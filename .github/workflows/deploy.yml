@@ -1,0 +1,38 @@
+name: Deploy approved environment
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [staging, production]
+        required: true
+        default: staging
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    permissions:
+      contents: read
+    env:
+      BYGA_ENV: ${{ inputs.environment }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
+      BYGA_CHART_DB_ID: ${{ vars.BYGA_CHART_DB_ID }}
+      BYGA_OFFICE_DB_ID: ${{ vars.BYGA_OFFICE_DB_ID }}
+      BYGA_PUBLIC_ORIGIN: ${{ vars.BYGA_PUBLIC_ORIGIN }}
+      BYGA_CHART_SCHEMA: ${{ vars.BYGA_CHART_SCHEMA }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: node scripts/configure.mjs
+      - name: Migrate application database only
+        run: node scripts/wrangler.mjs d1 migrations apply trading_office_db --remote --config .wrangler/deploy-${BYGA_ENV}.json
+      - name: Deploy
+        run: npm run deploy
+        env:
+          BYGA_DEPLOY_CONFIG: .wrangler/deploy-${{ inputs.environment }}.json

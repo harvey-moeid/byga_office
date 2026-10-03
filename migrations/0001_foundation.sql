@@ -1,0 +1,27 @@
+PRAGMA foreign_keys = ON;
+CREATE TABLE trading_config_versions (id TEXT PRIMARY KEY, version INTEGER UNIQUE NOT NULL, snapshot TEXT NOT NULL CHECK(json_valid(snapshot)), created_at INTEGER NOT NULL);
+CREATE TRIGGER config_immutable BEFORE UPDATE ON trading_config_versions BEGIN SELECT RAISE(ABORT,'immutable config'); END;
+CREATE TABLE system_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE cases (uuid TEXT PRIMARY KEY, id TEXT UNIQUE NOT NULL, mode TEXT NOT NULL CHECK(mode IN ('LIVE','SIMULATION')), source TEXT NOT NULL, direction TEXT, status TEXT NOT NULL, candle_timestamp INTEGER NOT NULL, config_version TEXT NOT NULL REFERENCES trading_config_versions(id), context TEXT NOT NULL, result TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, idempotency_key TEXT UNIQUE NOT NULL);
+CREATE INDEX cases_queue ON cases(mode,status,created_at);
+CREATE TABLE signals (uuid TEXT PRIMARY KEY, id TEXT UNIQUE NOT NULL, case_uuid TEXT UNIQUE NOT NULL REFERENCES cases(uuid), direction TEXT NOT NULL CHECK(direction IN ('BUY','SELL')), confidence REAL NOT NULL, created_at INTEGER NOT NULL, snapshot TEXT NOT NULL);
+CREATE INDEX signals_page ON signals(created_at DESC);
+CREATE TABLE scanner_runs (uuid TEXT PRIMARY KEY, candle_timestamp INTEGER NOT NULL, config_version TEXT NOT NULL, mode TEXT NOT NULL, created_at INTEGER NOT NULL, UNIQUE(candle_timestamp,config_version,mode));
+CREATE TABLE scanner_outputs (run_uuid TEXT NOT NULL REFERENCES scanner_runs(uuid), name TEXT NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(run_uuid,name));
+CREATE TABLE prompt_versions (id TEXT PRIMARY KEY, character_id TEXT NOT NULL, snapshot TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE TRIGGER prompt_immutable BEFORE UPDATE ON prompt_versions BEGIN SELECT RAISE(ABORT,'immutable prompt'); END;
+CREATE TABLE character_configs (id TEXT PRIMARY KEY, snapshot TEXT NOT NULL);
+CREATE TABLE provider_configs (id TEXT PRIMARY KEY, snapshot TEXT NOT NULL);
+CREATE TABLE ai_runs (uuid TEXT PRIMARY KEY, case_uuid TEXT NOT NULL REFERENCES cases(uuid), character_id TEXT NOT NULL, provider TEXT NOT NULL, model TEXT NOT NULL, prompt_version TEXT NOT NULL, attempt INTEGER NOT NULL, status TEXT NOT NULL, tokens INTEGER NOT NULL DEFAULT 0, raw TEXT, rendered_prompt TEXT, created_at INTEGER NOT NULL);
+CREATE INDEX ai_retention ON ai_runs(created_at);
+CREATE TABLE ai_character_outputs (case_uuid TEXT NOT NULL REFERENCES cases(uuid), character_id TEXT NOT NULL, snapshot TEXT NOT NULL, PRIMARY KEY(case_uuid,character_id));
+CREATE TABLE risk_runs (case_uuid TEXT PRIMARY KEY REFERENCES cases(uuid), snapshot TEXT NOT NULL);
+CREATE TABLE boss_decisions (case_uuid TEXT PRIMARY KEY REFERENCES cases(uuid), snapshot TEXT NOT NULL);
+CREATE TABLE simulation_runs (uuid TEXT PRIMARY KEY, case_uuid TEXT UNIQUE NOT NULL REFERENCES cases(uuid), replay_mode TEXT NOT NULL, config_mode TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE TABLE discord_deliveries (key TEXT PRIMARY KEY, case_uuid TEXT NOT NULL, kind TEXT NOT NULL, status TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, payload TEXT NOT NULL, last_error TEXT, created_at INTEGER NOT NULL);
+CREATE TABLE usage_daily (day TEXT PRIMARY KEY, calls INTEGER NOT NULL DEFAULT 0, tokens INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE sessions (token_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL);
+CREATE TABLE login_limits (key TEXT PRIMARY KEY, attempts INTEGER NOT NULL, reset_at INTEGER NOT NULL);
+
+CREATE TABLE case_events (case_uuid TEXT NOT NULL REFERENCES cases(uuid), status TEXT NOT NULL, created_at INTEGER NOT NULL);
+CREATE INDEX case_events_case ON case_events(case_uuid);

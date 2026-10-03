@@ -1,0 +1,12 @@
+{
+  "name": "byga-trading-office", "main": "src/server/index.ts", "compatibility_date": "2026-10-01",
+  "assets": {"directory": "./dist", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"]},
+  "d1_databases": [
+    {"binding": "CHART_DB", "database_name": "chart_db", "database_id": "00000000-0000-0000-0000-000000000001"},
+    {"binding": "DB", "database_name": "trading_office_db", "database_id": "00000000-0000-0000-0000-000000000002", "migrations_dir": "migrations"}
+  ],
+  "durable_objects": {"bindings": [{"name": "OFFICE", "class_name": "Office"}]},
+  "migrations": [{"tag": "v1", "new_sqlite_classes": ["Office"]}],
+  "triggers": {"crons": ["* * * * *"]},
+  "vars": {"APP_ENV": "development", "PUBLIC_ORIGIN": "http://localhost:8787", "CHART_SCHEMA": "{\"table\":\"candles\",\"market\":\"symbol\",\"timeframe\":\"timeframe\",\"timestamp\":\"timestamp\",\"open\":\"open\",\"high\":\"high\",\"low\":\"low\",\"close\":\"close\",\"volume\":\"volume\",\"timestampUnit\":\"seconds\"}"}
+}
