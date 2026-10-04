@@ -229,8 +229,24 @@ export default function OfficeScene({
 }) {
   const [view, setView] = useState<View>("overview");
   const [reset, setReset] = useState(0);
+  const beforeMeetingView = useRef<View>("overview");
+  const meetingWasActive = useRef(false);
   useEffect(() => {
-    if (meetingId) setView("meeting");
+    if (meetingId) {
+      if (!meetingWasActive.current) {
+        meetingWasActive.current = true;
+        setView((current) => {
+          beforeMeetingView.current = current;
+          return "meeting";
+        });
+      }
+      return;
+    }
+    if (meetingWasActive.current) {
+      meetingWasActive.current = false;
+      setView(beforeMeetingView.current);
+      setReset((value) => value + 1);
+    }
   }, [meetingId]);
   const labelHost = useRef<HTMLDivElement>(null!);
   const [quality, setQuality] = useState<Quality>(() =>
