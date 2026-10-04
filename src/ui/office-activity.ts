@@ -1,5 +1,5 @@
 import { characterIds, type CharacterId } from "../core/contracts";
-import { walkable, type Point } from "./navigation";
+import type { Point } from "./navigation";
 
 export type OfficeActivityKind =
   | "coffee"
@@ -172,18 +172,22 @@ const groupPlans: Record<
   },
 };
 
+function sample(random: RandomSource) {
+  return Math.min(0.999999999, Math.max(0, random()));
+}
+
 function integer(min: number, max: number, random: RandomSource) {
-  return min + Math.floor(random() * (max - min + 1));
+  return min + Math.floor(sample(random) * (max - min + 1));
 }
 
 function pick<T>(items: readonly T[], random: RandomSource) {
-  return items[Math.min(items.length - 1, Math.floor(random() * items.length))];
+  return items[Math.floor(sample(random) * items.length)];
 }
 
 function shuffle<T>(items: readonly T[], random: RandomSource) {
   const result = [...items];
   for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.min(i, Math.floor(random() * (i + 1)));
+    const j = Math.floor(sample(random) * (i + 1));
     [result[i], result[j]] = [result[j], result[i]];
   }
   return result;
@@ -215,7 +219,7 @@ export function createOfficeActivityEvent(
 ): OfficeActivityEvent {
   const count = integer(2, 6, random);
   const participants = shuffle(characterIds, random).slice(0, count);
-  const group = random() < 0.38;
+  const group = sample(random) < 0.38;
   const assignments: Partial<Record<CharacterId, OfficeActivity>> = {};
 
   if (group) {
@@ -257,11 +261,9 @@ export function activityDestinations() {
   return [
     ...Object.values(individualSpots).flat(),
     ...Object.values(groupPlans).flatMap((plan) => plan.spots),
-  ].filter((point, index, points) => {
-    const key = point.join(",");
-    return (
-      walkable(point) &&
-      points.findIndex((candidate) => candidate.join(",") === key) === index
-    );
-  });
+  ].filter(
+    (point, index, points) =>
+      points.findIndex((candidate) => candidate.join(",") === point.join(",")) ===
+      index,
+  );
 }
