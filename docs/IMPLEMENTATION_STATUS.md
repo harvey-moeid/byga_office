@@ -2,6 +2,8 @@
 
 ## Latest evidence — 4 October 2026
 
+Latest code validation: [CI 37182406627](https://github.com/harvey-moeid/byga_office/actions/runs/37182406627) passed **109 unit/integration tests and 30 browser tests**, including six production configuration guards. Deployment [37182406624](https://github.com/harvey-moeid/byga_office/actions/runs/37182406624) stopped before deployment because `CLOUDFLARE_API_TOKEN`, `ADMIN_PASSWORD` and `OPENAI_API_KEY` are missing in GitHub environment `production`. See [the acceptance report](PRODUCTION_ACCEPTANCE.md).
+
 - GitHub CI run [37181449019](https://github.com/harvey-moeid/byga_office/actions/runs/37181449019) passed: 103 unit/integration tests, 30 desktop/mobile browser tests, TypeScript, ESLint, frontend build and Worker dry run. This supersedes the earlier sandbox-blocked test results below. Browser fixture selectors/public case routing were corrected without skipping assertions.
 - Cloudflare account/subdomain/D1 access works through the connector. No BYGA Worker existed at the time of verification.
 - All five application migrations were applied to `trading_office_db` (`e787a5b2-c876-4afa-beae-55bb616504be`), with five migration ledger rows and 22 application tables verified. No market database migration or seed was performed.
