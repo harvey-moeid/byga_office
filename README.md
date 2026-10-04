@@ -55,6 +55,8 @@ Browser tests cover desktop/mobile layout, the 3D renderer, WebGL fallback, offl
 
 ## Architecture
 
+Admin → Trading Config → **Minimal Scanner Consensus** sets the minimum number of aligned BUY or SELL scanners (1–6, default 2). A trigger still requires more votes than the opposite direction; ties never trigger. The saved value applies to automatic triggers, revalidation, simulations, and scanner fallback. NEXT CASE preserves in-flight case snapshots; legacy configurations use 2. The Operations consensus card displays the active threshold. No environment variable or database migration is required.
+
 - `src/core`: OHLC validation, EMA/RSI/ADX/MACD/ATR/Bollinger/structure, six scanners, trigger, risk, voting, confidence, context compression.
 - `src/server/market.ts`: SELECT-only market repository, validated SQL identifiers, configurable timestamp units/timeframe names, gap and freshness checks. Indicators read sufficient warm-up history; raw AI context defaults to 50/100/100.
 - `src/server/office.ts`: durable live and independent simulation queues; immutable config/prompt snapshots; parallel Analysts; Risk Manager then Boss; persistent per-character outputs; revalidation/cooldown; atomic signal publication with cancellation protection.

@@ -139,6 +139,61 @@ test("case and character provider metadata are visible only in Admin views", asy
     }),
   ).toBeVisible();
 });
+test("Admin saves scanner minimum and Operations shows the stored threshold", async ({
+  page,
+}) => {
+  let config = { ...defaultConfig };
+  let version = 1;
+  await page.route("**/api/v1/auth/session", (route) =>
+    route.fulfill({ json: { admin: true } }),
+  );
+  await page.route("**/api/v1/admin/config", (route) => {
+    if (route.request().method() === "POST") {
+      const body = route.request().postDataJSON();
+      expect(body.activation).toBe("NEXT CASE");
+      expect(body.config.scannerConsensusMin).toBe(4);
+      config = body.config;
+      version++;
+      return route.fulfill({ json: { id: `TRADING-CONFIG-v${version}` } });
+    }
+    return route.fulfill({
+      json: { config, id: `TRADING-CONFIG-v${version}`, versions: [] },
+    });
+  });
+  await page.route("**/api/v1/office/state", (route) =>
+    route.fulfill({
+      json: {
+        office: "MONITORING",
+        active: null,
+        scanners: [],
+        scanner_consensus_min: config.scannerConsensusMin,
+      },
+    }),
+  );
+  await page.addInitScript(() => {
+    HTMLCanvasElement.prototype.getContext = (() =>
+      null) as typeof HTMLCanvasElement.prototype.getContext;
+  });
+  await page.goto("/admin");
+  const minimum = page.getByRole("combobox", {
+    name: "Minimal Scanner Consensus",
+  });
+  await expect(minimum).toHaveValue("2");
+  await expect(minimum.locator("option")).toHaveCount(6);
+  await minimum.selectOption("4");
+  await page
+    .getByRole("button", { name: "Save new version", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "Tersimpan: TRADING-CONFIG-v2",
+  );
+  await page.reload();
+  await expect(minimum).toHaveValue("4");
+  await page.goto("/operations");
+  await expect(
+    page.getByText("Minimal 4 · majority unik", { exact: true }),
+  ).toBeVisible();
+});
 // UI contract fixtures are explicitly local tests; production data still comes from D1.
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/v1/**", (route) => {

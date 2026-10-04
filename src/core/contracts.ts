@@ -33,6 +33,7 @@ const weights = z
     "Weights must total 100",
   );
 export const configSchema = z.object({
+  scannerConsensusMin: z.number().int().min(1).max(6).default(2),
   scanner: z.object({
     ema: z.tuple([
       z.number().int().min(2).max(500),
@@ -85,6 +86,7 @@ export const configSchema = z.object({
 });
 export type TradingConfig = z.infer<typeof configSchema>;
 export const defaultConfig: TradingConfig = {
+  scannerConsensusMin: 2,
   scanner: {
     ema: [20, 50, 200],
     period: 14,

@@ -164,6 +164,40 @@ describe("Indicators and structure", () => {
   });
 });
 describe("Scanner/trigger contract", () => {
+  it("keeps legacy config snapshots compatible with minimum 2", () => {
+    const { scannerConsensusMin: _minimum, ...legacy } = defaultConfig;
+    expect(configSchema.parse(legacy).scannerConsensusMin).toBe(2);
+  });
+  it.each([0, 7, 2.5, "3", null])(
+    "rejects invalid consensus minimum %s",
+    (minimum) => {
+      expect(
+        configSchema.safeParse({
+          ...defaultConfig,
+          scannerConsensusMin: minimum,
+        }).success,
+      ).toBe(false);
+    },
+  );
+  it.each([1, 2, 3, 4, 5, 6])(
+    "requires configured minimum %s for either direction",
+    (minimum) => {
+      for (const direction of ["BUY", "SELL"] as const) {
+        const enough = Array.from({ length: 6 }, (_, i) =>
+          i < minimum ? direction : "NONE",
+        );
+        expect(trigger(scanners(enough), minimum)).toBe(direction);
+        enough[minimum - 1] = "NONE";
+        expect(trigger(scanners(enough), minimum)).toBeNull();
+      }
+      expect(
+        trigger(
+          scanners(["BUY", "BUY", "SELL", "SELL", "NONE", "NONE"]),
+          minimum,
+        ),
+      ).toBeNull();
+    },
+  );
   it("runs exactly six always-active scanners, with reasons for NONE and saved context", () => {
     const output = scan(market, defaultConfig, "TRADING-CONFIG-v1", 42);
     expect(output.map((s) => s.name)).toEqual([...scannerNames]);

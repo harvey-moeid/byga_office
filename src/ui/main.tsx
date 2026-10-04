@@ -12,6 +12,7 @@ import {
 } from "react-router-dom";
 import {
   characterIds,
+  defaultConfig,
   type AvatarPreset,
   type CharacterId,
   formatPrice,
@@ -41,6 +42,7 @@ const SimulationPlayback = lazy(() =>
   import("./simulation").then((m) => ({ default: m.SimulationPlayback })),
 );
 interface OfficeState {
+  scanner_consensus_min?: number;
   office: string;
   active: { id: string; status: string } | null;
   scanners: ScannerOutput[];
@@ -299,7 +301,12 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
                 .length ?? 0}
               <em> SELL</em>
             </strong>
-            <small>Minimal 2 · majority unik</small>
+            <small>
+              Minimal{" "}
+              {state.data?.scanner_consensus_min ??
+                defaultConfig.scannerConsensusMin}{" "}
+              · majority unik
+            </small>
           </div>
         </div>
       )}

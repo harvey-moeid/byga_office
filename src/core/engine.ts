@@ -10,6 +10,7 @@ import {
   structure,
 } from "./indicators";
 import {
+  defaultConfig,
   scannerNames,
   scannerOutputSchema,
   type AnalystResult,
@@ -163,11 +164,14 @@ export function composition(scanners: ScannerOutput[]) {
     { BUY: 0, SELL: 0, NONE: 0 },
   );
 }
-export function trigger(scanners: ScannerOutput[]): TradeDirection | null {
+export function trigger(
+  scanners: ScannerOutput[],
+  minimum = defaultConfig.scannerConsensusMin,
+): TradeDirection | null {
   const c = composition(scanners);
-  return c.BUY >= 2 && c.BUY > c.SELL
+  return c.BUY >= minimum && c.BUY > c.SELL
     ? "BUY"
-    : c.SELL >= 2 && c.SELL > c.BUY
+    : c.SELL >= minimum && c.SELL > c.BUY
       ? "SELL"
       : null;
 }

@@ -5,6 +5,7 @@ import {
   avatarPresets,
   defaultConfig,
   providers,
+  scannerNames,
   type CharacterConfig,
   type TradingConfig,
 } from "../core/contracts";
@@ -140,6 +141,27 @@ function ConfigEditor() {
       {draft && (
         <>
           <div className="form-grid">
+            <label>
+              Minimal Scanner Consensus
+              <select
+                value={draft.scannerConsensusMin}
+                onChange={(e) =>
+                  update("scannerConsensusMin", Number(e.target.value))
+                }
+                aria-describedby="scanner-consensus-help"
+              >
+                {scannerNames.map((_, i) => (
+                  <option key={i + 1} value={i + 1}>
+                    {i + 1} dari {scannerNames.length} scanner
+                  </option>
+                ))}
+              </select>
+              <small id="scanner-consensus-help" className="muted">
+                Jumlah minimal scanner BUY atau SELL untuk memicu analisis
+                otomatis. Jumlah searah harus lebih besar dari arah lawan; hasil
+                seri tidak memicu. Default: 2 dari 6.
+              </small>
+            </label>
             {(
               [
                 "minRR",
