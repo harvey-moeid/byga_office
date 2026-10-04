@@ -541,7 +541,7 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   expect(errors).toEqual([]);
 });
 
-async function fixtureMeeting(page: Page) {
+async function fixtureMeeting(page: Page, enabled: () => boolean = () => true) {
   const snapshot: MeetingSnapshot = {
     case_id: "CASE-meeting-fixture",
     status: "COMPLETED",
@@ -562,7 +562,7 @@ async function fixtureMeeting(page: Page) {
     unavailable: [],
   };
   await page.route("**/api/v1/office/meeting", (route) =>
-    route.fulfill({ json: { meeting: snapshot } }),
+    route.fulfill({ json: { meeting: enabled() ? snapshot : null } }),
   );
   return snapshot;
 }
@@ -635,9 +635,8 @@ test("3D speech follows the seated character and opens the actual result detail"
   test.setTimeout(75000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  // Probe WebGL before navigation so a slow software renderer cannot consume
-  // the first speaker's finite presentation window before assertions begin.
+  // Probe WebGL before navigation. The meeting itself is enabled only after
+  // the 3D renderer is ready, so production walking/timing stays realistic.
   const supported = await page.evaluate(() => {
     const canvas = document.createElement("canvas");
     const gl = canvas.getContext("webgl2");
@@ -648,8 +647,11 @@ test("3D speech follows the seated character and opens the actual result detail"
     !supported,
     "WebGL unavailable; meeting fallback is tested separately",
   );
-  await fixtureMeeting(page);
+  let meetingEnabled = false;
+  await fixtureMeeting(page, () => meetingEnabled);
   await page.goto("/");
+  await expect(page.getByRole("button", { name: /Reset View/ })).toBeVisible();
+  meetingEnabled = true;
   const bubble = page.getByRole("button", {
     name: "Baca percakapan Trend Analyst",
     exact: true,
