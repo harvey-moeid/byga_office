@@ -66,4 +66,18 @@ describe("Read-only chart repository", () => {
     await expect(readMarket(e, now)).rejects.toThrow();
     expect(e.CHART_DB.prepare).not.toHaveBeenCalled();
   });
+  it("includes an explicit closed flag only when configured", async () => {
+    const e = env();
+    e.CHART_SCHEMA = JSON.stringify({ ...schema, closed: "is_closed" });
+    await readMarket(e, now);
+    for (const [sql] of (e.CHART_DB.prepare as ReturnType<typeof vi.fn>).mock
+      .calls)
+      expect(sql).toContain('AND "is_closed" = 1');
+  });
+  it("rejects injection in the closed flag before querying", async () => {
+    const e = env();
+    e.CHART_SCHEMA = JSON.stringify({ ...schema, closed: "is_closed OR 1=1" });
+    await expect(readMarket(e, now)).rejects.toThrow();
+    expect(e.CHART_DB.prepare).not.toHaveBeenCalled();
+  });
 });

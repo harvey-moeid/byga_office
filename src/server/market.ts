@@ -17,6 +17,7 @@ export const chartSchema = z.object({
   low: identifier,
   close: identifier,
   volume: identifier,
+  closed: identifier.optional(),
   timestampUnit: z.enum(["seconds", "milliseconds"]),
   timeframeValues: z
     .object({ H1: z.string(), M15: z.string(), M5: z.string() })
@@ -40,7 +41,8 @@ export async function readMarket(
   const entries = await Promise.all(
     timeframes.map(async (tf) => {
       const cutoff = Math.floor((at - duration[tf] - delay) / multiplier);
-      const sql = `SELECT "${s.timestamp}" AS timestamp, "${s.open}" AS open, "${s.high}" AS high, "${s.low}" AS low, "${s.close}" AS close, "${s.volume}" AS volume FROM "${s.table}" WHERE "${s.market}" = ? AND "${s.timeframe}" = ? AND "${s.timestamp}" <= ? ORDER BY "${s.timestamp}" DESC LIMIT ?`;
+      const closed = s.closed ? ` AND "${s.closed}" = 1` : "";
+      const sql = `SELECT "${s.timestamp}" AS timestamp, "${s.open}" AS open, "${s.high}" AS high, "${s.low}" AS low, "${s.close}" AS close, "${s.volume}" AS volume FROM "${s.table}" WHERE "${s.market}" = ? AND "${s.timeframe}" = ? AND "${s.timestamp}" <= ?${closed} ORDER BY "${s.timestamp}" DESC LIMIT ?`;
       const rows = await env.CHART_DB.prepare(sql)
         .bind("BTCUSDT", s.timeframeValues?.[tf] ?? tf, cutoff, count)
         .all<Record<string, unknown>>();

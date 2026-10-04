@@ -1,6 +1,6 @@
 # Cloudflare resources and permissions
 
-Account and distinct chart/application D1 IDs have been supplied and saved in the cloud configuration draft. Their formats are valid locally; remote ownership, existence and access remain unverified. The local copy is ignored at `.wrangler/cloud-resources.json`. The deployment environment, HTTPS origin, market schema and credentials are still required. The repository does not guess the schema of the existing `chart_db`.
+The supplied account and both D1 database IDs have been verified through successful remote GET/SELECT requests using the Cloudflare connector. The chart schema and observed mapping are recorded in [the read-only verification report](CLOUDFLARE_VERIFICATION.md). The application database has no application tables yet. Verification of the environment token via API remains incomplete; deployment environment, HTTPS origin and application secrets are still required. Local Wrangler configuration still uses placeholders.
 
 ## Resources
 
@@ -15,10 +15,10 @@ Use a Cloudflare API token scoped to the selected account with Worker script dep
 
 Set `BYGA_ENV=staging` or `production`, `CLOUDFLARE_ACCOUNT_ID`, `BYGA_CHART_DB_ID`, `BYGA_OFFICE_DB_ID`, `BYGA_PUBLIC_ORIGIN` (exact HTTPS origin), `BYGA_CHART_SCHEMA` (JSON). Optional `BYGA_R2_BUCKET`. Use separate databases/Worker names for staging and production.
 
-Example schema mapping (replace to match the real database):
+Observed schema mapping for the supplied chart_db (closed-flag handling and tick size still require review; see the verification report):
 
 ```json
-{"table":"candles","market":"symbol","timeframe":"timeframe","timestamp":"timestamp","open":"open","high":"high","low":"low","close":"close","volume":"volume","timestampUnit":"seconds","timeframeValues":{"H1":"1h","M15":"15m","M5":"5m"},"tickSize":0.01}
+{"table":"candles","market":"symbol","timeframe":"timeframe","timestamp":"open_time","open":"open","high":"high","low":"low","close":"close","volume":"volume","closed":"is_closed","timestampUnit":"milliseconds","timeframeValues":{"H1":"H1","M15":"M15","M5":"M5"}}
 ```
 
 ```sh

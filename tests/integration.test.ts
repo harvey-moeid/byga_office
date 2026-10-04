@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { build } from "esbuild";
 import { readFile, mkdir, readdir } from "node:fs/promises";
 import { pbkdf2Sync } from "node:crypto";
@@ -8,6 +8,8 @@ import {
   convertV4MiniflareOptions,
   Response as MFResponse,
 } from "miniflare";
+import { digest } from "../src/server/auth";
+import { apiLimits } from "../src/server/rate-limit";
 import { defaultConfig, type Signal } from "../src/core/contracts";
 let mf: Miniflare,
   cookie = "";
@@ -29,7 +31,8 @@ const chart = {
   table: "candles",
   market: "symbol",
   timeframe: "timeframe",
-  timestamp: "timestamp",
+  timestamp: "open_time",
+  closed: "is_closed",
   open: "open",
   high: "high",
   low: "low",
@@ -186,7 +189,7 @@ beforeAll(async () => {
     await db.exec(await readFile("migrations/" + file, "utf8"));
   const market = await mf.getD1Database("CHART_DB");
   await market.exec(
-    "CREATE TABLE candles(symbol TEXT,timeframe TEXT,timestamp INTEGER,open REAL,high REAL,low REAL,close REAL,volume REAL,PRIMARY KEY(symbol,timeframe,timestamp));",
+    "CREATE TABLE candles(symbol TEXT,timeframe TEXT,open_time INTEGER,open REAL,high REAL,low REAL,close REAL,volume REAL,is_closed INTEGER NOT NULL CHECK(is_closed IN (0,1)),PRIMARY KEY(symbol,timeframe,open_time));",
   );
   const now = Date.now();
   for (const [tf, duration] of [
@@ -199,7 +202,7 @@ beforeAll(async () => {
     const statements = Array.from({ length: 320 }, (_, i) => {
       const close = 100 + Math.sin(i / 8) * 8 + i * 0.02;
       return market
-        .prepare("INSERT INTO candles VALUES (?,?,?,?,?,?,?,?)")
+        .prepare("INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?)")
         .bind(
           "BTCUSDT",
           tf,
@@ -209,15 +212,137 @@ beforeAll(async () => {
           close - 1,
           close,
           100 + (i % 7),
+          1,
         );
     });
     await market.batch(statements);
   }
 }, 60000);
+beforeEach(async () => {
+  await (await mf.getD1Database("DB")).exec("DELETE FROM api_limits");
+});
 afterAll(async () => {
   await mf?.dispose();
 });
 describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
+  it("atomically limits concurrent API requests, isolates IPs and resets expired windows", async () => {
+    const db = await mf.getD1Database("DB");
+    const ip = "198.51.100.8";
+    const key = `read:${await digest(ip)}`;
+    await db
+      .prepare("INSERT INTO api_limits VALUES (?,?,?)")
+      .bind(key, apiLimits.read - 1, Date.now() + apiLimits.windowMs)
+      .run();
+    const request = (headers: Record<string, string> = {}) =>
+      mf.dispatchFetch(origin + "/api/v1/auth/session", {
+        headers: { "CF-Connecting-IP": ip, ...headers },
+      });
+    const responses = await Promise.all([request(), request(), request()]);
+    expect(responses.map((r) => r.status).sort()).toEqual([200, 429, 429]);
+    const blocked = responses.find((r) => r.status === 429)!;
+    expect(Number(blocked.headers.get("Retry-After"))).toBeGreaterThan(0);
+    expect(blocked.headers.get("Cache-Control")).toBe("no-store");
+    expect(blocked.headers.get("X-RateLimit-Remaining")).toBe("0");
+    expect((await request({ "X-Forwarded-For": "198.51.100.99" })).status).toBe(
+      429,
+    );
+    expect((await request({ "CF-Connecting-IP": "198.51.100.9" })).status).toBe(
+      200,
+    );
+    await db
+      .prepare("UPDATE api_limits SET reset_at=0 WHERE key=?")
+      .bind(key)
+      .run();
+    const reset = await request();
+    expect(reset.status).toBe(200);
+    expect(reset.headers.get("X-RateLimit-Remaining")).toBe(
+      String(apiLimits.read - 1),
+    );
+    expect(
+      (await db.prepare("SELECT key FROM api_limits").all()).results.every(
+        (r) => !String(r.key).includes(ip),
+      ),
+    ).toBe(true);
+  });
+  it("separates mutation budgets from reads and protects rejected Admin mutations", async () => {
+    const db = await mf.getD1Database("DB");
+    const ip = "198.51.100.10";
+    const key = `write:${await digest(ip)}`;
+    await db
+      .prepare("INSERT INTO api_limits VALUES (?,?,?)")
+      .bind(key, apiLimits.write - 1, Date.now() + apiLimits.windowMs)
+      .run();
+    const responses = await Promise.all(
+      Array.from({ length: 3 }, () =>
+        mf.dispatchFetch(origin + "/api/v1/admin/emergency", {
+          method: "POST",
+          headers: { "CF-Connecting-IP": ip, Origin: origin },
+          body: "{}",
+        }),
+      ),
+    );
+    expect(responses.map((r) => r.status).sort()).toEqual([401, 429, 429]);
+    expect(
+      (
+        await mf.dispatchFetch(origin + "/api/v1/auth/session", {
+          headers: { "CF-Connecting-IP": ip },
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await mf.dispatchFetch(origin + "/office", {
+          headers: { "CF-Connecting-IP": ip },
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await mf.dispatchFetch(origin + "/api/v1/auth/session", {
+          method: "OPTIONS",
+          headers: { "CF-Connecting-IP": ip },
+        })
+      ).status,
+    ).toBe(204);
+  });
+  it("honors the real is_closed flag even when an old candle passes the time cutoff", async () => {
+    const chartDb = await mf.getD1Database("CHART_DB");
+    const row = await chartDb
+      .prepare(
+        "SELECT MAX(open_time) AS t FROM candles WHERE timeframe='M5' AND open_time<=?",
+      )
+      .bind(Date.now() - 305000)
+      .first<{ t: number }>();
+    await chartDb
+      .prepare(
+        "UPDATE candles SET is_closed=0 WHERE timeframe='M5' AND open_time=?",
+      )
+      .bind(row!.t)
+      .run();
+    const before = await chartDb
+      .prepare("SELECT * FROM candles ORDER BY timeframe,open_time")
+      .all();
+    try {
+      const response = await call("/market/status");
+      expect(response.status).toBe(200);
+      const market = (await response.json()) as { candle_timestamp: number };
+      expect(market.candle_timestamp).toBe(row!.t - 300000);
+      expect(
+        (
+          await chartDb
+            .prepare("SELECT * FROM candles ORDER BY timeframe,open_time")
+            .all()
+        ).results,
+      ).toEqual(before.results);
+    } finally {
+      await chartDb
+        .prepare(
+          "UPDATE candles SET is_closed=1 WHERE timeframe='M5' AND open_time=?",
+        )
+        .bind(row!.t)
+        .run();
+    }
+  });
   it("rejects unauthorized Admin and private signals", async () => {
     expect((await call("/admin/config", undefined, false)).status).toBe(401);
     expect((await call("/signals", undefined, false)).status).toBe(401);
@@ -313,6 +438,20 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     expect(text).not.toContain("fixture-only-ai-key");
     expect(text).not.toContain("primary_provider");
     expect(text).not.toContain("rendered_prompt");
+    expect(text).not.toContain('"provider"');
+    expect(text).not.toContain('"model"');
+    const publicHistory = await call("/characters/trend", undefined, false);
+    const publicText = await publicHistory.text();
+    expect(publicText).not.toContain('"provider"');
+    expect(publicText).not.toContain('"model"');
+    expect(publicText).not.toContain('"validationErrors"');
+    const adminHistory = await call("/characters/trend");
+    const entries = (await adminHistory.json()) as {
+      provider?: string;
+      model?: string;
+    }[];
+    expect(entries[0].provider).toBe("openai");
+    expect(entries[0].model).toBeTruthy();
   }, 30000);
   it("emergency SELL uses same tested pipeline and live signal contracts", async () => {
     scenario = "SELL";
@@ -583,7 +722,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     const rows = (
       await chartDb
         .prepare(
-          "SELECT timeframe,timestamp FROM candles ORDER BY timeframe,timestamp",
+          "SELECT timeframe,open_time AS timestamp FROM candles ORDER BY timeframe,open_time",
         )
         .all<{ timeframe: string; timestamp: number }>()
     ).results;
@@ -594,7 +733,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
         const close = 1000 - i;
         return chartDb
           .prepare(
-            "UPDATE candles SET open=?,high=?,low=?,close=?,volume=100 WHERE timeframe=? AND timestamp=?",
+            "UPDATE candles SET open=?,high=?,low=?,close=?,volume=100 WHERE timeframe=? AND open_time=?",
           )
           .bind(
             close + 0.5,
@@ -899,6 +1038,9 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     await db
       .prepare("INSERT INTO login_limits VALUES ('fixture-expired',1,0)")
       .run();
+    await db
+      .prepare("INSERT INTO api_limits VALUES ('fixture-expired',1,0)")
+      .run();
     const ns = await mf.getDurableObjectNamespace("OFFICE");
     const stub = ns.get(ns.idFromName("BTCUSDT"));
     await stub.fetch("https://test/__test/idle");
@@ -928,6 +1070,11 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     expect(
       await db
         .prepare("SELECT * FROM login_limits WHERE key='fixture-expired'")
+        .first(),
+    ).toBeNull();
+    expect(
+      await db
+        .prepare("SELECT * FROM api_limits WHERE key='fixture-expired'")
         .first(),
     ).toBeNull();
     const { alarm } = (await (

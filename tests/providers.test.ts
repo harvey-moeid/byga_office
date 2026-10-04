@@ -66,6 +66,40 @@ function runtime() {
   return { r, audit, circuits };
 }
 describe("Eight provider adapters", () => {
+  it("retries invalid price relationships then falls back without rewriting the vote/confidence", async () => {
+    const { r, audit } = runtime();
+    const bad = {
+      ...output,
+      price_levels: { entry: 100, stop_loss: 101, take_profit: 102 },
+    };
+    const fetcher = vi.fn(
+      async (input: RequestInfo | URL) =>
+        new Response(
+          JSON.stringify(
+            response(
+              String(input).includes("googleapis") ? "gemini" : "openai",
+              JSON.stringify(bad),
+            ),
+          ),
+        ),
+    ) as typeof fetch;
+    const result = await runCharacter(
+      env,
+      defaultCharacters()[0],
+      {},
+      r,
+      fetcher,
+      async () => {},
+    );
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    expect(audit).toHaveBeenCalledTimes(4);
+    expect(result.flags).toContain("SEMANTIC_VALIDATION_FAILED");
+    expect(result.output?.vote).toBe("BUY");
+    expect(result.output?.confidence).toBe(75);
+    expect(result.validationErrors.join(" ")).toContain(
+      "Price levels contradict vote",
+    );
+  });
   it.each(providers)("%s formats and parses its wire contract", async (p) => {
     const f = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toMatch(/^https:/);

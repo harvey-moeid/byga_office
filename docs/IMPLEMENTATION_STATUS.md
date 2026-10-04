@@ -15,7 +15,17 @@ Initial implementation against PRD v1.0. The checklist uses `[x]` for implemente
 | 2D/3D UI | Chromium desktop/portrait/landscape tests; renderer and native context-loss fallback, offline reconnect, narrow navigation, scanner filters, Admin review; obstacle-aware routes for all eight actors, animated limbs, coffee activity, geometry detail/instancing and FPS-triggered quality reduction | Premium assets/rigged animations, character-to-character avoidance, physical touch/device/FPS QA and further visual polish |
 | Usage/retention | WIB day counters, atomic daily quotas, reserved tokens/case; idle retention clears expired raw/prompt/session data while preserving structured audits (tested), daily maintenance and due-outbox alarms | Long-term scheduling/failure stress tests and deployed counters |
 
-## Validation performed
+## Current build validation — 4 October 2026 (UTC)
+
+- Added configurable `closed` chart column filtering with the observed `is_closed` flag; SELECT-only and cutoff/freshness guards remain. Integration fixtures now use `open_time` in milliseconds plus `is_closed`. No remote data changed.
+- Added optional structured AI price levels and BUY/SELL price relationship checks; persistent semantic failure still preserves the last vote/confidence under the PRD policy.
+- Added atomic persistent API budgets (240 reads / 30 mutations per IP per 60-second window), hashed keys, 429/retry headers and expiry cleanup. Migration 0005 targets the application database only and has not been applied remotely. Missing trusted IP uses one shared fallback budget; limits are per IP, so users behind one NAT share a budget.
+- Split Admin/Simulation routes into lazy modules, and added explicit Admin-only provider/model metadata in case/character views.
+- TypeScript, ESLint and production build passed. Admin chunk: 3.90 kB gzip; Simulation chunk: 1.63 kB gzip; main JS: 104.78 kB gzip; 3D: 248.85 kB gzip.
+- 66 unit tests passed. The 34-test integration suite could not start because sandbox loopback listening is blocked (`listen EPERM`). Requests for additional permissions stopped before execution; this is not a passing integration result. Three browser scenarios were added (lazy routes, APPLY NOW confirmation, metadata privacy); the current 30 browser executions have not run.
+- Previous full checks below belong to the earlier implementation, not this revision. Rate limiting and Admin metadata remain awaiting integration/browser acceptance.
+
+## Earlier validation performed
 
 - `npm run check`: strict TypeScript, ESLint, **84 unit/integration tests**, frontend build passed.
 - `BYGA_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:browser`: **21 browser tests** across desktop, emulated Pixel 7 portrait/landscape passed. All ran; none skipped. Browser APIs are intercepted fixtures. Physical Android/device performance acceptance is separate.
@@ -32,7 +42,7 @@ The earlier browser download returned `403 Domain forbidden` for `cdn.playwright
 
 Native WebGL context-loss tests found a DOM cleanup error in 3D labels during fallback. Labels now use a dedicated portal host; native context-loss transitions pass without page errors.
 
-The user subsequently supplied Cloudflare Account ID and distinct `chart_db`/`trading_office_db` IDs. Nonsecret draft variable suggestions and ignored local resource metadata were saved; formats were validated locally. Remote existence/ownership and environment assignment remain unverified. Wrangler reports that it is not authenticated, and the running environment has no configured Cloudflare credential. The `chart_db` schema, HTTPS origin, AI keys, user Admin password hash and Discord webhooks remain outstanding. No remote resources were created/migrated, no paid AI inference was made, and no Discord message was sent to a real webhook. Production acceptance and remaining visual/security/reliability work stay open in the checklist.
+The supplied Cloudflare account and both database IDs were subsequently verified via connector GET/SELECT calls. The remote chart schema uses candles.open_time in milliseconds, H1/M15/M5 timeframe values and an is_closed flag. trading_office_db has only an internal table and has not been migrated. See [the verification report](CLOUDFLARE_VERIFICATION.md) and [schema snapshot](chart_db.schema.sql). The environment token is reported ready but remains unverified via API because shell network requests could not complete. Connector token verification endpoints returned Invalid API Token despite successful D1 reads; this does not establish the environment token's validity. Environment assignment, HTTPS origin, application secrets, real market freshness/gaps and deployed acceptance remain open. All remote SQL was SELECT-only with rows_written=0 and changed_db=false. No remote resources were created/migrated, no paid AI inference was made, and no real Discord message was sent.
 
 The development Worker was restarted after the frozen installation and passed the HTML/API/scanner/unauthorized-Admin smoke checks again. Restoration in a fresh cloud task has not been verified; running processes must restart.
 

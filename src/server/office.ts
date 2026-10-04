@@ -1194,6 +1194,9 @@ export class Office extends DurableObject<Env> {
       this.env.DB.prepare("DELETE FROM login_limits WHERE reset_at<?").bind(
         Date.now(),
       ),
+      this.env.DB.prepare("DELETE FROM api_limits WHERE reset_at<?").bind(
+        Date.now(),
+      ),
     ]);
   }
 }
