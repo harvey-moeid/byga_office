@@ -1313,6 +1313,12 @@ footer {
 .home-stage .office-scene {
   height: 100%;
 }
+.home-stage .scene-label-layer {
+  z-index: 7;
+}
+.home-stage > .meeting-status {
+  z-index: 8;
+}
 .home-stage .scene-title {
   display: none;
 }
