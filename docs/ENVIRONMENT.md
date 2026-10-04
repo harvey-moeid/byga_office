@@ -157,7 +157,9 @@ Workflow deployment saat ini **tidak menyalin key provider tambahan tersebut** d
 
 ## 7. Status operasional
 
-Pada 4 Oktober 2026, inference nyata OpenRouter dan Gemini serta smoke test Worker produksi sudah lulus. Aktivasi pemindaian otomatis masih terhambat batas akun Cloudflare: seluruh 5 slot cron Workers Free sudah terpakai, dan Worker ini belum memiliki cron aktif. Mengisi env tambahan tidak menyelesaikan batas tersebut.
+Pada 4 Oktober 2026, inference nyata OpenRouter dan Gemini serta smoke test Worker produksi sudah lulus. Cron `* * * * *` untuk `byga-office` berhasil dipasang pada 14:31:02 WIB (07:31:02 UTC) dan dikonfirmasi lewat pembacaan ulang API Cloudflare. Batas cron yang sebelumnya menghambat sudah tidak menolak konfigurasi ini; tidak ada cron Worker lain yang dihapus atau paket akun yang diubah oleh tindakan ini. Cron tidak memerlukan env tambahan.
+
+Konfigurasi jadwal sudah terkonfirmasi. Pada pemeriksaan 14:34 WIB, tick telah mencapai pemeriksaan data dan office melaporkan `Stale M5 data`; candle M5 tertutup terakhir pada snapshot chart baru sampai penutupan 14:25 WIB. Scan sukses berulang masih membutuhkan data upstream yang segar. Perubahan cron dapat membutuhkan waktu propagasi [hingga 15 menit menurut Cloudflare](https://developers.cloudflare.com/workers/configuration/cron-triggers/).
 
 Deployment penuh dan acceptance keseluruhan belum selesai. Rincian hasil dan pekerjaan tersisa ada di [laporan acceptance produksi](PRODUCTION_ACCEPTANCE.md).
 

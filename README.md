@@ -2,7 +2,7 @@
 
 React + TypeScript + React Three Fiber frontend, Cloudflare Worker API, D1 audit database, and two persistent Durable Object orchestrators (live and simulation). Built against [PRD v1.0](BYGA_AI_TRADING_OFFICE_PRD.md). Progress is recorded in [the checklist](BYGA_AI_TRADING_OFFICE_CHECKLIST.md).
 
-Production uses a verified Cloudflare account/chart schema and five applied application migrations. CI passes 109 unit/integration tests and 30 desktop/mobile browser tests using isolated fixtures. Real OpenRouter and Gemini inference and the deployed Worker smoke tests pass. The Worker is published, but automated scanning remains blocked by the account's five-cron Free-plan limit; production acceptance is still incomplete. See [required environment variables](docs/ENVIRONMENT.md), [the acceptance report](docs/PRODUCTION_ACCEPTANCE.md), [deployment setup](docs/DEPLOYMENT.md), and [implementation status](docs/IMPLEMENTATION_STATUS.md).
+Production uses a verified Cloudflare account/chart schema and five applied application migrations. CI passes 109 unit/integration tests and 30 desktop/mobile browser tests using isolated fixtures. Real OpenRouter and Gemini inference and the deployed Worker smoke tests pass. The Worker is published and its one-minute cron schedule was accepted and read back from Cloudflare at 07:31 UTC on 4 October 2026. Repeated scheduled execution and full production acceptance still require observation. See [required environment variables](docs/ENVIRONMENT.md), [the acceptance report](docs/PRODUCTION_ACCEPTANCE.md), [deployment setup](docs/DEPLOYMENT.md), and [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
 ## Local development
 

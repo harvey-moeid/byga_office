@@ -6,7 +6,7 @@ Worker: `byga-office`
 URL: https://byga-office.harveymoeid.workers.dev  
 Code: `aff739c0c93458a1fd9fa8a664aec384be9e944a`
 
-The Worker is published and the deployed application/Admin smoke checks pass. **Automated market scans are not enabled**: Cloudflare rejected the cron update because the account has reached its Workers Free allowance of five cron triggers. Connector GET confirmed `byga-office` has an empty schedule list. The final deployment job therefore failed; production scheduling acceptance is incomplete.
+The Worker is published and the deployed application/Admin smoke checks pass. **The one-minute cron is now configured**: at 07:31:02 UTC (14:31:02 WIB), the Cloudflare schedules API accepted `* * * * *`, and a subsequent GET returned that schedule. This resolves the configuration blocker. Repeated scheduled execution is not yet accepted. The earlier deployment job remains a historical failed run; it was not re-run to install this schedule.
 
 ## Confirmed
 
@@ -20,13 +20,15 @@ The Worker is published and the deployed application/Admin smoke checks pass. **
 - Deployed frontend shell/static JavaScript, Durable Object state, production candle API, provider configuration, unauthorized Admin rejection, test-route absence, real Admin login, Secure/HttpOnly/SameSite=Strict cookie flags, wrong-origin rejection and logout/session invalidation passed.
 - All five application migrations are applied to `trading_office_db`; 22 application tables and the migration ledger were verified. No migrations or seed writes were applied to remote `chart_db`.
 
-## Scheduling blocker
+## Scheduling configuration — blocker resolved
 
-The enable-cron step returned Cloudflare **10072**:
+The earlier enable-cron step returned Cloudflare **10072**:
 
 > This account has reached the Workers Free limit of 5 cron triggers per account.
 
-No existing trigger was deleted and no account plan was changed. Free a slot by explicitly selecting an existing trigger to retire, or change the account plan, then re-run the deployment on current main. Using a Durable Object alarm for periodic market scans is another possible implementation, but the current alarm handler only processes cases/outbox/retention; it does not replace the cron-driven market scanner.
+On the subsequent user-requested check, PUT schedules returned HTTP 200/success and GET confirmed `* * * * *` for `byga-office`. No other Worker's trigger was deleted or modified, and no account plan was changed by this action. The schedule matches the tracked Wrangler configuration; no application code or runtime secret was changed.
+
+At 07:34:17 UTC, the office state had changed to `market_error: Stale M5 data`, while `scanner_runs` still contained zero rows. No manual scan was issued in this check; this is evidence that the scheduled tick reached the market freshness guard, not a successful market scan. A SELECT-only chart snapshot showed latest closed opens H1 06:00 UTC, M15 07:00 UTC, and M5 07:20 UTC (closed at 07:25 UTC), explaining the stale M5 rejection. Freshness checks were not relaxed and no chart data was written. Repeated successful scans and the full AI pipeline remain unaccepted. [Cloudflare documents up to 15 minutes of cron propagation](https://developers.cloudflare.com/workers/configuration/cron-triggers/). Inspect subsequent scanner audit rows and office state before accepting repeated execution. The current Durable Object alarm handles cases/outbox/retention; market scanning is triggered by the cron handler.
 
 An earlier first-deployment office-state read returned HTTP 500 and subsequent reads succeeded. Safe smoke-test reads now have five attempts with bounded delays for transient 5xx responses; persistent failures still reject deployment. Login/logout mutations are not retried by this helper.
 
@@ -34,7 +36,7 @@ The previous direct OpenAI attempt failed with HTTP 429 `insufficient_quota`. Th
 
 ## Still requiring acceptance
 
-- Successful scheduled scan activation and repeated operational observations.
+- Fresh upstream candle ingestion and repeated successful scheduled scans; schedule installation and reaching the freshness guard are confirmed.
 - Full real Worker case pipeline, configured failover, simulation and recovery observations.
 - Real Discord webhook configuration and explicitly authorized delivery acceptance. Current deployed health reports `NOT_CONFIGURED`; no real delivery test was sent.
 - Exchange tick-size verification; the existing display precision is not exchange evidence.

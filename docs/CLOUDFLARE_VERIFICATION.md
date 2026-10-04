@@ -6,7 +6,7 @@ Account ID: `07086b4d368d0a37ebcbbf186e51eecf`.
 
 Worker `byga-office` sudah terbit di https://byga-office.harveymoeid.workers.dev. Pada deployment 37184871525, OpenRouter `openai/gpt-4.1-mini` dan Gemini `gemini-3.5-flash-lite` lolos discovery/inferensi nyata; frontend, binding D1, Durable Object, login Admin, cookie, penolakan origin, dan logout lolos smoke test. Delapan konfigurasi karakter tersimpan dengan OpenRouter utama dan Gemini fallback. Nama kedua secret runtime terkonfirmasi tanpa membuka nilainya.
 
-Aktivasi pemindaian otomatis belum selesai: Cloudflare mengembalikan 10072 karena lima slot cron Workers Free sudah terpakai. GET schedules Worker mengonfirmasi daftar kosong. Tidak ada cron lain dihapus atau paket akun diubah. Lihat [laporan penerimaan terbaru](PRODUCTION_ACCEPTANCE.md).
+Pada pemeriksaan berikutnya, 07:31:02 UTC (14:31:02 WIB), PUT schedules untuk `byga-office` berhasil dengan HTTP 200 dan GET mengonfirmasi cron `* * * * *`, sesuai `wrangler.jsonc`. Hambatan konfigurasi 10072 sebelumnya sudah teratasi untuk jadwal ini. Tidak ada cron Worker lain yang diubah/dihapus atau paket akun diubah oleh tindakan ini. Pada 07:34:17 UTC, office melaporkan `Stale M5 data` tanpa pemanggilan scan manual dalam pemeriksaan ini. SELECT chart menunjukkan candle M5 tertutup terakhir memiliki open 07:20 UTC (close 07:25 UTC); audit scanner masih kosong. Jadwal telah mencapai guard freshness, tetapi scan sukses berulang belum diterima. Tidak ada data chart ditulis atau guard freshness dilonggarkan. Lihat [laporan penerimaan terbaru](PRODUCTION_ACCEPTANCE.md).
 
 ## Hasil deployment sebelum pergantian provider
 
