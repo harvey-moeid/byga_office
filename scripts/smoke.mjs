@@ -26,6 +26,11 @@ await get("/api/v1/admin/config", 401);
 await get("/api/v1/__test/alarm", 404);
 const state = await (await get("/api/v1/office/state")).json();
 assert.equal(typeof state.office, "string", "Durable Object state missing");
+assert.ok(
+  Number.isInteger(state.scanner_consensus_min) &&
+    state.scanner_consensus_min >= 1 && state.scanner_consensus_min <= 6,
+  "Deployed backend must expose the configurable Scanner Consensus minimum",
+);
 const characters = await (await get("/api/v1/characters")).json();
 assert.equal(characters.length, 8);
 assert.ok(characters.every(c => !("primary_provider" in c) && !("primary_model" in c)));
@@ -53,6 +58,11 @@ if (process.env.ADMIN_PASSWORD) {
       headers: { Cookie: cookie }, signal: AbortSignal.timeout(20000),
     });
     assert.equal(config.status, 200);
+    const activeConfig = await config.json();
+    assert.equal(
+      activeConfig.config.scannerConsensusMin, state.scanner_consensus_min,
+      "Admin config and Operations must agree on the Scanner Consensus minimum",
+    );
     const rejected = await fetch(origin + "/api/v1/admin/scan", {
       method: "POST",
       headers: { Cookie: cookie, Origin: "https://invalid-origin.example", "Content-Type": "application/json" },

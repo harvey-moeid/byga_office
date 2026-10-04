@@ -2,7 +2,19 @@ name: Deploy approved environment
 on:
   push:
     branches: [main]
-    paths: ["deployment/production.json", ".github/workflows/deploy.yml", "scripts/live-ai.mjs", "scripts/smoke.mjs"]
+    paths:
+      - "src/**"
+      - "migrations/**"
+      - "deployment/**"
+      - "wrangler.jsonc"
+      - "package.json"
+      - "package-lock.json"
+      - "index.html"
+      - "vite.config.ts"
+      - "tsconfig.json"
+      - "scripts/**"
+      - ".github/workflows/deploy.yml"
+      - ".github/workflows/frontend.yml"
   workflow_dispatch:
     inputs:
       environment:
@@ -11,20 +23,27 @@ on:
         required: true
         default: production
 
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: false
+        default: production
+
 permissions:
   contents: read
 concurrency:
-  group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'production' }}
+  group: deploy-${{ inputs.environment || 'production' }}
   cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'production' }}
+    environment: ${{ inputs.environment || 'production' }}
     env:
       CI: "true"
-      BYGA_ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'production' }}
+      BYGA_ENV: ${{ inputs.environment || 'production' }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       BYGA_CHART_DB_ID: ${{ vars.BYGA_CHART_DB_ID }}
       BYGA_OFFICE_DB_ID: ${{ vars.BYGA_OFFICE_DB_ID }}
@@ -66,7 +85,7 @@ jobs:
       - name: Browser acceptance
         run: |
           npx playwright install --with-deps chromium
-          npm run test:browser -- --workers=2
+          npm run test:browser -- --workers=1
       - name: Generate verified environment configuration
         run: |
           node scripts/configure.mjs
@@ -118,6 +137,8 @@ jobs:
         run: npm run deploy
       - name: Verify final deployment
         run: node scripts/smoke.mjs
+      - name: Verify deployed asset hashes
+        run: node scripts/frontend-smoke.mjs
       - name: Remove temporary runtime secrets
         if: always()
         run: rm -f .wrangler/runtime-secrets.json
