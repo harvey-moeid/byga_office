@@ -15,7 +15,7 @@ import {
   type AvatarPreset,
   type CharacterId,
 } from "../core/contracts";
-import { rooms } from "./navigation";
+import { isMeeting, rooms } from "./navigation";
 import {
   initialQuality,
   adaptQuality,
@@ -24,6 +24,12 @@ import {
 } from "./quality";
 import { OfficeEnvironment } from "./office-environment";
 import { OfficeCharacter } from "./office-character";
+import {
+  ACTIVITY_TRAVEL_BUFFER_MS,
+  activityDelayMs,
+  createOfficeActivityEvent,
+  type OfficeActivity,
+} from "./office-activity";
 import type { ComponentRef, RefObject } from "react";
 import type { MeetingTurn } from "../core/meeting";
 import { SpeechBubble } from "./meeting-view";
@@ -257,11 +263,61 @@ export default function OfficeScene({
   );
   const profile = profiles[quality];
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
-  const [idleSlot, setIdleSlot] = useState(0);
+  const [activities, setActivities] = useState<
+    Partial<Record<CharacterId, OfficeActivity>>
+  >({});
+  const firstActivity = useRef(true);
+  const meetingActive = !!meetingId || isMeeting(state);
   useEffect(() => {
-    const timer = setInterval(() => setIdleSlot((s) => (s + 1) % 8), 22000);
-    return () => clearInterval(timer);
-  }, []);
+    let disposed = false;
+    const timers: number[] = [];
+    const schedule = (first: boolean) => {
+      const timer = window.setTimeout(() => {
+        if (disposed) return;
+        if (document.hidden) {
+          schedule(false);
+          return;
+        }
+        const event = createOfficeActivityEvent();
+        setActivities(event.assignments);
+        (
+          Object.entries(event.assignments) as [CharacterId, OfficeActivity][]
+        ).forEach(([id, activity]) => {
+          timers.push(
+            window.setTimeout(() => {
+              if (disposed) return;
+              setActivities((current) => {
+                if (current[id] !== activity) return current;
+                const next = { ...current };
+                delete next[id];
+                return next;
+              });
+            }, activity.durationMs + ACTIVITY_TRAVEL_BUFFER_MS),
+          );
+        });
+        timers.push(
+          window.setTimeout(() => {
+            if (disposed) return;
+            setActivities({});
+            schedule(false);
+          }, event.durationMs + ACTIVITY_TRAVEL_BUFFER_MS),
+        );
+      }, activityDelayMs(first));
+      timers.push(timer);
+    };
+    if (meetingActive) {
+      firstActivity.current = false;
+      setActivities({});
+    } else {
+      const first = firstActivity.current;
+      firstActivity.current = false;
+      schedule(first);
+    }
+    return () => {
+      disposed = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [meetingActive]);
   const antialias = useRef(quality !== "low");
   return (
     <div className="office-scene" aria-label="Kantor trading 3D interaktif">
@@ -372,9 +428,7 @@ export default function OfficeScene({
             index={index}
             avatar={avatars[id] ?? "professional"}
             state={state}
-            coffee={
-              state === "MONITORING" && profile.decorative && index === idleSlot
-            }
+            activity={activities[id]}
             decorative={profile.decorative}
             onSelect={onSelect}
             labelHost={labelHost}

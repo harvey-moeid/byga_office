@@ -13,6 +13,13 @@ import {
   type Point,
 } from "../src/ui/navigation";
 import { initialQuality, adaptQuality, profiles } from "../src/ui/quality";
+import {
+  FIRST_ACTIVITY_DELAY,
+  NEXT_ACTIVITY_DELAY,
+  activityDelayMs,
+  activityDestinations,
+  createOfficeActivityEvent,
+} from "../src/ui/office-activity";
 describe("office navigation", () => {
   for (const state of ["AI_ANALYSIS", "MONITORING", "COFFEE"])
     it(`all eight characters reach ${state} without crossing furniture/walls`, () => {
@@ -96,6 +103,49 @@ describe("office navigation", () => {
   it("decorative behavior yields to the trading workflow", () => {
     expect(destination(0, "AI_ANALYSIS", true)).toEqual(
       destination(0, "AI_ANALYSIS"),
+    );
+  });
+  it("keeps every dynamic activity destination walkable and routable", () => {
+    for (const spot of activityDestinations()) {
+      expect(walkable(spot)).toBe(true);
+      characterIds.forEach((_, index) => {
+        const desk = destination(index, "MONITORING");
+        expect(planRoute(desk, spot).length, `desk ${index} -> ${spot}`).toBeGreaterThan(0);
+        expect(planRoute(spot, desk).length, `${spot} -> desk ${index}`).toBeGreaterThan(0);
+      });
+    }
+  });
+  it("schedules varied activity events for two to six characters", () => {
+    let seed = 0x5eed1234;
+    const random = () => {
+      seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+      return seed / 2 ** 32;
+    };
+    const modes = new Set<string>();
+    for (let i = 0; i < 80; i++) {
+      const event = createOfficeActivityEvent(random);
+      const assignments = Object.values(event.assignments).filter(Boolean);
+      expect(assignments.length).toBeGreaterThanOrEqual(2);
+      expect(assignments.length).toBeLessThanOrEqual(6);
+      expect(event.durationMs).toBeGreaterThanOrEqual(10_000);
+      expect(event.durationMs).toBeLessThanOrEqual(60_000);
+      assignments.forEach((activity) => {
+        expect(activity!.durationMs).toBeGreaterThanOrEqual(10_000);
+        expect(activity!.durationMs).toBeLessThanOrEqual(60_000);
+        expect(walkable(activity!.destination)).toBe(true);
+      });
+      modes.add(event.mode);
+    }
+    expect(modes).toEqual(new Set(["individual", "group"]));
+  });
+  it("uses the agreed first and recurring activity timing windows", () => {
+    expect(activityDelayMs(true, () => 0)).toBe(FIRST_ACTIVITY_DELAY.min);
+    expect(activityDelayMs(true, () => 0.999999)).toBeLessThanOrEqual(
+      FIRST_ACTIVITY_DELAY.max,
+    );
+    expect(activityDelayMs(false, () => 0)).toBe(NEXT_ACTIVITY_DELAY.min);
+    expect(activityDelayMs(false, () => 0.999999)).toBeLessThanOrEqual(
+      NEXT_ACTIVITY_DELAY.max,
     );
   });
 });

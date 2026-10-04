@@ -9,6 +9,7 @@ import {
   type RefObject,
 } from "react";
 import { Group, Vector2, Vector3, MathUtils, Shape } from "three";
+import type { OfficeActivity } from "./office-activity";
 import {
   characterIds,
   type AvatarPreset,
@@ -161,7 +162,7 @@ const shirt: [number, number][] = [
 export function OfficeCharacter({
   index,
   state,
-  coffee,
+  activity,
   decorative,
   avatar,
   onSelect,
@@ -171,7 +172,7 @@ export function OfficeCharacter({
 }: {
   index: number;
   state: string;
-  coffee: boolean;
+  activity?: OfficeActivity;
   decorative: boolean;
   avatar: AvatarPreset;
   onSelect: (id: string) => void;
@@ -192,10 +193,18 @@ export function OfficeCharacter({
   );
   const [arrived, setArrived] = useState(false);
   const arrivedRef = useRef(false);
+  const meeting = isAttendingMeeting(index, state);
+  const activeActivity = meeting ? undefined : activity;
+  const coffee =
+    activeActivity?.kind === "coffee" || activeActivity?.kind === "coffee-break";
   const destination = useMemo(() => {
-    const [x, z] = actorDestination(index, state, coffee);
+    if (activeActivity) {
+      const [x, z] = activeActivity.destination;
+      return new Vector3(x, 0, z);
+    }
+    const [x, z] = actorDestination(index, state);
     return new Vector3(x, 0, z);
-  }, [index, state, coffee]);
+  }, [activeActivity, index, state]);
   const path = useRef<Vector3[]>([]);
   const direction = useRef(new Vector3());
   const [reduced, setReduced] = useState(
@@ -224,7 +233,6 @@ export function OfficeCharacter({
         ...([movement.destination[0], 0, movement.destination[1]] as Triple),
       );
   }, [destination]);
-  const meeting = isAttendingMeeting(index, state);
   const speechVisible = !!speech && arrived && meeting;
   useEffect(() => {
     onSpeechReady?.(characterIds[index], speechVisible);
@@ -256,13 +264,14 @@ export function OfficeCharacter({
         root.current.rotation.y += difference * Math.min(1, delta * 10);
       }
     }
-    const sitting = !walking && !path.current.length && !coffee;
+    const atActivity = !!activeActivity && !walking && !path.current.length;
+    const sitting = !walking && !path.current.length && !atActivity;
     if (arrivedRef.current !== sitting) {
       arrivedRef.current = sitting;
       setArrived(sitting);
     }
     if (!walking) {
-      const target = seatedFacing(index, state);
+      const target = activeActivity?.facing ?? seatedFacing(index, state);
       const difference = Math.atan2(
         Math.sin(target - root.current.rotation.y),
         Math.cos(target - root.current.rotation.y),
@@ -279,6 +288,17 @@ export function OfficeCharacter({
       breathe;
     const gait =
       walking && !reduced ? Math.sin(clock.elapsedTime * 8 + index) * 0.42 : 0;
+    const activityKind = activeActivity?.kind;
+    const stretching = atActivity && activityKind === "stretch";
+    const gesturing =
+      atActivity &&
+      (activityKind === "chat" ||
+        activityKind === "group-chat" ||
+        activityKind === "briefing");
+    const reviewing =
+      atActivity &&
+      (activityKind === "market-review" ||
+        activityKind === "group-market-review");
     for (let side = 0; side < 2; side++) {
       const swing = side ? -gait : gait;
       const hip = hips[side].current,
@@ -304,25 +324,51 @@ export function OfficeCharacter({
           ? Math.sin(clock.elapsedTime * 4 + index + side) * 0.025
           : 0;
       const drinking = coffee && side === 1 && !walking;
+      const activityShoulder = stretching
+        ? side
+          ? -2.25
+          : -2.05
+        : gesturing
+          ? -0.45 +
+            (reduced
+              ? 0
+              : Math.sin(clock.elapsedTime * 2.4 + index + side) * 0.22)
+          : reviewing
+            ? -0.32
+            : undefined;
       if (shoulder)
         shoulder.rotation.x = MathUtils.damp(
           shoulder.rotation.x,
           drinking
             ? -1.1
-            : sitting
-              ? (meeting ? -0.5 : -0.96) +
-                typing +
-                (speech && !reduced && side === 1
-                  ? Math.sin(clock.elapsedTime * 3) * 0.12
-                  : 0)
-              : -swing * 0.6,
+            : activityShoulder !== undefined
+              ? activityShoulder
+              : sitting
+                ? (meeting ? -0.5 : -0.96) +
+                  typing +
+                  (speech && !reduced && side === 1
+                    ? Math.sin(clock.elapsedTime * 3) * 0.12
+                    : 0)
+                : -swing * 0.6,
           10,
           delta,
         );
       if (elbow)
         elbow.rotation.x = MathUtils.damp(
           elbow.rotation.x,
-          drinking ? -1.65 : sitting ? (meeting ? -0.7 : -0.56) : -0.12,
+          drinking
+            ? -1.65
+            : stretching
+              ? -0.2
+              : gesturing
+                ? -0.85
+                : reviewing
+                  ? -0.38
+                  : sitting
+                    ? meeting
+                      ? -0.7
+                      : -0.56
+                    : -0.12,
           10,
           delta,
         );
@@ -330,14 +376,19 @@ export function OfficeCharacter({
     if (head.current) {
       head.current.rotation.y =
         decorative && !reduced && !walking
-          ? Math.sin(clock.elapsedTime * 0.5 + index * 3) * 0.08
+          ? Math.sin(
+              clock.elapsedTime * (gesturing ? 1.1 : 0.5) + index * 3,
+            ) * (gesturing ? 0.16 : 0.08)
           : 0;
-      head.current.rotation.x =
-        sitting && !meeting
-          ? 0.08
-          : speech && !reduced && sitting
-            ? Math.sin(clock.elapsedTime * 2) * 0.03
-            : 0;
+      head.current.rotation.x = reviewing
+        ? -0.04
+        : stretching && !reduced
+          ? Math.sin(clock.elapsedTime * 1.4) * 0.06
+          : sitting && !meeting
+            ? 0.08
+            : speech && !reduced && sitting
+              ? Math.sin(clock.elapsedTime * 2) * 0.03
+              : 0;
     }
   });
   const longHair = index === 1 || index === 4;
