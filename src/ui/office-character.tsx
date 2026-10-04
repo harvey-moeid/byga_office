@@ -348,14 +348,14 @@ export function OfficeCharacter({
         onSelect(characterIds[index]);
       }}
     >
-      {speechVisible && (
+      {labelHost && (
         <Html
           portal={labelHost}
           position={[0, 1.82, 0]}
           center
           zIndexRange={[4, 3]}
         >
-          {speech}
+          {speechVisible ? speech : null}
         </Html>
       )}
       <group
