@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   defaultCharacters,
   providers,
+  workersAIModel,
   type Provider,
 } from "../src/core/contracts";
 import {
@@ -11,6 +12,8 @@ import {
   parseOutput,
   requestAI,
   runCharacter,
+  discoverModels,
+  isProviderConfigured,
   type AIRuntime,
   type Circuit,
 } from "../src/server/providers";
@@ -65,7 +68,109 @@ function runtime() {
   };
   return { r, audit, circuits };
 }
-describe("Eight provider adapters", () => {
+describe("Provider adapters", () => {
+  it("bounds a stalled Workers AI catalog request", async () => {
+    vi.useFakeTimers();
+    try {
+      const models = vi.fn(() => new Promise<never>(() => {}));
+      const cloudflare = { ...env, AI: { models } as unknown as Ai };
+      const pending = discoverModels(cloudflare, "workers-ai").catch(
+        (e) => e.message,
+      );
+      await vi.advanceTimersByTimeAsync(10001);
+      expect(await pending).toBe("MODEL_DISCOVERY_TIMEOUT");
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  const binding = (
+    run = vi.fn(async () => ({
+      response: output,
+      usage: { prompt_tokens: 20, completion_tokens: 12 },
+    })),
+    models = vi.fn(async () => []),
+  ) => ({ ...env, AI: { run, models } as unknown as Ai });
+  it.each([true, false])(
+    "Workers AI handles JSON response objects and strings (%s)",
+    async (object) => {
+      const run = vi.fn(async () => ({
+        response: object ? output : JSON.stringify(output),
+        usage: { prompt_tokens: 20, completion_tokens: 12 },
+      }));
+      const cloudflare = binding(run);
+      const f = vi.fn() as unknown as typeof fetch;
+      const result = await requestAI(
+        cloudflare,
+        "workers-ai",
+        workersAIModel,
+        "fixture prompt",
+        defaultCharacters()[0],
+        1000,
+        f,
+      );
+      expect(parseOutput(result.text)).toEqual(output);
+      expect(result.tokens).toBe(32);
+      expect(run).toHaveBeenCalledWith(
+        workersAIModel,
+        expect.objectContaining({
+          stream: false,
+          response_format: expect.objectContaining({ type: "json_schema" }),
+          max_tokens: 1500,
+        }),
+        { signal: expect.any(AbortSignal) },
+      );
+      expect(f).not.toHaveBeenCalled();
+      expect(isProviderConfigured(cloudflare, "workers-ai")).toBe(true);
+      expect(isProviderConfigured(env, "workers-ai")).toBe(false);
+    },
+  );
+  it("Workers AI failure uses audited retries and configured external fallback", async () => {
+    const cloudflare = binding(
+      vi.fn(async () => {
+        throw new Error("WORKERS_AI_UNAVAILABLE");
+      }),
+    );
+    const { r, audit } = runtime();
+    const f = vi.fn(
+      async () => new Response(JSON.stringify(response("gemini"))),
+    ) as typeof fetch;
+    const result = await runCharacter(
+      cloudflare,
+      {
+        ...defaultCharacters()[0],
+        primary_provider: "workers-ai",
+        primary_model: workersAIModel,
+      },
+      {},
+      r,
+      f,
+      async () => {},
+    );
+    expect(result.status).toBe("SUCCESS");
+    expect(result.provider).toBe("gemini");
+    expect(result.flags).toContain("MODEL_FALLBACK_USED");
+    expect(cloudflare.AI!.run).toHaveBeenCalledTimes(2);
+    expect(audit).toHaveBeenCalledTimes(3);
+  });
+  it("discovers only text generation models and deduplicates catalog names", async () => {
+    const models = vi.fn(async () => [
+      { name: workersAIModel, task: { name: "Text Generation" } },
+      { name: workersAIModel, task: { name: "Text Generation" } },
+      { name: "@cf/image/model", task: { name: "Text-to-Image" } },
+    ]);
+    expect(
+      await discoverModels(binding(undefined, models), "workers-ai"),
+    ).toEqual([workersAIModel]);
+    expect(models).toHaveBeenCalledWith({
+      page: 1,
+      per_page: 100,
+      hide_experimental: true,
+    });
+    await expect(discoverModels(env, "workers-ai")).rejects.toThrow(
+      "PROVIDER_NOT_CONFIGURED",
+    );
+  });
   it("retries invalid price relationships then falls back without rewriting the vote/confidence", async () => {
     const { r, audit } = runtime();
     const bad = {
@@ -100,39 +205,42 @@ describe("Eight provider adapters", () => {
       "Price levels contradict vote",
     );
   });
-  it.each(providers)("%s formats and parses its wire contract", async (p) => {
-    const f = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-      expect(String(input)).toMatch(/^https:/);
-      expect(init?.method).toBe("POST");
-      const body = JSON.parse(String(init?.body));
-      if (p === "gemini") {
-        expect(new Headers(init?.headers).get("x-goog-api-key")).toBe(
-          "test-gemini",
-        );
-        expect(body.contents).toHaveLength(1);
-      } else
-        expect(new Headers(init?.headers).get("Authorization")).toMatch(
-          /^Bearer test-/,
-        );
-      if (p === "openrouter") {
-        expect(body.response_format.type).toBe("json_schema");
-        expect(body.response_format.json_schema.strict).toBe(true);
-        expect(body.provider.require_parameters).toBe(true);
-      }
-      return new Response(JSON.stringify(response(p)));
-    }) as typeof fetch;
-    const r = await requestAI(
-      env,
-      p,
-      "fixture-model",
-      "Locked context",
-      defaultCharacters()[0],
-      1000,
-      f,
-    );
-    expect(parseOutput(r.text)).toEqual(output);
-    expect(r.tokens).toBe(32);
-  });
+  it.each(providers.filter((p) => p !== "workers-ai"))(
+    "%s formats and parses its wire contract",
+    async (p) => {
+      const f = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        expect(String(input)).toMatch(/^https:/);
+        expect(init?.method).toBe("POST");
+        const body = JSON.parse(String(init?.body));
+        if (p === "gemini") {
+          expect(new Headers(init?.headers).get("x-goog-api-key")).toBe(
+            "test-gemini",
+          );
+          expect(body.contents).toHaveLength(1);
+        } else
+          expect(new Headers(init?.headers).get("Authorization")).toMatch(
+            /^Bearer test-/,
+          );
+        if (p === "openrouter") {
+          expect(body.response_format.type).toBe("json_schema");
+          expect(body.response_format.json_schema.strict).toBe(true);
+          expect(body.provider.require_parameters).toBe(true);
+        }
+        return new Response(JSON.stringify(response(p)));
+      }) as typeof fetch;
+      const r = await requestAI(
+        env,
+        p,
+        "fixture-model",
+        "Locked context",
+        defaultCharacters()[0],
+        1000,
+        f,
+      );
+      expect(parseOutput(r.text)).toEqual(output);
+      expect(r.tokens).toBe(32);
+    },
+  );
   it("parses fenced strict JSON and rejects extra invalid structure", () => {
     expect(parseOutput("```json\n" + JSON.stringify(output) + "\n```")).toEqual(
       output,

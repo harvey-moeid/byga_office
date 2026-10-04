@@ -5,6 +5,8 @@ import {
   avatarPresets,
   defaultConfig,
   providers,
+  providerLabel,
+  workersAIModel,
   scannerNames,
   type CharacterConfig,
   type TradingConfig,
@@ -315,8 +317,10 @@ function CharacterEditor() {
     () => setDraft(data.data?.find((c) => c.id === id)),
     [id, data.data],
   );
-  const modelData = useState<string[]>([]);
-  const [models, setModels] = modelData;
+  const [models, setModels] = useState({
+    primary: [] as string[],
+    fallback: [] as string[],
+  });
   const save = async () => {
     try {
       await api("/admin/characters", draft);
@@ -347,11 +351,32 @@ function CharacterEditor() {
               <label key={k}>
                 {k}
                 <select
+                  aria-label={k}
                   value={draft[k]}
-                  onChange={(e) => setDraft({ ...draft, [k]: e.target.value })}
+                  onChange={(e) => {
+                    const provider = e.target
+                      .value as CharacterConfig[typeof k];
+                    setDraft({
+                      ...draft,
+                      [k]: provider,
+                      ...(provider === "workers-ai"
+                        ? {
+                            [k === "primary_provider"
+                              ? "primary_model"
+                              : "fallback_model"]: workersAIModel,
+                          }
+                        : {}),
+                    });
+                    setModels((m) => ({
+                      ...m,
+                      [k === "primary_provider" ? "primary" : "fallback"]: [],
+                    }));
+                  }}
                 >
                   {providers.map((p) => (
-                    <option key={p}>{p}</option>
+                    <option key={p} value={p}>
+                      {providerLabel(p)}
+                    </option>
                   ))}
                 </select>
               </label>
@@ -376,7 +401,7 @@ function CharacterEditor() {
                   />
                 ) : (
                   <input
-                    list={k.includes("model") ? "models" : undefined}
+                    list={k.includes("model") ? `${k}-options` : undefined}
                     value={draft[k]}
                     onChange={(e) =>
                       setDraft({ ...draft, [k]: e.target.value })
@@ -424,29 +449,34 @@ function CharacterEditor() {
               </label>
             ))}
           </div>
-          <datalist id="models">
-            {models.map((m) => (
-              <option key={m}>{m}</option>
-            ))}
-          </datalist>
+          {(["primary", "fallback"] as const).map((role) => (
+            <datalist key={role} id={`${role}_model-options`}>
+              {models[role].map((m) => (
+                <option key={m}>{m}</option>
+              ))}
+            </datalist>
+          ))}
           <div className="actions">
-            <button
-              onClick={async () => {
-                try {
-                  const r = await api<{ models: string[] }>("/admin/models", {
-                    id: draft.primary_provider,
-                  });
-                  setModels(r.models);
-                  setMessage(
-                    `${r.models.length} models loaded; custom model ID tetap tersedia.`,
-                  );
-                } catch (e) {
-                  setMessage((e as Error).message);
-                }
-              }}
-            >
-              Discover primary models
-            </button>
+            {(["primary", "fallback"] as const).map((role) => (
+              <button
+                key={role}
+                onClick={async () => {
+                  try {
+                    const r = await api<{ models: string[] }>("/admin/models", {
+                      id: draft[`${role}_provider`],
+                    });
+                    setModels((m) => ({ ...m, [role]: r.models }));
+                    setMessage(
+                      `${r.models.length} models loaded; custom model ID tetap tersedia.`,
+                    );
+                  } catch (e) {
+                    setMessage((e as Error).message);
+                  }
+                }}
+              >
+                Discover {role} models
+              </button>
+            ))}
             <button className="primary" onClick={save}>
               Save character & prompt
             </button>
@@ -503,12 +533,16 @@ function Providers() {
       <Notice error={d.error} />
       {d.data?.map((p) => (
         <div className="list-row" key={p.id}>
-          <strong>{p.id}</strong>
+          <strong>{providerLabel(p.id)}</strong>
           <Badge value={p.state} />
           <span>
             {health.data?.configured.find((c) => c.id === p.id)?.configured
-              ? "Secret configured"
-              : "Secret missing"}
+              ? p.id === "workers-ai"
+                ? "AI binding configured"
+                : "Secret configured"
+              : p.id === "workers-ai"
+                ? "AI binding missing"
+                : "Secret missing"}
           </span>
           <button
             onClick={async () => {

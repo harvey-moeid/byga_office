@@ -10,7 +10,12 @@ import {
 } from "miniflare";
 import { digest } from "../src/server/auth";
 import { apiLimits } from "../src/server/rate-limit";
-import { defaultConfig, type Signal } from "../src/core/contracts";
+import {
+  defaultConfig,
+  workersAIModel,
+  type CharacterConfig,
+  type Signal,
+} from "../src/core/contracts";
 let mf: Miniflare,
   cookie = "";
 let scenario: "BUY" | "SELL" | "NO_TRADE" | "TIE" | "BOSS_REVERSE" = "BUY";
@@ -397,6 +402,39 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     expect(set).toContain("SameSite=Strict");
     cookie = set.split(";")[0];
     expect(await (await call("/auth/session")).json()).toEqual({ admin: true });
+  });
+  it("accepts Workers AI character settings and reports missing binding without real inference", async () => {
+    const health = (await (await call("/admin/health")).json()) as {
+      configured: { id: string; configured: boolean }[];
+    };
+    expect(health.configured).toContainEqual({
+      id: "workers-ai",
+      configured: false,
+    });
+    const characters = (await (
+      await call("/admin/characters")
+    ).json()) as CharacterConfig[];
+    const original = characters.find((c) => c.id === "trend")!;
+    const updated = await call("/admin/characters", {
+      ...original,
+      primary_provider: "workers-ai",
+      primary_model: workersAIModel,
+    });
+    expect(updated.status).toBe(200);
+    const saved = (await (
+      await call("/admin/characters")
+    ).json()) as CharacterConfig[];
+    expect(saved.find((c) => c.id === "trend")).toMatchObject({
+      primary_provider: "workers-ai",
+      primary_model: workersAIModel,
+    });
+    expect((await call("/admin/models", { id: "workers-ai" })).status).toBe(
+      503,
+    );
+    expect(
+      (await call("/admin/test-provider", { id: "workers-ai" })).status,
+    ).toBe(503);
+    await call("/admin/characters", original);
   });
   it("reads only closed H1/M15/M5 candles and rejects cross-origin mutation", async () => {
     const res = await call("/market/status");

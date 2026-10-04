@@ -44,49 +44,56 @@ export function circuitResult(
         openedAt: c.openedAt || c.failures + 1 >= policy.threshold ? now : 0,
       };
 }
-const api: Record<Provider, { url: string; models?: string; key: keyof Env }> =
-  {
-    openai: {
-      url: "https://api.openai.com/v1/chat/completions",
-      models: "https://api.openai.com/v1/models",
-      key: "OPENAI_API_KEY",
-    },
-    gemini: {
-      url: "https://generativelanguage.googleapis.com/v1beta/models",
-      models: "https://generativelanguage.googleapis.com/v1beta/models",
-      key: "GEMINI_API_KEY",
-    },
-    groq: {
-      url: "https://api.groq.com/openai/v1/chat/completions",
-      models: "https://api.groq.com/openai/v1/models",
-      key: "GROQ_API_KEY",
-    },
-    openrouter: {
-      url: "https://openrouter.ai/api/v1/chat/completions",
-      models: "https://openrouter.ai/api/v1/models",
-      key: "OPENROUTER_API_KEY",
-    },
-    mistral: {
-      url: "https://api.mistral.ai/v1/chat/completions",
-      models: "https://api.mistral.ai/v1/models",
-      key: "MISTRAL_API_KEY",
-    },
-    huggingface: {
-      url: "https://router.huggingface.co/v1/chat/completions",
-      models: "https://router.huggingface.co/v1/models",
-      key: "HF_TOKEN",
-    },
-    cohere: {
-      url: "https://api.cohere.com/v2/chat",
-      models: "https://api.cohere.com/v1/models",
-      key: "COHERE_API_KEY",
-    },
-    nvidia: {
-      url: "https://integrate.api.nvidia.com/v1/chat/completions",
-      models: "https://integrate.api.nvidia.com/v1/models",
-      key: "NVIDIA_API_KEY",
-    },
-  };
+const api: Record<
+  Exclude<Provider, "workers-ai">,
+  { url: string; models?: string; key: keyof Env }
+> = {
+  openai: {
+    url: "https://api.openai.com/v1/chat/completions",
+    models: "https://api.openai.com/v1/models",
+    key: "OPENAI_API_KEY",
+  },
+  gemini: {
+    url: "https://generativelanguage.googleapis.com/v1beta/models",
+    models: "https://generativelanguage.googleapis.com/v1beta/models",
+    key: "GEMINI_API_KEY",
+  },
+  groq: {
+    url: "https://api.groq.com/openai/v1/chat/completions",
+    models: "https://api.groq.com/openai/v1/models",
+    key: "GROQ_API_KEY",
+  },
+  openrouter: {
+    url: "https://openrouter.ai/api/v1/chat/completions",
+    models: "https://openrouter.ai/api/v1/models",
+    key: "OPENROUTER_API_KEY",
+  },
+  mistral: {
+    url: "https://api.mistral.ai/v1/chat/completions",
+    models: "https://api.mistral.ai/v1/models",
+    key: "MISTRAL_API_KEY",
+  },
+  huggingface: {
+    url: "https://router.huggingface.co/v1/chat/completions",
+    models: "https://router.huggingface.co/v1/models",
+    key: "HF_TOKEN",
+  },
+  cohere: {
+    url: "https://api.cohere.com/v2/chat",
+    models: "https://api.cohere.com/v1/models",
+    key: "COHERE_API_KEY",
+  },
+  nvidia: {
+    url: "https://integrate.api.nvidia.com/v1/chat/completions",
+    models: "https://integrate.api.nvidia.com/v1/models",
+    key: "NVIDIA_API_KEY",
+  },
+};
+export function isProviderConfigured(env: Env, provider: Provider) {
+  if (provider === "workers-ai") return typeof env.AI?.run === "function";
+  const credential = env[api[provider].key];
+  return typeof credential === "string" && credential.length > 0;
+}
 const outputJsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -170,6 +177,44 @@ export async function requestAI(
   timeout: number,
   fetcher: typeof fetch = fetch,
 ) {
+  if (provider === "workers-ai") {
+    if (!env.AI) throw new Error("PROVIDER_NOT_CONFIGURED");
+    const payload = await env.AI.run(
+      model,
+      {
+        messages: [{ role: "user", content: prompt }],
+        temperature: character.temperature,
+        max_tokens: character.max_output_tokens,
+        stream: false,
+        response_format: { type: "json_schema", json_schema: outputJsonSchema },
+      },
+      { signal: AbortSignal.timeout(timeout) },
+    );
+    const response = payload.response;
+    const text =
+      typeof response === "string"
+        ? response
+        : response && typeof response === "object"
+          ? JSON.stringify(response)
+          : undefined;
+    if (!text) throw new Error("EMPTY_PROVIDER_RESPONSE");
+    const usage = payload.usage as
+      | {
+          total_tokens?: number;
+          prompt_tokens?: number;
+          completion_tokens?: number;
+        }
+      | undefined;
+    return {
+      text: redact(text, env),
+      tokens:
+        usage?.total_tokens ??
+        (usage?.prompt_tokens !== undefined &&
+        usage?.completion_tokens !== undefined
+          ? usage.prompt_tokens + usage.completion_tokens
+          : Math.ceil((prompt.length + text.length) / 4)),
+    };
+  }
   const spec = api[provider],
     secret = env[spec.key];
   if (typeof secret !== "string" || !secret)
@@ -199,7 +244,7 @@ export async function requestAI(
       temperature: character.temperature,
       max_tokens: character.max_output_tokens,
       response_format:
-        (provider === "openai" || provider === "openrouter")
+        provider === "openai" || provider === "openrouter"
           ? {
               type: "json_schema",
               json_schema: {
@@ -220,8 +265,7 @@ export async function requestAI(
       };
   }
   if (provider === "openrouter") body.provider = { require_parameters: true };
-  if (["huggingface", "nvidia"].includes(provider))
-    delete body.response_format;
+  if (["huggingface", "nvidia"].includes(provider)) delete body.response_format;
   const response = await fetcher(url, {
     method: "POST",
     headers,
@@ -261,6 +305,29 @@ export async function discoverModels(
   provider: Provider,
   fetcher: typeof fetch = fetch,
 ) {
+  if (provider === "workers-ai") {
+    if (!env.AI) throw new Error("PROVIDER_NOT_CONFIGURED");
+    const models: string[] = [];
+    for (let page = 1; page <= 5; page++) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const found = await Promise.race([
+        env.AI.models({ page, per_page: 100, hide_experimental: true }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("MODEL_DISCOVERY_TIMEOUT")),
+            10000,
+          );
+        }),
+      ]).finally(() => clearTimeout(timer));
+      models.push(
+        ...found
+          .filter((m) => m.task.name.toLowerCase() === "text generation")
+          .map((m) => m.name),
+      );
+      if (found.length < 100) break;
+    }
+    return [...new Set(models)].slice(0, 500);
+  }
   const spec = api[provider];
   const secret = env[spec.key];
   if (typeof secret !== "string" || !secret)
@@ -333,8 +400,7 @@ export async function runCharacter(
     [0, c.primary_provider, c.primary_model, c.primary_timeout],
     [1, c.fallback_provider, c.fallback_model, c.fallback_timeout],
   ] as const) {
-    const credential = env[api[provider].key];
-    if (typeof credential !== "string" || !credential) {
+    if (!isProviderConfigured(env, provider)) {
       errors.push("PROVIDER_NOT_CONFIGURED");
       continue;
     }

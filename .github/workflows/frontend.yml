@@ -1,78 +1,14 @@
 name: Publish validated frontend
+# Compatibility entry point: frontend and backend use the same acceptance pipeline.
 on:
-  push:
-    branches: [main]
-    paths: ["src/ui/**", "browser-tests/**", "playwright.config.ts", ".github/workflows/frontend.yml", "scripts/frontend-smoke.mjs"]
   workflow_dispatch:
 
 permissions:
   contents: read
-concurrency:
-  group: deploy-production
-  cancel-in-progress: false
 
 jobs:
   publish:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 20
-    environment: production
-    env:
-      CI: "true"
-      BYGA_ENV: production
-      CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
-      BYGA_CHART_DB_ID: ${{ vars.BYGA_CHART_DB_ID }}
-      BYGA_OFFICE_DB_ID: ${{ vars.BYGA_OFFICE_DB_ID }}
-      BYGA_PUBLIC_ORIGIN: ${{ vars.BYGA_PUBLIC_ORIGIN }}
-      BYGA_CHART_SCHEMA: ${{ vars.BYGA_CHART_SCHEMA }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      WRANGLER_SEND_METRICS: "false"
-    steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Require backend identical to the accepted deployed code
-        run: |
-          # This is the code revision published by production run 37184871525.
-          # A backend/config change must use deploy.yml and its live acceptance.
-          git diff --exit-code aff739c0c93458a1fd9fa8a664aec384be9e944a HEAD -- \
-            src/server src/core migrations deployment wrangler.jsonc \
-            package.json package-lock.json scripts/configure.mjs \
-            scripts/deploy.mjs scripts/wrangler.mjs
-          test -n "$CLOUDFLARE_API_TOKEN"
-      - name: Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: "24"
-          cache: npm
-      - run: npm ci
-      - run: npm run check
-      - name: Desktop and mobile browser acceptance
-        run: |
-          npx playwright install --with-deps chromium
-          # Match CI: avoid competing software WebGL renderers on one runner.
-          npm run test:browser -- --workers=1
-      - name: Generate existing production configuration
-        run: |
-          node scripts/configure.mjs
-          node --input-type=module <<'JS'
-          import { readFileSync, appendFileSync } from "node:fs";
-          import assert from "node:assert/strict";
-          const path = ".wrangler/deploy-production.json";
-          const config = JSON.parse(readFileSync(path, "utf8"));
-          const defaults = JSON.parse(readFileSync("deployment/production.json", "utf8"));
-          assert.equal(config.name, "byga-office");
-          assert.equal(config.account_id, defaults.account_id);
-          assert.equal(config.d1_databases.find(db => db.binding === "CHART_DB").database_id, defaults.chart_db_id);
-          assert.equal(config.d1_databases.find(db => db.binding === "DB").database_id, defaults.office_db_id);
-          assert.equal(config.vars.PUBLIC_ORIGIN, defaults.public_origin);
-          assert.deepEqual(JSON.parse(config.vars.CHART_SCHEMA), defaults.chart_schema);
-          assert.deepEqual(config.triggers.crons, ["* * * * *"]);
-          appendFileSync(process.env.GITHUB_ENV,
-            "BYGA_DEPLOY_CONFIG=" + path + "\nBYGA_PUBLIC_ORIGIN=" + config.vars.PUBLIC_ORIGIN + "\n");
-          JS
-      - name: Publish verified frontend with existing backend and cron
-        run: npm run deploy
-      - name: Verify deployed asset hashes and existing API responses
-        run: node scripts/frontend-smoke.mjs
+    uses: ./.github/workflows/deploy.yml
+    with:
+      environment: production
+    secrets: inherit

@@ -46,7 +46,7 @@ Default character models are `openai/gpt-4.1-mini` through OpenRouter and `gemin
 
 Optional: `DISCORD_MEETING_WEBHOOK` and `DISCORD_SIGNAL_WEBHOOK`. Missing webhooks remain unverified; do not call configured-only status successful delivery. Existing runtime secrets of other provider types are preserved by Wrangler but are not copied from unrelated Workers.
 
-Changing the tracked production target triggers the deployment workflow on main. Otherwise run Actions → Deploy approved environment → Run workflow → production. Missing credentials fail before checkout/build/migrations.
+Changes to frontend, backend, contracts, dependencies, migrations, configuration and deployment scripts on main trigger `deploy.yml` automatically. Run Actions → Deploy approved environment → Run workflow → production to deploy manually. Missing credentials fail before checkout/build/migrations. Nonsecret values may be omitted from GitHub environment variables when the tracked production defaults are correct.
 
 The workflow runs code and browser checks, validates actual SELECT-only market reads through the application's reader (260 candles per timeframe with OHLC/gap/freshness guards), and makes a bounded structured-output probe for each selected provider with synthetic input, using the exact default models from the character configuration. Both model discovery and inference must pass. The probes do not publish a signal. It then applies only application migrations, deploys initially with cron disabled, installs runtime secrets, verifies frontend/assets/D1/Durable Object/Admin login/cookie flags/origin rejection/logout, and enables cron only after acceptance. A failed initial smoke test leaves cron disabled. The final smoke test must also pass.
 
@@ -65,6 +65,8 @@ Verify real BTCUSDT H1/M15/M5 reads and freshness/gaps; real model discovery and
 
 ## Frontend publication
 
-Changes under `src/ui/` trigger `frontend.yml` in the same protected GitHub `production` environment and deployment concurrency group. Its first gate requires backend, core contracts, dependencies, D1 migrations and deployment configuration to match the code revision actually published by run 37184871525 (`aff739c0c93458a1fd9fa8a664aec384be9e944a`). Backend/config changes must go through the full deployment workflow; update this baseline only after an accepted backend publication.
+Frontend and backend are deployed together through `deploy.yml`, with the same code/browser/market/provider acceptance checks and production concurrency group. There is no comparison against a fixed backend commit. Both API/Admin smoke checks and SHA-256 verification of built JS/CSS assets run after publication.
 
-After code/integration/browser checks, this workflow publishes the frontend with the same Worker backend, existing secrets, bindings and cron. It does not migrate D1 or call AI/Discord. The smoke check verifies SHA-256 of every built JS/CSS asset on production and the existing unauthenticated API/auth boundaries. It reports market freshness separately; stale upstream data does not imply a frontend publication failure or a passing trading acceptance. Nonsecret overrides must match the production settings used for the baseline; changes to those settings require the full deployment workflow.
+The previous `frontend.yml` entry remains available for manual dispatch and calls the same full deployment workflow. It has no automatic push trigger, so a commit changing frontend and backend starts one deployment pipeline. This manual entry requires the same production secrets as a full deployment.
+
+Provider probes make bounded real AI requests with synthetic input; they do not publish trading signals. Changes to configuration remain subject to the Admin activation rules.
