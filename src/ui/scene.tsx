@@ -19,8 +19,11 @@ import { isMeeting, rooms } from "./navigation";
 import {
   initialQuality,
   adaptQuality,
+  parseQualityMode,
   profiles,
+  qualityModes,
   type Quality,
+  type QualityMode,
 } from "./quality";
 import { OfficeEnvironment } from "./office-environment";
 import { OfficeCharacter } from "./office-character";
@@ -64,6 +67,7 @@ function InteriorReflections() {
 }
 
 type View = "overview" | "floor" | "meeting";
+const QUALITY_STORAGE_KEY = "byga:3d-quality";
 const views: Record<
   View,
   {
@@ -255,12 +259,27 @@ export default function OfficeScene({
     }
   }, [meetingId]);
   const labelHost = useRef<HTMLDivElement>(null!);
-  const [quality, setQuality] = useState<Quality>(() =>
-    initialQuality(
-      navigator.hardwareConcurrency ?? 4,
-      (navigator as Navigator & { deviceMemory?: number }).deviceMemory,
-    ),
+  const deviceQuality = useMemo(
+    () =>
+      initialQuality(
+        navigator.hardwareConcurrency ?? 4,
+        (navigator as Navigator & { deviceMemory?: number }).deviceMemory,
+      ),
+    [],
   );
+  const [qualityMode, setQualityMode] = useState<QualityMode>(() =>
+    parseQualityMode(window.localStorage.getItem(QUALITY_STORAGE_KEY)),
+  );
+  const [quality, setQuality] = useState<Quality>(() => {
+    const stored = parseQualityMode(
+      window.localStorage.getItem(QUALITY_STORAGE_KEY),
+    );
+    return stored === "auto" ? deviceQuality : stored;
+  });
+  useEffect(() => {
+    window.localStorage.setItem(QUALITY_STORAGE_KEY, qualityMode);
+    setQuality(qualityMode === "auto" ? deviceQuality : qualityMode);
+  }, [deviceQuality, qualityMode]);
   const profile = profiles[quality];
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
   const [activities, setActivities] = useState<
@@ -341,7 +360,7 @@ export default function OfficeScene({
           toneMappingExposure: 1.12,
         }}
         onCreated={({ gl }) => {
-          if (softwareRendering(gl)) setQuality("low");
+          if (qualityMode === "auto" && softwareRendering(gl)) setQuality("low");
           gl.domElement.addEventListener("webglcontextlost", (event) => {
             event.preventDefault();
             window.dispatchEvent(new Event("byga:webgl-lost"));
@@ -440,7 +459,9 @@ export default function OfficeScene({
             }
           />
         ))}
-        <PerformanceMonitor quality={quality} onQuality={setQuality} />
+        {qualityMode === "auto" && (
+          <PerformanceMonitor quality={quality} onQuality={setQuality} />
+        )}
         <CameraView view={view} reset={reset} controls={controls} />
         <OrbitControls
           ref={controls}
@@ -493,7 +514,24 @@ export default function OfficeScene({
           ↺
         </button>
       </div>
-      <span className="scene-quality">Auto · {quality}</span>
+      <label className="scene-quality">
+        <span>Kualitas 3D</span>
+        <select
+          aria-label="Kualitas 3D"
+          value={qualityMode}
+          onChange={(event) =>
+            setQualityMode(event.target.value as QualityMode)
+          }
+        >
+          {qualityModes.map((mode) => (
+            <option key={mode} value={mode}>
+              {mode === "auto"
+                ? `Auto · ${quality}`
+                : mode[0].toUpperCase() + mode.slice(1)}
+            </option>
+          ))}
+        </select>
+      </label>
     </div>
   );
 }

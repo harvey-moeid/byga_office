@@ -559,11 +559,34 @@ p {
 }
 .scene-quality {
   position: absolute;
-  bottom: 28px;
+  bottom: 20px;
   left: 20px;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: #9db4ad;
   font-size: 9px;
+  letter-spacing: 0.5px;
+  background: #132b2fed;
+  border: 1px solid #5b817980;
+  border-radius: 8px;
+  padding: 6px 7px 6px 10px;
+  backdrop-filter: blur(10px);
+}
+.scene-quality span {
+  white-space: nowrap;
   pointer-events: none;
+}
+.scene-quality select {
+  min-height: 34px;
+  border: 1px solid #58776f;
+  border-radius: 6px;
+  background: #1b3737;
+  color: #e4efe9;
+  padding: 5px 28px 5px 9px;
+  font-size: 10px;
+  cursor: pointer;
 }
 .screen-label {
   color: #d4e8db;
@@ -624,6 +647,14 @@ p {
   .scene-quality {
     bottom: 65px;
     left: 12px;
+    padding: 5px 6px 5px 8px;
+  }
+  .scene-quality span {
+    display: none;
+  }
+  .scene-quality select {
+    min-height: 36px;
+    font-size: 9px;
   }
   .room-label {
     font-size: 6px;
