@@ -93,7 +93,7 @@ function CameraView({
   useEffect(() => {
     const setting = views[view];
     const factor =
-      view === "overview" && size.width / size.height < 0.95 ? 1.24 : 1;
+      view === "overview" ? Math.max(1, 1.4 / (size.width / size.height)) : 1;
     camera.position.set(
       ...(setting.camera.map(
         (n, i) => setting.target[i] + (n - setting.target[i]) * factor,
