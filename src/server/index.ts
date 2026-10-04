@@ -5,6 +5,7 @@ import {
   type Signal,
 } from "../core/contracts";
 import { reviewDelivery } from "./discord";
+import { consumeApiLimit, limitHeaders, limitedResponse } from "./rate-limit";
 import { isAdmin, json, login, logout, sameOrigin } from "./auth";
 import type { Env } from "./env";
 import { chartSchema, readMarket } from "./market";
@@ -296,6 +297,14 @@ async function route(request: Request, env: Env): Promise<Response> {
           vote: a.output?.vote,
           confidence: a.output?.confidence,
           summary: a.output?.summary,
+          ...(admin
+            ? {
+                provider: a.provider,
+                model: a.model,
+                prompt_version: a.prompt_version,
+                validationErrors: a.validationErrors,
+              }
+            : {}),
           warning: a.flags.includes("SEMANTIC_VALIDATION_FAILED")
             ? "AI response quality issue detected"
             : null,
@@ -481,8 +490,17 @@ export default {
     try {
       if (Number(request.headers.get("Content-Length")) > 200000)
         return json({ error: "Request too large" }, 413);
-      const routed = await route(request, env);
+      let limit;
+      try {
+        limit = await consumeApiLimit(request, env);
+      } catch {
+        return json({ error: "API temporarily unavailable" }, 503);
+      }
+      const routed = limit?.blocked
+        ? limitedResponse(limit)
+        : await route(request, env);
       const response = new Response(routed.body, routed);
+      limitHeaders(response, limit);
       response.headers.set("Referrer-Policy", "same-origin");
       response.headers.set("X-Frame-Options", "DENY");
       response.headers.set(

@@ -1,0 +1,51 @@
+# Pemeriksaan Cloudflare BYGA — 4 Oktober 2026 (UTC)
+
+Account ID: `07086b4d368d0a37ebcbbf186e51eecf`.
+
+Pemeriksaan remote menggunakan konektor Cloudflare: GET metadata kedua database dan SELECT schema/data agregat. Tidak ada migrasi, seed, deployment, atau perubahan database.
+
+| Database | ID | Hasil |
+| --- | --- | --- |
+| chart_db | 76f53f4c-a542-48a7-8eb8-10dbcba3c1aa | GET dan SELECT berhasil; ukuran snapshot 3.301.376 byte; region APAC |
+| trading_office_db | e787a5b2-c876-4afa-beae-55bb616504be | GET dan SELECT berhasil; hanya tabel internal _cf_KV, belum ada tabel aplikasi/migrasi; ukuran 12.288 byte |
+
+Semua SELECT yang dijalankan melaporkan `rows_written=0`, `changes=0`, dan `changed_db=false`. Angka metadata `num_tables` tidak dipakai sebagai sumber jumlah tabel; daftar diperiksa melalui `sqlite_schema`.
+
+## Token dan akses
+
+Runtime environment melaporkan `CLOUDFLARE_API_TOKEN` berstatus `ready` dan network policy `enforced` untuk api.cloudflare.com. Status tersebut bukan verifikasi otorisasi API.
+
+Verifikasi token environment belum selesai: permintaan shell tanpa tambahan akses jaringan gagal dengan `Operation not permitted`; permintaan akses tambahan terhenti sebelum respons API. Nilai token tidak dicetak/disimpan.
+
+Pada konektor Cloudflare, GET /user/tokens/verify dan GET /accounts/{account_id}/tokens/verify mengembalikan error 1000 `Invalid API Token`, sedangkan akses kedua database dan SELECT berhasil. Hasil konektor tidak membuktikan validitas/invaliditas token environment BYGA, dan alasan perbedaan respons belum diketahui.
+
+## Schema chart_db
+
+Tabel: candles, candle_stats, ingest_runs, pair_ingest_state, d1_migrations, dan tabel internal _cf_KV.
+
+`candles`: id INTEGER PRIMARY KEY AUTOINCREMENT; symbol TEXT NOT NULL; timeframe TEXT NOT NULL; open_time INTEGER NOT NULL; open/high/low/close/volume REAL NOT NULL; created_at INTEGER DEFAULT unixepoch(); source TEXT NOT NULL DEFAULT 'bybit'; is_closed INTEGER NOT NULL DEFAULT 0 CHECK (is_closed IN (0,1)).
+
+Unique index: `idx_candles_unique(symbol, timeframe, open_time)`. Index tambahan: `idx_ingest_runs_created(id DESC)`. Trigger INSERT/DELETE pada candles memperbarui candle_stats.
+
+Mapping yang teramati (belum diterapkan ke config deployment):
+
+```json
+{"table":"candles","market":"symbol","timeframe":"timeframe","timestamp":"open_time","open":"open","high":"high","low":"low","close":"close","volume":"volume","closed":"is_closed","timestampUnit":"milliseconds","timeframeValues":{"H1":"H1","M15":"M15","M5":"M5"}}
+```
+
+Unit milidetik didukung oleh nilai open_time berukuran 13 digit pada data yang dibaca. Tick size belum diverifikasi.
+
+| BTCUSDT timeframe | Total snapshot | is_closed=1 | Sumber |
+| --- | ---: | ---: | --- |
+| H1 | 792 | 791 | bybit |
+| M15 | 1631 | 1630 | bybit,okx_swap |
+| M5 | 4891 | 4890 | bybit,okx_swap |
+| H4 | 216 | 215 | bybit |
+| D1 | 369 | 368 | bybit |
+
+Ini snapshot, bukan jaminan freshness/gap atau kualitas candle. Reader aplikasi kini mendukung `closed: "is_closed"` untuk menyaring flag tersebut, sekaligus cutoff waktu. Unit test query lulus; integrasi schema nyata memakai fixture lokal tersedia tetapi belum dijalankan karena sandbox. Freshness/gap remote belum mendapat live acceptance. Config lokal masih memakai placeholder dan timestamp kolom `timestamp`, sehingga belum cocok dengan schema remote.
+
+## Setup yang masih terbuka
+
+Verifikasi token environment melalui API; tentukan staging/production dan HTTPS origin; siapkan config deployment dengan ID/mapping terverifikasi; periksa flag closed, freshness/gap dan tick size; migrasi hanya trading_office_db bila masuk lingkup setup berikutnya; siapkan secret aplikasi dan validasi deployment. Tidak ada langkah tersebut yang dijalankan pada pemeriksaan ini.
+

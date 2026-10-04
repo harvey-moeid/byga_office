@@ -302,9 +302,21 @@ export function semanticErrors(output: AnalystResult["output"]) {
   if (!output) return ["No structured output"];
   if (output.vote === "NO_TRADE") return [];
   const opposing = output.vote === "BUY" ? "SELL" : "BUY";
-  return output.evidence
+  const errors = output.evidence
     .filter((e) => e.code === "DIRECTIONAL_BIAS" && e.direction === opposing)
     .map(() => "Vote contradicts explicit directional bias evidence");
+  const levels = output.price_levels;
+  if (levels) {
+    if (
+      output.vote === "BUY"
+        ? levels.stop_loss >= levels.entry || levels.take_profit <= levels.entry
+        : levels.stop_loss <= levels.entry || levels.take_profit >= levels.entry
+    )
+      errors.push(
+        "Price levels contradict vote: BUY requires SL < entry < TP; SELL requires TP < entry < SL",
+      );
+  }
+  return errors;
 }
 export function buildContext(
   context: MarketContext,

@@ -1,5 +1,143 @@
 import { test, expect } from "@playwright/test";
 import { defaultConfig } from "../src/core/contracts";
+test("Admin and Simulation modules load only when their routes are opened", async ({
+  page,
+}) => {
+  const modules: string[] = [];
+  page.on("request", (request) =>
+    modules.push(new URL(request.url()).pathname),
+  );
+  await page.goto("/signals");
+  await expect(
+    page.getByRole("heading", { name: "Signals", exact: true }),
+  ).toBeVisible();
+  expect(modules.some((path) => path.endsWith("/src/ui/admin.tsx"))).toBe(
+    false,
+  );
+  expect(modules.some((path) => path.endsWith("/src/ui/simulation.tsx"))).toBe(
+    false,
+  );
+  await page
+    .getByRole("navigation")
+    .getByRole("link", { name: "Admin", exact: true })
+    .click();
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+  expect(modules.some((path) => path.endsWith("/src/ui/admin.tsx"))).toBe(true);
+  expect(modules.some((path) => path.endsWith("/src/ui/simulation.tsx"))).toBe(
+    false,
+  );
+  await page
+    .getByRole("navigation")
+    .getByRole("link", { name: "Simulation", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Simulation", exact: true }),
+  ).toBeVisible();
+  expect(modules.some((path) => path.endsWith("/src/ui/simulation.tsx"))).toBe(
+    true,
+  );
+});
+test("APPLY NOW cancels on dismissal and sends confirmed changes only on acceptance", async ({
+  page,
+}) => {
+  let posts = 0;
+  await page.route("**/api/v1/auth/session", (route) =>
+    route.fulfill({ json: { admin: true } }),
+  );
+  await page.route("**/api/v1/admin/config", (route) => {
+    if (route.request().method() === "POST") {
+      posts++;
+      expect(route.request().postDataJSON()).toMatchObject({
+        activation: "APPLY NOW",
+        confirmed: true,
+      });
+      return route.fulfill({ json: { id: "TRADING-CONFIG-v2" } });
+    }
+    return route.fulfill({
+      json: { config: defaultConfig, id: "TRADING-CONFIG-v1", versions: [] },
+    });
+  });
+  await page.goto("/admin");
+  await page
+    .getByLabel("Activation", { exact: true })
+    .selectOption("APPLY NOW");
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await page
+    .getByRole("button", { name: "Save new version", exact: true })
+    .click();
+  expect(posts).toBe(0);
+  page.once("dialog", (dialog) => dialog.accept());
+  await page
+    .getByRole("button", { name: "Save new version", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "Tersimpan: TRADING-CONFIG-v2",
+  );
+  expect(posts).toBe(1);
+});
+test("case and character provider metadata are visible only in Admin views", async ({
+  page,
+}) => {
+  let admin = false;
+  const analyst = {
+    id: "trend",
+    status: "SUCCESS",
+    vote: "BUY",
+    summary: "Fixture analysis",
+    provider: "fixture-provider",
+    model: "fixture-model",
+    output: { vote: "BUY", summary: "Fixture analysis" },
+  };
+  const caseData = {
+    id: "CASE-fixture",
+    status: "COMPLETED",
+    direction: "BUY",
+    created_at: Date.now(),
+    analysts: [analyst],
+  };
+  await page.route("**/api/v1/auth/session", (route) =>
+    route.fulfill({ json: { admin } }),
+  );
+  await page.route("**/api/v1/**/CASE-fixture*", (route) =>
+    route.fulfill({ json: caseData }),
+  );
+  await page.route("**/api/v1/characters/trend", (route) =>
+    route.fulfill({
+      json: [{ ...analyst, case_id: "CASE-fixture", updated_at: Date.now() }],
+    }),
+  );
+  await page.goto("/cases/CASE-fixture");
+  await expect(
+    page.getByText("Fixture analysis", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Provider fixture-provider · Model fixture-model", {
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await page.goto("/characters/trend");
+  await expect(
+    page.getByText("Fixture analysis", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Provider fixture-provider · Model fixture-model", {
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  admin = true;
+  await page.goto("/characters/trend");
+  await expect(
+    page.getByText("Provider fixture-provider · Model fixture-model", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.goto("/cases/CASE-fixture");
+  await expect(
+    page.getByText("Provider fixture-provider · Model fixture-model", {
+      exact: true,
+    }),
+  ).toBeVisible();
+});
 // UI contract fixtures are explicitly local tests; production data still comes from D1.
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/v1/**", (route) => {

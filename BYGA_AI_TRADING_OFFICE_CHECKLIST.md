@@ -8,7 +8,11 @@ Legend:
 - [~] Sedang dikerjakan
 
 
-## Update implementasi — 4 Oktober 2026 (WIB)
+## Update build lanjutan — 4 Oktober 2026 (UTC)
+
+Reader mendukung `closed: "is_closed"` dan hanya SELECT; validator AI memeriksa hubungan entry/SL/TP; API memiliki rate limit persisten pada database aplikasi; metadata provider/model ditampilkan khusus Admin; modul Admin dan Simulation dimuat terpisah. Typecheck, lint, build, dan 66 unit test lulus. Suite saat ini memiliki 100 tes total; 34 tes integrasi belum berjalan karena sandbox menolak server lokal (`listen EPERM`). Tiga skenario browser baru ditambahkan (30 eksekusi lintas tiga viewport); suite browser baru belum dijalankan. Validasi sebelumnya di bawah adalah catatan historis. Tidak ada migrasi/deployment remote.
+
+## Update implementasi awal — 4 Oktober 2026 (WIB)
 
 Fondasi dan pipeline backend diimplementasikan serta diuji lokal; UI/3D masih tahap awal. Pembaruan lanjutan: recovery D1 terbatas, resume keluaran AI, retensi idle, review audit Discord, filter scanner, reconnect offline, routing meja/dinding, instancing dan kualitas adaptif sudah ditambahkan. QA browser tetap terpisah dari acceptance produksi/perangkat fisik. `[x]` menunjukkan implementasi dengan pemeriksaan lokal relevan, `[~]` menunjukkan implementasi awal atau validasi lanjutan yang masih diperlukan. Bukan klaim MVP produksi selesai.
 
@@ -18,7 +22,7 @@ Rincian dan batasan: [IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md). 
 
 ---
 
-Cloudflare Account ID dan kedua ID D1 telah diterima dan disimpan sebagai parameter draft. Format valid dan database berbeda; Wrangler belum terautentikasi, sehingga binding/schema remote dan deployment belum diverifikasi.
+Account dan kedua database telah diperiksa melalui GET/SELECT konektor Cloudflare; schema remote tercatat di docs/CLOUDFLARE_VERIFICATION.md. Token environment masih belum terverifikasi melalui API; belum ada migrasi atau deployment remote.
 
 # Milestone 0 — Repository & Project Setup
 
@@ -419,7 +423,7 @@ Cloudflare Account ID dan kedua ID D1 telah diterima dan disimpan sebagai parame
 - [~] Validate direction/reason consistency
 - [x] Validate bias consistency
 - [x] Validate evidence shape
-- [ ] Validate price direction consistency
+- [x] Validate price direction consistency (entry/SL/TP terstruktur; unit/provider fixture lulus)
 - [x] Flag `SEMANTIC_VALIDATION_FAILED`
 - [x] Retry jika validation gagal
 - [x] Jika persistent invalid → gunakan vote response terakhir
@@ -609,7 +613,7 @@ Cloudflare Account ID dan kedua ID D1 telah diterima dan disimpan sebagai parame
 - [x] Public Signal History ON/OFF enforcement
 - [x] Public history limit setting
 - [x] Redact Admin-only fields
-- [ ] Implement API rate limiting jika diperlukan
+- [~] Implement API rate limiting jika diperlukan (implementasi tersedia; uji integrasi tertunda)
 
 ---
 
@@ -682,7 +686,7 @@ Cloudflare Account ID dan kedua ID D1 telah diterima dan disimpan sebagai parame
 - [~] Risk
 - [~] Boss
 - [~] Config version
-- [ ] Provider/model metadata Admin-only
+- [~] Provider/model metadata Admin-only (UI/API tersedia; uji integrasi/browser tertunda)
 
 ## Scanners
 
@@ -701,7 +705,7 @@ Cloudflare Account ID dan kedua ID D1 telah diterima dan disimpan sebagai parame
 - [~] Current state
 - [~] Latest vote
 - [~] Confidence
-- [ ] Provider/model Admin-only
+- [~] Provider/model Admin-only (UI/API tersedia; uji integrasi/browser tertunda)
 - [~] Warning state
 - [~] History
 
@@ -1017,7 +1021,7 @@ Cloudflare Account ID dan kedua ID D1 telah diterima dan disimpan sebagai parame
 - [x] Protect mutation endpoints
 - [x] CSRF-safe strategy
 - [x] Login rate limiting
-- [ ] API rate limiting
+- [~] API rate limiting (implementasi D1 + uji concurrency tersedia; eksekusi integrasi tertunda)
 - [~] Secure cookie review
 - [x] Restrict chart_db writes
 - [x] Restrict raw AI logs ke Admin
@@ -1120,8 +1124,8 @@ Cloudflare Account ID dan kedua ID D1 telah diterima dan disimpan sebagai parame
 
 - [x] Measure initial bundle
 - [x] Code split 3D
-- [ ] Lazy-load Admin
-- [ ] Lazy-load Simulation
+- [x] Lazy-load Admin (chunk build terpisah; QA browser baru masih tertunda)
+- [x] Lazy-load Simulation (chunk build terpisah; QA browser baru masih tertunda)
 - [ ] Optimize GLB/GLTF
 - [ ] Optimize textures
 - [~] Optimize D1 queries

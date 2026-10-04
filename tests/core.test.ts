@@ -293,4 +293,61 @@ describe("Risk and context", () => {
     expect(wibDate(Date.parse("2026-10-03T17:00:00Z"))).toBe("20261004");
     expect(formatPrice(1.1234, 0.0001)).toBe("1.1234");
   });
+  it.each([
+    ["BUY", 99, 101, 0],
+    ["SELL", 101, 99, 0],
+    ["BUY", 101, 102, 1],
+    ["SELL", 99, 98, 1],
+    ["BUY", 98, 99, 1],
+    ["SELL", 102, 101, 1],
+    ["BUY", 100, 101, 1],
+    ["SELL", 101, 100, 1],
+  ])(
+    "validates %s price relationships SL=%s TP=%s",
+    (vote, stop_loss, take_profit, errors) => {
+      const output = analysisSchema.parse({
+        vote,
+        confidence: 72,
+        summary: "Price plan",
+        reasoning: "Supplied levels",
+        evidence: [],
+        risk_flags: [],
+        price_levels: { entry: 100, stop_loss, take_profit },
+      });
+      expect(semanticErrors(output)).toHaveLength(errors as number);
+      expect(output.confidence).toBe(72);
+    },
+  );
+  it("allows omitted/null prices and NO_TRADE without imposing a direction", () => {
+    for (const price_levels of [
+      undefined,
+      null,
+      { entry: 100, stop_loss: 101, take_profit: 102 },
+    ]) {
+      const output = analysisSchema.parse({
+        vote: "NO_TRADE",
+        confidence: 70,
+        summary: "Abstain",
+        reasoning: "No plan",
+        evidence: [],
+        risk_flags: [],
+        price_levels,
+      });
+      expect(semanticErrors(output)).toEqual([]);
+    }
+  });
+  it("rejects nonfinite and nonpositive price levels structurally", () => {
+    for (const entry of [0, -1, Infinity, NaN])
+      expect(() =>
+        analysisSchema.parse({
+          vote: "BUY",
+          confidence: 70,
+          summary: "Invalid",
+          reasoning: "Bad prices",
+          evidence: [],
+          risk_flags: [],
+          price_levels: { entry, stop_loss: 99, take_profit: 101 },
+        }),
+      ).toThrow();
+  });
 });

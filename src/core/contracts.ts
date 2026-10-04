@@ -227,6 +227,14 @@ export const analysisSchema = z.object({
     )
     .max(30),
   risk_flags: z.array(z.string().max(100)).max(20),
+  price_levels: z
+    .object({
+      entry: z.number().finite().positive(),
+      stop_loss: z.number().finite().positive(),
+      take_profit: z.number().finite().positive(),
+    })
+    .nullable()
+    .optional(),
 });
 export type Analysis = z.infer<typeof analysisSchema>;
 export interface AnalystResult {
