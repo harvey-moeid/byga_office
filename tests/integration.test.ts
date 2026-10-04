@@ -569,6 +569,37 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     expect(text).not.toContain("rendered_prompt");
     expect(text).not.toContain('"provider"');
     expect(text).not.toContain('"model"');
+    const callsBeforeMeeting = requests;
+    const meetingResponse = await call("/office/meeting", undefined, false);
+    expect(meetingResponse.status).toBe(200);
+    const meetingText = await meetingResponse.text();
+    const meeting = JSON.parse(meetingText).meeting;
+    expect(meeting.case_id).toBe(item.id);
+    expect(meeting.finished).toBe(true);
+    expect(
+      meeting.turns.map((turn: { character: string }) => turn.character),
+    ).toEqual([
+      "trend",
+      "structure",
+      "momentum",
+      "liquidity",
+      "volume",
+      "quant",
+      "risk",
+      "boss",
+    ]);
+    expect(meeting.turns.at(-1).analysis.summary).toBe(
+      c.result.signal?.boss_summary,
+    );
+    for (const privateField of [
+      '"provider"',
+      '"model"',
+      "rendered_prompt",
+      "fixture-only",
+      '"context"',
+    ])
+      expect(meetingText).not.toContain(privateField);
+    expect(requests).toBe(callsBeforeMeeting);
     const publicHistory = await call("/characters/trend", undefined, false);
     const publicText = await publicHistory.text();
     expect(publicText).not.toContain('"provider"');
@@ -615,6 +646,10 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     expect(item.id).toMatch(/^CASE-/);
     const c = await done(item.id);
     expect(c.status, JSON.stringify(c.result)).toBe("COMPLETED");
+    const liveMeeting = (await (
+      await call("/office/meeting", undefined, false)
+    ).json()) as { meeting: { case_id: string } | null };
+    expect(liveMeeting.meeting?.case_id).not.toBe(item.id);
     expect(
       (await db
         .prepare("SELECT COUNT(*) AS n FROM signals")

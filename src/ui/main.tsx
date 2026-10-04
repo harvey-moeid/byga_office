@@ -24,6 +24,12 @@ import {
 import "./style.css";
 import { useData, useOfficeState, useOnline } from "./data";
 import {
+  useMeetingPresentation,
+  MeetingStatus,
+  MeetingDetail,
+  SpeechBubble,
+} from "./meeting-view";
+import {
   Badge,
   Empty,
   Heading,
@@ -230,6 +236,7 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
   const office = state.data?.office ?? "CONNECTING";
   const health = useData<Record<string, string>>("/health", true);
   const render3D = view === "3D" && supportsWebGL();
+  const meeting = useMeetingPresentation(render3D);
   const notices = (
     <div className={immersive ? "home-notices" : undefined}>
       <Notice error={state.error} retry={state.retry} />
@@ -348,7 +355,13 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
           <SceneBoundary>
             <Suspense fallback={<Empty>Memuat kantor 3D…</Empty>}>
               <OfficeScene
-                state={office}
+                state={meeting.active ? meeting.playback!.stage : office}
+                meetingId={
+                  meeting.active ? meeting.snapshot?.case_id : undefined
+                }
+                speech={meeting.active ? meeting.current : undefined}
+                onSpeechDetails={meeting.openDetails}
+                onSpeechReady={meeting.onSpeechReady}
                 onSelect={setSelected}
                 prices={market.data?.timeframes.M5.map((c) => c.close) ?? []}
                 avatars={Object.fromEntries(
@@ -377,6 +390,20 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
             ))}
           </div>
         )}
+        <MeetingStatus presentation={meeting} />
+        {!render3D && meeting.active && meeting.current && (
+          <div className="fallback-meeting">
+            <SpeechBubble
+              turn={meeting.current}
+              onDetails={meeting.openDetails}
+            />
+          </div>
+        )}
+        <MeetingDetail
+          turn={meeting.detail}
+          caseId={meeting.snapshot?.case_id}
+          onClose={() => meeting.openDetails(undefined)}
+        />
         {!immersive && (
           <div className="office-caption">
             <span>

@@ -33,7 +33,15 @@ export function isMeeting(state: string) {
   ].includes(state);
 }
 export function seatedFacing(index: number, state: string) {
-  return isMeeting(state) ? meetingSeats[index].facing : Math.PI;
+  return isAttendingMeeting(index, state)
+    ? meetingSeats[index].facing
+    : Math.PI;
+}
+export function isAttendingMeeting(index: number, state: string) {
+  return (
+    isMeeting(state) &&
+    (index !== 7 || ["BOSS_DECISION", "DISCORD"].includes(state))
+  );
 }
 export const desks: Point[] = [
   [-4, -2],
@@ -178,7 +186,7 @@ export function destination(
   state: string,
   coffee = false,
 ): Point {
-  if (isMeeting(state)) return meetingSeats[index].position;
+  if (isAttendingMeeting(index, state)) return meetingSeats[index].position;
   if (coffee) return [-2 + (index % 2) * 0.55, 5 + (index % 3) * 0.5];
   return [desks[index][0], desks[index][1] + 0.72];
 }

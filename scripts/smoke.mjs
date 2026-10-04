@@ -25,6 +25,15 @@ assert.equal(session.admin, false);
 await get("/api/v1/admin/config", 401);
 await get("/api/v1/__test/alarm", 404);
 const state = await (await get("/api/v1/office/state")).json();
+const meeting = await (await get("/api/v1/office/meeting")).json();
+assert.ok(Object.hasOwn(meeting, "meeting"), "Meeting presentation endpoint missing");
+if (meeting.meeting) {
+  assert.equal(typeof meeting.meeting.case_id, "string");
+  assert.ok(Array.isArray(meeting.meeting.turns));
+  assert.ok(meeting.meeting.turns.every(turn =>
+    ["trend", "structure", "momentum", "liquidity", "volume", "quant", "risk", "boss"].includes(turn.character) &&
+    typeof turn.analysis.summary === "string" && typeof turn.analysis.reasoning === "string"));
+}
 assert.equal(typeof state.office, "string", "Durable Object state missing");
 assert.ok(
   Number.isInteger(state.scanner_consensus_min) &&
