@@ -16,7 +16,7 @@ Lima migrasi 0001–0005 sudah diterapkan ke `trading_office_db` dan tercatat da
 
 260 candle tertutup terbaru per H1/M15/M5 mempunyai nol gap dan nol baris OHLC/volume tidak valid. Snapshot di sekitar pergantian candle menunjukkan freshness dapat gagal pada toleransi lima detik; validasi predeploy memakai reader aplikasi yang sama dan wajib lolos, bukan mengabaikan candle yang tertinggal. Tick size instrumen belum mendapat verifikasi exchange; jangan menganggap presisi tampilan sebagai verifikasi tick size.
 
-Konfigurasi produksi nyata disimpan di `deployment/production.json`, menargetkan `https://byga-trading-office-production.harveymoeid.workers.dev`. Credential deployment, Admin dan OpenAI wajib tersedia sebelum workflow dapat menerbitkan Worker.
+Konfigurasi produksi nyata disimpan di `deployment/production.json`, menargetkan `https://byga-office.harveymoeid.workers.dev`. Credential deployment, Admin dan OpenAI wajib tersedia sebelum workflow dapat menerbitkan Worker.
 
 Laporan di bawah ini adalah pemeriksaan awal sebelum migrasi:
 

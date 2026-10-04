@@ -30,7 +30,8 @@ npm run deploy
 
 ## Production workflow
 
-Target: `https://byga-trading-office-production.harveymoeid.workers.dev`.
+Worker name: `byga-office` (production); `byga-office-staging` for staging. The generator uses the base name from `wrangler.jsonc`, adding an environment suffix only for staging.
+Target: `https://byga-office.harveymoeid.workers.dev`.
 GitHub environment: `production`. Nonsecret defaults come from `deployment/production.json`; environment variables override them. Staging requires its own settings and a distinct application database.
 
 Add these secrets to the GitHub `production` environment through Settings → Environments → production → Environment secrets:

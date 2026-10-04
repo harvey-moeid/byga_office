@@ -49,7 +49,7 @@ const source = JSON.parse(await readFile("wrangler.jsonc", "utf8"));
 const chart = source.d1_databases.find(db => db.binding === "CHART_DB");
 const application = source.d1_databases.find(db => db.binding === "DB");
 if (!chart || !application) throw new Error("Missing CHART_DB or DB binding.");
-source.name = `byga-trading-office-${environment}`;
+source.name = environment === "production" ? source.name : `${source.name}-${environment}`;
 source.account_id = settings.account;
 source.main = resolve("src/server/index.ts");
 source.assets.directory = resolve("dist");

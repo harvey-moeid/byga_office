@@ -11,6 +11,7 @@
 - Real OpenAI model discovery passed, including availability of `gpt-4.1-mini`.
 - Live inference diagnostics log only allowlisted error codes/types and HTTP status. Only identified temporary rate limits receive bounded retries; quota errors stop immediately.
 - Tracked production configuration and automated predeployment/deployed checks are committed.
+- The production Worker target is now `byga-office` at `https://byga-office.harveymoeid.workers.dev`; staging uses `byga-office-staging`. This naming change does not establish deployment acceptance.
 
 ## Current deployment blocker
 
@@ -27,7 +28,7 @@ The provider's specific code was not in the logging allowlist and was reported a
 
 Official guidance: [OpenAI 429 troubleshooting](https://help.openai.com/en/articles/5955604-troubleshooting-api-rate-limits-and-429-errors). Retrying quota/billing errors does not restore access.
 
-After fixing API access, re-run failed jobs in the linked deployment run, or run Actions → Deploy approved environment → production. The workflow retains its required real-inference gate, then performs app-only migrations, deployment with cron disabled, runtime secret installation, deployed smoke checks and final cron activation.
+After fixing API access, run Actions → Deploy approved environment → production on the latest main revision (or re-run a deployment of that revision). Older runs target the previous Worker name. The workflow retains its required real-inference gate, then performs app-only migrations, deployment with cron disabled, runtime secret installation, deployed smoke checks and final cron activation.
 
 No BYGA production Worker exists at the latest Cloudflare check. No successful real inference or real Discord delivery occurred. Worker write/deploy permissions and deployed acceptance are still unverified because execution stopped before those steps. Discord webhook environment variables were empty in this run.
 

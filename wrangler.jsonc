@@ -1,5 +1,5 @@
 {
-  "name": "byga-trading-office", "main": "src/server/index.ts", "compatibility_date": "2026-10-01",
+  "name": "byga-office", "main": "src/server/index.ts", "compatibility_date": "2026-10-01",
   "assets": {"directory": "./dist", "binding": "ASSETS", "not_found_handling": "single-page-application", "run_worker_first": ["/api/*"]},
   "d1_databases": [
     {"binding": "CHART_DB", "database_name": "chart_db", "database_id": "00000000-0000-0000-0000-000000000001"},
