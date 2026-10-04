@@ -210,6 +210,13 @@ export function OfficeCharacter({
   useEffect(() => {
     arrivedRef.current = false;
     setArrived(false);
+    if (reduced) {
+      path.current = [];
+      position.current.copy(destination);
+      arrivedRef.current = true;
+      setArrived(true);
+      return;
+    }
     const current = position.current;
     const movement = planMovement(
       [current.x, current.z],
@@ -223,7 +230,7 @@ export function OfficeCharacter({
       position.current.set(
         ...([movement.destination[0], 0, movement.destination[1]] as Triple),
       );
-  }, [destination]);
+  }, [destination, reduced]);
   const meeting = isAttendingMeeting(index, state);
   const speechVisible = !!speech && arrived && meeting;
   useEffect(() => {
@@ -348,20 +355,20 @@ export function OfficeCharacter({
         onSelect(characterIds[index]);
       }}
     >
+      {speechVisible && (
+        <Html
+          portal={labelHost}
+          position={[0, 1.82, 0]}
+          center
+          zIndexRange={[4, 3]}
+        >
+          {speech}
+        </Html>
+      )}
       <group
         ref={body}
         scale={[index === 6 ? 1.05 : 1, index === 1 ? 0.98 : 1, 1]}
       >
-        {speechVisible && (
-          <Html
-            portal={labelHost}
-            position={[0, 2.25, 0]}
-            center
-            zIndexRange={[4, 3]}
-          >
-            {speech}
-          </Html>
-        )}
         <mesh position={[0, 0.96, 0]} scale={[1, 1, 0.66]} castShadow>
           <latheGeometry args={[coatProfile, decorative ? 24 : 12]} />
           <meshStandardMaterial color={appearance.suit} roughness={0.9} />
