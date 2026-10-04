@@ -503,6 +503,18 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
     "System Chromium does not expose WebGL2; fallback is covered separately",
   );
   await expect(page.getByRole("button", { name: /Reset View/ })).toBeVisible();
+  const quality = page.getByLabel("Kualitas 3D", { exact: true });
+  await expect(quality).toBeVisible();
+  await expect(quality.locator("option")).toHaveCount(5);
+  await expect(quality.locator('option[value="ultra"]')).toHaveText("Ultra");
+  await quality.selectOption("low");
+  expect(
+    await page.evaluate(() => localStorage.getItem("byga:3d-quality")),
+  ).toBe("low");
+  await page.reload();
+  await expect(page.getByLabel("Kualitas 3D", { exact: true })).toHaveValue(
+    "low",
+  );
   const scene = await page.locator(".office-scene").boundingBox();
   const viewport = page.viewportSize()!;
   expect(scene?.x).toBe(0);
