@@ -74,11 +74,19 @@ export class SceneBoundary extends Component<
     );
   }
 }
+let webGLSupport: boolean | undefined;
 export function supportsWebGL() {
+  if (webGLSupport !== undefined) return webGLSupport;
   try {
     const c = document.createElement("canvas");
-    return !!(c.getContext("webgl2") || c.getContext("webgl"));
+    const gl = c.getContext("webgl2") || c.getContext("webgl");
+    webGLSupport = !!gl;
+    // Dashboard polling must not accumulate probe contexts and evict the
+    // actual office renderer from the browser's active-context limit.
+    gl?.getExtension("WEBGL_lose_context")?.loseContext();
+    return webGLSupport;
   } catch {
+    webGLSupport = false;
     return false;
   }
 }
