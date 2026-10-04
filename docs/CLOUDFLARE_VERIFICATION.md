@@ -2,7 +2,13 @@
 
 Account ID: `07086b4d368d0a37ebcbbf186e51eecf`.
 
-## Hasil deployment terbaru
+## Hasil produksi setelah pergantian provider
+
+Worker `byga-office` sudah terbit di https://byga-office.harveymoeid.workers.dev. Pada deployment 37184871525, OpenRouter `openai/gpt-4.1-mini` dan Gemini `gemini-3.5-flash-lite` lolos discovery/inferensi nyata; frontend, binding D1, Durable Object, login Admin, cookie, penolakan origin, dan logout lolos smoke test. Delapan konfigurasi karakter tersimpan dengan OpenRouter utama dan Gemini fallback. Nama kedua secret runtime terkonfirmasi tanpa membuka nilainya.
+
+Aktivasi pemindaian otomatis belum selesai: Cloudflare mengembalikan 10072 karena lima slot cron Workers Free sudah terpakai. GET schedules Worker mengonfirmasi daftar kosong. Tidak ada cron lain dihapus atau paket akun diubah. Lihat [laporan penerimaan terbaru](PRODUCTION_ACCEPTANCE.md).
+
+## Hasil deployment sebelum pergantian provider
 
 Ketiga secret wajib GitHub produksi sudah tersedia. Token Cloudflare yang dipakai workflow berhasil menjalankan reader aplikasi nyata melalui API D1 pada 06:34 dan 06:41 UTC: 260 candle tertutup per H1/M15/M5 lolos OHLC, gap, dan freshness. Seluruh query chart SELECT-only. Ini membuktikan akses baca D1, belum membuktikan izin deploy Worker.
 

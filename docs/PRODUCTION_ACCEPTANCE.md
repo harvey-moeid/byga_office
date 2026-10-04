@@ -1,49 +1,43 @@
 # Production acceptance — 4 October 2026 (UTC)
 
+## Current production state
+
+Worker: `byga-office`  
+URL: https://byga-office.harveymoeid.workers.dev  
+Code: `aff739c0c93458a1fd9fa8a664aec384be9e944a`
+
+The Worker is published and the deployed application/Admin smoke checks pass. **Automated market scans are not enabled**: Cloudflare rejected the cron update because the account has reached its Workers Free allowance of five cron triggers. Connector GET confirmed `byga-office` has an empty schedule list. The final deployment job therefore failed; production scheduling acceptance is incomplete.
+
 ## Confirmed
 
-- Code commit: `9345f9a3d34aab949095f12c99e3afdbaefff667`.
-- [CI 37183388465](https://github.com/harvey-moeid/byga_office/actions/runs/37183388465): success; **109 unit/integration tests**, **30 browser tests**, TypeScript, ESLint, frontend build and Worker dry run passed.
-- All three required GitHub production secrets are present and pass preflight. Admin password meets the minimum length. Secret values were not exposed.
-- Cloudflare account, workers.dev subdomain and both database IDs were verified.
-- All five application migrations are applied remotely and recorded in `d1_migrations`. 22 application tables verified. No migrations or seeds were applied to `chart_db`.
-- Actual application market reader passed through the supplied Cloudflare API token at 06:34:08 and 06:41:08 UTC: 260 closed BTCUSDT candles per H1/M15/M5, OHLC/volume, gaps and freshness. Queries were SELECT-only and verified not to write data. These are point-in-time checks; boundary ingestion lag can still cause strict freshness rejection.
-- Real OpenAI model discovery passed, including availability of `gpt-4.1-mini`.
-- Live inference diagnostics log only allowlisted error codes/types and HTTP status. Only identified temporary rate limits receive bounded retries; quota errors stop immediately.
-- Tracked production configuration and automated predeployment/deployed checks are committed.
-- The production Worker target is now `byga-office` at `https://byga-office.harveymoeid.workers.dev`; staging uses `byga-office-staging`. This naming change does not establish deployment acceptance.
+- [CI 37184871468](https://github.com/harvey-moeid/byga_office/actions/runs/37184871468): **109 unit/integration tests**, **30 browser tests**, TypeScript, ESLint, frontend build and Worker dry run passed.
+- [Deployment 37184871525](https://github.com/harvey-moeid/byga_office/actions/runs/37184871525): credential preflight, code/browser checks, real market reads, both AI probes, app-only migrations, Worker publication, runtime secret installation and initial deployed smoke checks passed.
+- Required GitHub production secrets are `CLOUDFLARE_API_TOKEN`, `ADMIN_PASSWORD`, `OPENROUTER_API_KEY` and `GEMINI_API_KEY`. The workflow derives/installs only `ADMIN_PASSWORD_HASH` for runtime Admin authentication. A direct OpenAI key is no longer required.
+- Real SELECT-only application market reader at 07:11:12 UTC: 260 closed BTCUSDT candles per H1/M15/M5 passed OHLC/volume, gaps and freshness. These checks are snapshots; strict freshness protection remains active.
+- Real model discovery and one bounded synthetic structured inference per provider passed through the actual adapter in the GitHub runner: OpenRouter `openai/gpt-4.1-mini` (251 tokens) and Gemini `gemini-3.5-flash-lite` (126 tokens). The probes publish no trading signals. Full Worker case processing and failover are separate acceptance items.
+- Both selected runtime secret names were confirmed in Cloudflare settings, without reading/exposing values.
+- All eight stored character configurations were verified with OpenRouter primary and Gemini fallback using the models above.
+- Deployed frontend shell/static JavaScript, Durable Object state, production candle API, provider configuration, unauthorized Admin rejection, test-route absence, real Admin login, Secure/HttpOnly/SameSite=Strict cookie flags, wrong-origin rejection and logout/session invalidation passed.
+- All five application migrations are applied to `trading_office_db`; 22 application tables and the migration ledger were verified. No migrations or seed writes were applied to remote `chart_db`.
 
-## Current provider selection
+## Scheduling blocker
 
-Production now requires `OPENROUTER_API_KEY` (primary) and `GEMINI_API_KEY` (fallback), along with the existing Cloudflare deployment token and Admin password. The workflow no longer requires a direct OpenAI key. Default models are `openai/gpt-4.1-mini` through OpenRouter and `gemini-3.5-flash-lite` through Gemini; both receive real discovery/inference probes before deployment. New character seeds use this selection; stored character settings remain editable in Admin.
+The enable-cron step returned Cloudflare **10072**:
 
-Live validation of the newly selected credentials has not passed yet. Add these two GitHub `production` secrets, then run Deploy approved environment on latest main. Successful fixture tests do not establish provider account access or inference acceptance.
+> This account has reached the Workers Free limit of 5 cron triggers per account.
 
-## Previous OpenAI deployment blocker
+No existing trigger was deleted and no account plan was changed. Free a slot by explicitly selecting an existing trigger to retire, or change the account plan, then re-run the deployment on current main. Using a Durable Object alarm for periodic market scans is another possible implementation, but the current alarm handler only processes cases/outbox/retention; it does not replace the cron-driven market scanner.
 
-[Deployment 37183388460](https://github.com/harvey-moeid/byga_office/actions/runs/37183388460) passed credentials, all code/browser checks and the real market reader, then failed on its first structured inference request:
+An earlier first-deployment office-state read returned HTTP 500 and subsequent reads succeeded. Safe smoke-test reads now have five attempts with bounded delays for transient 5xx responses; persistent failures still reject deployment. Login/logout mutations are not retried by this helper.
 
-```
-provider: openai
-http_status: 429
-type: insufficient_quota
-attempt: 1
-```
+The previous direct OpenAI attempt failed with HTTP 429 `insufficient_quota`. That historical failure no longer blocks the selected OpenRouter/Gemini configuration.
 
-The provider's specific code was not in the logging allowlist and was reported as `unclassified`; the exact credit/spend/usage-limit cause was not established. This is no longer a missing-secret failure. Check billing balance and enforced usage/spend limits for the organization/project owning `OPENAI_API_KEY`. Restore API access or replace that GitHub production secret with a key belonging to a funded project.
+## Still requiring acceptance
 
-Official guidance: [OpenAI 429 troubleshooting](https://help.openai.com/en/articles/5955604-troubleshooting-api-rate-limits-and-429-errors). Retrying quota/billing errors does not restore access.
-
-After fixing API access, run Actions → Deploy approved environment → production on the latest main revision (or re-run a deployment of that revision). Older runs target the previous Worker name. The workflow retains its required real-inference gate, then performs app-only migrations, deployment with cron disabled, runtime secret installation, deployed smoke checks and final cron activation.
-
-No BYGA production Worker exists at the latest Cloudflare check. No successful real inference or real Discord delivery occurred. Worker write/deploy permissions and deployed acceptance are still unverified because execution stopped before those steps. Discord webhook environment variables were empty in this run.
-
-## Still requiring live acceptance
-
-- Exchange tick-size verification; the application's existing default precision is not exchange evidence.
-- Production deploy and postdeploy frontend/assets/D1/Durable Object/authentication/cookie/origin/logout checks.
-- Successful OpenRouter and Gemini structured inference, full case pipeline, configured fallback, simulation and operational recovery observations.
-- Real Discord webhook configuration and explicitly authorized delivery acceptance. Configuration alone does not prove delivery.
+- Successful scheduled scan activation and repeated operational observations.
+- Full real Worker case pipeline, configured failover, simulation and recovery observations.
+- Real Discord webhook configuration and explicitly authorized delivery acceptance. Current deployed health reports `NOT_CONFIGURED`; no real delivery test was sent.
+- Exchange tick-size verification; the existing display precision is not exchange evidence.
 - Physical device/FPS and premium asset acceptance where required by the PRD.
 
-Do not label production or all MVP integration acceptance complete until the relevant live results exist.
+Do not label all production/MVP acceptance complete until these results exist.

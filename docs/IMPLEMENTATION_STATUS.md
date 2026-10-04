@@ -2,7 +2,7 @@
 
 ## Current provider configuration
 
-Production selection is now OpenRouter (`openai/gpt-4.1-mini`) with Gemini (`gemini-3.5-flash-lite`) fallback. GitHub environment secrets `OPENROUTER_API_KEY` and `GEMINI_API_KEY` replace the direct OpenAI requirement; each selected provider must pass discovery and bounded real inference before publishing. New character seeds use these defaults; existing saved settings are not automatically changed. The validation results below predate this provider-selection change until the new CI run completes. Real credentials remain to be validated.
+Production selection is now OpenRouter (`openai/gpt-4.1-mini`) with Gemini (`gemini-3.5-flash-lite`) fallback. GitHub environment secrets `OPENROUTER_API_KEY` and `GEMINI_API_KEY` replace the direct OpenAI requirement; each selected provider must pass discovery and bounded real inference before publishing. New character seeds use these defaults; existing saved settings are not automatically changed. [CI 37184871468](https://github.com/harvey-moeid/byga_office/actions/runs/37184871468) passed 109 unit/integration and 30 browser tests for the selected providers. Both real discovery/inference probes and deployed frontend/D1/Durable Object/Admin login/logout/origin smoke checks passed in [deployment 37184871525](https://github.com/harvey-moeid/byga_office/actions/runs/37184871525). Worker `byga-office` is published; automated scans remain disabled because the account already uses all five Workers Free cron slots (Cloudflare 10072). Full Worker case/failover/simulation and Discord acceptance remain open. Earlier evidence below is historical.
 
 ## Latest evidence — 4 October 2026
 

@@ -1,6 +1,6 @@
 # Cloudflare resources and permissions
 
-The account, both D1 IDs and chart schema were verified through the Cloudflare connector. All five application migrations have now been applied remotely to `trading_office_db` and recorded in its Wrangler-compatible migration ledger. `chart_db` was only queried with SELECT. The concrete production settings are tracked in `deployment/production.json`; local development still uses placeholders. No production Worker deployment has been confirmed yet.
+The account, both D1 IDs and chart schema were verified through the Cloudflare connector. All five application migrations have now been applied remotely to `trading_office_db` and recorded in its Wrangler-compatible migration ledger. `chart_db` was only queried with SELECT. The concrete production settings are tracked in `deployment/production.json`; local development still uses placeholders. The production Worker is now published and its deployed smoke checks pass, but cron activation is blocked by the account's five-trigger Free limit; see the acceptance report.
 
 ## Resources
 
@@ -32,6 +32,7 @@ npm run deploy
 
 Worker name: `byga-office` (production); `byga-office-staging` for staging. The generator uses the base name from `wrangler.jsonc`, adding an environment suffix only for staging.
 Target: `https://byga-office.harveymoeid.workers.dev`.
+Current status: published with passing deployed smoke checks; cron schedules remain empty after Cloudflare error 10072. Existing triggers and the account plan were not changed. Scheduling must be resolved before automatic scans can run.
 GitHub environment: `production`. Nonsecret defaults come from `deployment/production.json`; environment variables override them. Staging requires its own settings and a distinct application database.
 
 Add these secrets to the GitHub `production` environment through Settings → Environments → production → Environment secrets:
