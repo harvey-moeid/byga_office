@@ -2,7 +2,7 @@
 
 React + TypeScript + React Three Fiber frontend, Cloudflare Worker API, D1 audit database, and two persistent Durable Object orchestrators (live and simulation). Built against [PRD v1.0](BYGA_AI_TRADING_OFFICE_PRD.md). Progress is recorded in [the checklist](BYGA_AI_TRADING_OFFICE_CHECKLIST.md).
 
-Production setup now has a verified Cloudflare account/chart schema, five applied remote application migrations, and a tracked nonsecret production target. CI passes 109 unit/integration tests and 30 desktop/mobile browser tests using isolated fixtures. Required production secrets and live candle validation now pass. Production deployment is blocked by OpenAI HTTP 429 `insufficient_quota` during real inference; this is not a completed production acceptance; see [the acceptance report](docs/PRODUCTION_ACCEPTANCE.md). See [deployment setup](docs/DEPLOYMENT.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).
+Production uses a verified Cloudflare account/chart schema and five applied application migrations. CI passes 109 unit/integration tests and 30 desktop/mobile browser tests using isolated fixtures. Real OpenRouter and Gemini inference and the deployed Worker smoke tests pass. The Worker is published, but automated scanning remains blocked by the account's five-cron Free-plan limit; production acceptance is still incomplete. See [required environment variables](docs/ENVIRONMENT.md), [the acceptance report](docs/PRODUCTION_ACCEPTANCE.md), [deployment setup](docs/DEPLOYMENT.md), and [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
 ## Local development
 
@@ -69,4 +69,4 @@ The scene uses procedural room/character meshes, bounded orbit/pan controls, obs
 
 ## Deployment
 
-See [deployment and permission requirements](docs/DEPLOYMENT.md). `npm run deploy` requires a generated real staging/production configuration and rejects the local placeholder config. No production resource is created automatically during local setup.
+See [required environment variables](docs/ENVIRONMENT.md) and [deployment and permission requirements](docs/DEPLOYMENT.md). `npm run deploy` requires a generated real staging/production configuration and rejects the local placeholder config. No production resource is created automatically during local setup.
