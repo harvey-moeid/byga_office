@@ -1,38 +1,121 @@
 name: Deploy approved environment
 on:
+  push:
+    branches: [main]
+    paths: ["deployment/production.json"]
   workflow_dispatch:
     inputs:
       environment:
         type: choice
         options: [staging, production]
         required: true
-        default: staging
+        default: production
+
+permissions:
+  contents: read
+concurrency:
+  group: deploy-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'production' }}
+  cancel-in-progress: false
+
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-    permissions:
-      contents: read
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'production' }}
     env:
-      BYGA_ENV: ${{ inputs.environment }}
+      CI: "true"
+      BYGA_ENV: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'production' }}
       CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}
       BYGA_CHART_DB_ID: ${{ vars.BYGA_CHART_DB_ID }}
       BYGA_OFFICE_DB_ID: ${{ vars.BYGA_OFFICE_DB_ID }}
       BYGA_PUBLIC_ORIGIN: ${{ vars.BYGA_PUBLIC_ORIGIN }}
       BYGA_CHART_SCHEMA: ${{ vars.BYGA_CHART_SCHEMA }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      DISCORD_MEETING_WEBHOOK: ${{ secrets.DISCORD_MEETING_WEBHOOK }}
+      DISCORD_SIGNAL_WEBHOOK: ${{ secrets.DISCORD_SIGNAL_WEBHOOK }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Require deployment and runtime credentials
+        shell: bash
+        run: |
+          missing=0
+          for key in CLOUDFLARE_API_TOKEN ADMIN_PASSWORD OPENAI_API_KEY; do
+            if [ -z "${!key}" ]; then
+              echo "::error::Missing production environment secret: $key"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+          if [ "${#ADMIN_PASSWORD}" -lt 12 ]; then
+            echo "::error::ADMIN_PASSWORD must contain at least 12 characters."
+            exit 1
+          fi
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          node-version: '24'
+          persist-credentials: false
+      - name: Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "24"
           cache: npm
       - run: npm ci
       - run: npm run check
-      - run: node scripts/configure.mjs
+      - name: Browser acceptance
+        run: |
+          npx playwright install --with-deps chromium
+          npm run test:browser -- --workers=2
+      - name: Generate verified environment configuration
+        run: |
+          node scripts/configure.mjs
+          node --input-type=module <<'JS'
+          import { readFileSync, appendFileSync } from "node:fs";
+          const path = ".wrangler/deploy-" + process.env.BYGA_ENV + ".json";
+          const config = JSON.parse(readFileSync(path, "utf8"));
+          appendFileSync(process.env.GITHUB_ENV,
+            "BYGA_DEPLOY_CONFIG=" + path + "\nBYGA_PUBLIC_ORIGIN=" + config.vars.PUBLIC_ORIGIN + "\n");
+          JS
+      - name: Real market schema, closed candles, gaps and freshness
+        run: node scripts/live-market.mjs
+      - name: Real OpenAI discovery and bounded structured inference
+        run: node scripts/live-ai.mjs
       - name: Migrate application database only
-        run: node scripts/wrangler.mjs d1 migrations apply trading_office_db --remote --config .wrangler/deploy-${BYGA_ENV}.json
-      - name: Deploy
+        run: node scripts/wrangler.mjs d1 migrations apply trading_office_db --remote --config "$BYGA_DEPLOY_CONFIG"
+      - name: Prepare initial deployment with cron disabled
+        run: |
+          node --input-type=module <<'JS'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const config = JSON.parse(readFileSync(process.env.BYGA_DEPLOY_CONFIG, "utf8"));
+          config.triggers = { crons: [] };
+          writeFileSync(".wrangler/deploy-initial.json", JSON.stringify(config));
+          JS
+      - name: Deploy without starting automated meetings
         run: npm run deploy
         env:
-          BYGA_DEPLOY_CONFIG: .wrangler/deploy-${{ inputs.environment }}.json
+          BYGA_DEPLOY_CONFIG: .wrangler/deploy-initial.json
+      - name: Install runtime secrets
+        run: |
+          node --input-type=module <<'JS'
+          import { pbkdf2Sync, randomBytes } from "node:crypto";
+          import { writeFileSync } from "node:fs";
+          const salt = randomBytes(16);
+          const hash = pbkdf2Sync(process.env.ADMIN_PASSWORD, salt, 100000, 32, "sha256").toString("hex");
+          const secrets = {
+            ADMIN_PASSWORD_HASH: "pbkdf2-sha256:100000:" + salt.toString("hex") + ":" + hash,
+            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+          };
+          for (const name of ["DISCORD_MEETING_WEBHOOK", "DISCORD_SIGNAL_WEBHOOK"])
+            if (process.env[name]) secrets[name] = process.env[name];
+          writeFileSync(".wrangler/runtime-secrets.json", JSON.stringify(secrets), { mode: 0o600 });
+          JS
+          node scripts/wrangler.mjs secret bulk .wrangler/runtime-secrets.json --config "$BYGA_DEPLOY_CONFIG"
+      - name: Verify deployed frontend, D1, Durable Object and Admin session
+        run: node scripts/smoke.mjs
+      - name: Enable scheduled production pipeline
+        run: npm run deploy
+      - name: Verify final deployment
+        run: node scripts/smoke.mjs
+      - name: Remove temporary runtime secrets
+        if: always()
+        run: rm -f .wrangler/runtime-secrets.json

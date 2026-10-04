@@ -2,7 +2,7 @@
 
 React + TypeScript + React Three Fiber frontend, Cloudflare Worker API, D1 audit database, and two persistent Durable Object orchestrators (live and simulation). Built against [PRD v1.0](BYGA_AI_TRADING_OFFICE_PRD.md). Progress is recorded in [the checklist](BYGA_AI_TRADING_OFFICE_CHECKLIST.md).
 
-This is an initial implementation, **not a production deployment or a completed acceptance of every MVP item**. Provider and pipeline tests use isolated AI fixtures. Browser tests now execute against system Chromium with intercepted API fixtures. Live market/schema, real AI inference, Discord delivery, R2 assets, physical device/FPS QA, and production deployment require further validation. See [implementation status](docs/IMPLEMENTATION_STATUS.md).
+Production setup now has a verified Cloudflare account/chart schema, five applied remote application migrations, and a tracked nonsecret production target. CI passes 103 unit/integration tests and 30 desktop/mobile browser tests using isolated fixtures. Production deployment and real inference are gated by credentials and live checks; this is not a completed production acceptance. See [deployment setup](docs/DEPLOYMENT.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
 ## Local development
 

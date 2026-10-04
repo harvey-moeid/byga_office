@@ -1,6 +1,6 @@
 # Cloudflare resources and permissions
 
-The supplied account and both D1 database IDs have been verified through successful remote GET/SELECT requests using the Cloudflare connector. The chart schema and observed mapping are recorded in [the read-only verification report](CLOUDFLARE_VERIFICATION.md). The application database has no application tables yet. Verification of the environment token via API remains incomplete; deployment environment, HTTPS origin and application secrets are still required. Local Wrangler configuration still uses placeholders.
+The account, both D1 IDs and chart schema were verified through the Cloudflare connector. All five application migrations have now been applied remotely to `trading_office_db` and recorded in its Wrangler-compatible migration ledger. `chart_db` was only queried with SELECT. The concrete production settings are tracked in `deployment/production.json`; local development still uses placeholders. No production Worker deployment has been confirmed yet.
 
 ## Resources
 
@@ -28,7 +28,24 @@ node scripts/wrangler.mjs d1 migrations apply trading_office_db --remote --confi
 npm run deploy
 ```
 
-A manual GitHub Actions deployment workflow is supplied. Configure GitHub environment variables/secrets and branch/environment protections before using it. The workflow is not tested against an actual account yet.
+## Production workflow
+
+Target: `https://byga-trading-office-production.harveymoeid.workers.dev`.
+GitHub environment: `production`. Nonsecret defaults come from `deployment/production.json`; environment variables override them. Staging requires its own settings and a distinct application database.
+
+Add these secrets to the GitHub `production` environment through Settings → Environments → production → Environment secrets:
+
+- `CLOUDFLARE_API_TOKEN`: the deployment/D1 token scoped to this account.
+- `ADMIN_PASSWORD`: at least 12 characters; the workflow derives the PBKDF2 hash and installs only `ADMIN_PASSWORD_HASH` in the Worker.
+- `OPENAI_API_KEY`: the selected production provider.
+
+Optional: `DISCORD_MEETING_WEBHOOK` and `DISCORD_SIGNAL_WEBHOOK`. Missing webhooks remain unverified; do not call configured-only status successful delivery. Existing runtime secrets of other provider types are preserved by Wrangler but are not copied from unrelated Workers.
+
+Changing the tracked production target triggers the deployment workflow on main. Otherwise run Actions → Deploy approved environment → Run workflow → production. Missing credentials fail before checkout/build/migrations.
+
+The workflow runs code and browser checks, validates actual SELECT-only market reads through the application's reader (260 candles per timeframe with OHLC/gap/freshness guards), and makes one bounded OpenAI structured-output probe with synthetic input. The probe does not publish a signal. It then applies only application migrations, deploys initially with cron disabled, installs runtime secrets, verifies frontend/assets/D1/Durable Object/Admin login/cookie flags/origin rejection/logout, and enables cron only after acceptance. A failed initial smoke test leaves cron disabled. The final smoke test must also pass.
+
+No full live-case AI/fallback/simulation acceptance or real Discord delivery is implied by the bounded probe. Physical device/FPS QA and premium R2/GLB assets remain separate acceptance items.
 
 ## Secrets
 

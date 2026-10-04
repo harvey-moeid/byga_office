@@ -1,0 +1,24 @@
+{
+  "account_id": "07086b4d368d0a37ebcbbf186e51eecf",
+  "chart_db_id": "76f53f4c-a542-48a7-8eb8-10dbcba3c1aa",
+  "office_db_id": "e787a5b2-c876-4afa-beae-55bb616504be",
+  "public_origin": "https://byga-trading-office-production.harveymoeid.workers.dev",
+  "chart_schema": {
+    "table": "candles",
+    "market": "symbol",
+    "timeframe": "timeframe",
+    "timestamp": "open_time",
+    "open": "open",
+    "high": "high",
+    "low": "low",
+    "close": "close",
+    "volume": "volume",
+    "closed": "is_closed",
+    "timestampUnit": "milliseconds",
+    "timeframeValues": {
+      "H1": "H1",
+      "M15": "M15",
+      "M5": "M5"
+    }
+  }
+}

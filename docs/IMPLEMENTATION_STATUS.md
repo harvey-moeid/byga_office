@@ -1,5 +1,17 @@
 # Implementation status — 4 October 2026 (WIB)
 
+## Latest evidence — 4 October 2026
+
+- GitHub CI run [37181449019](https://github.com/harvey-moeid/byga_office/actions/runs/37181449019) passed: 103 unit/integration tests, 30 desktop/mobile browser tests, TypeScript, ESLint, frontend build and Worker dry run. This supersedes the earlier sandbox-blocked test results below. Browser fixture selectors/public case routing were corrected without skipping assertions.
+- Cloudflare account/subdomain/D1 access works through the connector. No BYGA Worker existed at the time of verification.
+- All five application migrations were applied to `trading_office_db` (`e787a5b2-c876-4afa-beae-55bb616504be`), with five migration ledger rows and 22 application tables verified. No market database migration or seed was performed.
+- SELECT checks of the latest 260 closed BTCUSDT candles in H1/M15/M5 found zero gaps and zero invalid OHLC/volume rows. Freshness is a separate, time-dependent gate; some boundary snapshots were stale under the strict five-second tolerance and are not counted as a passing live read.
+- Production account, D1 mapping and HTTPS origin are tracked in `deployment/production.json`. Configuration rejects identical databases, placeholder IDs, unsafe origins and invalid SQL identifiers.
+- Deployment workflow now gates on credentials, real application-reader market validation and one bounded synthetic OpenAI discovery/inference probe. It installs hashed Admin/runtime secrets, tests deployed infrastructure/auth, and keeps initial cron disabled until smoke checks pass.
+- Production Worker, actual OpenAI inference/full pipeline/fallback, Discord delivery and physical device performance are **not accepted yet**. Required production credentials are not available in this workspace; the GitHub environment is checked by the deployment run. Do not turn these items into completed acceptance based on fixture CI.
+
+The older sections below are historical evidence and remaining scope.
+
 Initial implementation against PRD v1.0. The checklist uses `[x]` for implemented features with relevant local verification, `[~]` for initial implementation awaiting further functional/browser/provider validation, and `[ ]` for work not done or external resources not connected. This is not a declaration that the entire production MVP is complete.
 
 | Area | Current evidence | Remaining acceptance |

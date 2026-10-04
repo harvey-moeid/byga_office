@@ -2,7 +2,19 @@
 
 Account ID: `07086b4d368d0a37ebcbbf186e51eecf`.
 
-Pemeriksaan remote menggunakan konektor Cloudflare: GET metadata kedua database dan SELECT schema/data agregat. Tidak ada migrasi, seed, deployment, atau perubahan database.
+## Pembaruan setup produksi
+
+Akses akun `07086b4d368d0a37ebcbbf186e51eecf`, Workers subdomain `harveymoeid`, dan kedua D1 kembali berhasil diperiksa. Worker BYGA belum ada pada pemeriksaan ini.
+
+Lima migrasi 0001–0005 sudah diterapkan ke `trading_office_db` dan tercatat dalam `d1_migrations`. Terdapat 22 tabel aplikasi, selain ledger dan tabel internal. Migrasi tidak dijalankan ke `chart_db`.
+
+260 candle tertutup terbaru per H1/M15/M5 mempunyai nol gap dan nol baris OHLC/volume tidak valid. Snapshot di sekitar pergantian candle menunjukkan freshness dapat gagal pada toleransi lima detik; validasi predeploy memakai reader aplikasi yang sama dan wajib lolos, bukan mengabaikan candle yang tertinggal. Tick size instrumen belum mendapat verifikasi exchange; jangan menganggap presisi tampilan sebagai verifikasi tick size.
+
+Konfigurasi produksi nyata disimpan di `deployment/production.json`, menargetkan `https://byga-trading-office-production.harveymoeid.workers.dev`. Credential deployment, Admin dan OpenAI wajib tersedia sebelum workflow dapat menerbitkan Worker.
+
+Laporan di bawah ini adalah pemeriksaan awal sebelum migrasi:
+
+Pemeriksaan remote awal menggunakan konektor Cloudflare: GET metadata kedua database dan SELECT schema/data agregat. Saat itu tidak ada migrasi, seed, deployment, atau perubahan database.
 
 | Database | ID | Hasil |
 | --- | --- | --- |
