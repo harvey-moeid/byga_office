@@ -636,8 +636,8 @@ test("3D speech follows the seated character and opens the actual result detail"
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await fixtureMeeting(page);
-  await page.goto("/");
+  // Probe WebGL before navigation so a slow software renderer cannot consume
+  // the first speaker's finite presentation window before assertions begin.
   const supported = await page.evaluate(() => {
     const canvas = document.createElement("canvas");
     const gl = canvas.getContext("webgl2");
@@ -648,19 +648,23 @@ test("3D speech follows the seated character and opens the actual result detail"
     !supported,
     "WebGL unavailable; meeting fallback is tested separately",
   );
+  await fixtureMeeting(page);
+  await page.goto("/");
   const bubble = page.getByRole("button", {
     name: "Baca percakapan Trend Analyst",
     exact: true,
   });
   await expect(bubble).toBeVisible({ timeout: 25000 });
-  await expect(page.locator(".meeting-bubble")).toHaveCount(1);
-  await expect(
-    page.getByRole("button", { name: "Ruang meeting", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
+  // Open the finite-lived speech immediately. The modal intentionally pauses
+  // presentation, making the remaining assertions deterministic on slow CI.
   await bubble.click();
   await expect(page.getByRole("dialog")).toContainText(
     "Fixture trend: penjelasan lengkap",
   );
+  await expect(page.locator(".meeting-bubble")).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Ruang meeting", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await page
     .getByRole("button", { name: "Tutup percakapan", exact: true })
     .click();
@@ -669,10 +673,10 @@ test("3D speech follows the seated character and opens the actual result detail"
     exact: true,
   });
   await expect(boss).toBeVisible({ timeout: 40000 });
-  await page.screenshot({ path: testInfo.outputPath("meeting-boss-3d.png") });
   await boss.click();
   await expect(page.getByRole("dialog")).toContainText(
     "Fixture boss: penjelasan lengkap",
   );
+  await page.screenshot({ path: testInfo.outputPath("meeting-boss-3d.png") });
   expect(errors).toEqual([]);
 });
