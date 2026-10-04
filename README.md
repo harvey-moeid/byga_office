@@ -49,6 +49,10 @@ BYGA_CHROMIUM_EXECUTABLE_PATH=/usr/bin/chromium npm run test:browser
 
 Browser tests cover desktop/mobile layout, the 3D renderer, WebGL fallback, offline reconnect, scanner filters and Admin delivery review using explicitly intercepted API fixtures. The system Chromium command was exercised in this environment. Separate physical device/FPS and actual provider validation are still needed.
 
+## Home
+
+`/` opens the full-viewport 3D office with floating navigation and camera controls; `/office` redirects there. Market/scanner cards and charts remain on `/operations`. The charcoal/emerald/amber palette combines a dark stage with warm oak/walnut furniture. Meeting chairs and characters share one seating plan and face across the table. WebGL loss keeps an interactive 2D fallback.
+
 ## Architecture
 
 - `src/core`: OHLC validation, EMA/RSI/ADX/MACD/ATR/Bollinger/structure, six scanners, trigger, risk, voting, confidence, context compression.
@@ -65,7 +69,7 @@ The orchestrator persists a watchdog before processing cases, resumes unfinished
 
 Discord uses a durable outbox with a unique case/kind key. Known success is not resent. A timeout, server error or Worker interruption becomes `UNKNOWN` until reviewed. Admin → Usage supports confirmed `MARK_SENT` and `DISMISS`, with a persistent review audit; retry is allowed only for definite `FAILED` deliveries. HTTP 429 respects retry delay and a four-attempt cap. An old queue creation timestamp no longer makes a newly claimed delivery look interrupted.
 
-The office is a furnished architectural cutaway with oak/walnut materials, glass partitions and door openings, dual-monitor workstations, ergonomic chairs, a meeting area, lobby sofa, pantry, ventilated server racks, cabinets, plants and prayer rugs. Adult-proportion procedural characters have shaped faces, hair, jacket lapels, hands and articulated knees/elbows; they sit and type at desks, stand and walk to meetings, and carry coffee during idle activity. Overview, analyst and meeting camera presets complement orbit/pinch controls. Reflection lighting and wood grain are generated locally without external asset downloads. Static furniture is instanced by material/shape. Quality automatically reduces detail/shadows below 30 FPS; physical-device FPS is still unverified. Movement footprints include the rendered partitions and major furniture. Character-to-character avoidance and photorealistic/rigged GLB assets remain open. Trading runs entirely on the backend; browser decorations and Sholat do not invoke AI.
+The office is a furnished architectural cutaway with oak/walnut materials, glass partitions and door openings, dual-monitor workstations, ergonomic chairs, a meeting area, lobby sofa, pantry, ventilated server racks, cabinets and plants. Adult-proportion procedural characters have shaped faces, hair, jacket lapels, hands and articulated knees/elbows; they sit and type at desks, stand and walk to meetings, and carry coffee during idle activity. Overview, analyst and meeting camera presets complement orbit/pinch controls. Reflection lighting and wood grain are generated locally without external asset downloads. Static furniture is instanced by material/shape. Quality automatically reduces detail/shadows below 30 FPS; physical-device FPS is still unverified. Movement footprints include the rendered partitions and major furniture. Character-to-character avoidance and photorealistic/rigged GLB assets remain open. Trading runs entirely on the backend; browser decorations do not invoke AI.
 
 ## Deployment
 

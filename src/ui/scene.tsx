@@ -93,13 +93,20 @@ function CameraView({
   useEffect(() => {
     const setting = views[view];
     const factor =
-      view === "overview" ? Math.max(1, 1.4 / (size.width / size.height)) : 1;
+      view === "overview" ? Math.max(1, 1.3 / (size.width / size.height)) : 1;
     camera.position.set(
       ...(setting.camera.map(
         (n, i) => setting.target[i] + (n - setting.target[i]) * factor,
       ) as [number, number, number]),
     );
     controls.current?.target.set(...setting.target);
+    // A portrait overview needs more camera distance than a landscape scene.
+    // Keep orbit limits from clamping that fitted camera and cropping the floor.
+    if (controls.current)
+      controls.current.maxDistance = Math.max(
+        48,
+        camera.position.distanceTo(controls.current.target) * 1.2,
+      );
     camera.lookAt(...setting.target);
     controls.current?.update();
   }, [camera, controls, view, reset, size.width, size.height]);
@@ -201,13 +208,11 @@ function MarketWall({
 }
 export default function OfficeScene({
   state,
-  prayer,
   onSelect,
   prices,
   avatars = {},
 }: {
   state: string;
-  prayer: boolean;
   onSelect: (id: string) => void;
   prices: number[];
   avatars?: Partial<Record<CharacterId, AvatarPreset>>;
@@ -258,8 +263,8 @@ export default function OfficeScene({
           });
         }}
       >
-        <color attach="background" args={["#d4d9d5"]} />
-        <fog attach="fog" args={["#d4d9d5", 52, 100]} />
+        <color attach="background" args={["#101e26"]} />
+        <fog attach="fog" args={["#101e26", 120, 240]} />
         <hemisphereLight args={["#edf4ff", "#85745d", 1.7]} />
         <ambientLight intensity={0.3} />
         <directionalLight
@@ -338,12 +343,8 @@ export default function OfficeScene({
             index={index}
             avatar={avatars[id] ?? "professional"}
             state={state}
-            prayer={prayer}
             coffee={
-              !prayer &&
-              state === "MONITORING" &&
-              profile.decorative &&
-              index === idleSlot
+              state === "MONITORING" && profile.decorative && index === idleSlot
             }
             decorative={profile.decorative}
             onSelect={onSelect}

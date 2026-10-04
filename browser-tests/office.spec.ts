@@ -187,6 +187,18 @@ test("operations, scanner navigation, admin login and mobile layout remain usabl
     page.getByText("Lingkungan pengembangan lokal", { exact: false }),
   ).toBeVisible();
   await expect(page.getByText("Trend Analyst", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("button", { name: /Sholat/ })).toHaveCount(0);
+  await expect(page.locator(".metrics")).toHaveCount(0);
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await page
+    .getByRole("navigation")
+    .getByRole("link", { name: "Operations", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Scanner Command Center" }),
+  ).toBeVisible();
+  await expect(page.locator(".metrics")).toBeVisible();
   await page
     .getByRole("navigation")
     .getByRole("link", { name: "Scanners" })
@@ -351,7 +363,7 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   test.setTimeout(60_000);
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  await page.goto("/office");
+  await page.goto("/");
   const supported = await page.evaluate(() => {
     const c = document.createElement("canvas");
     const gl = c.getContext("webgl2");
@@ -363,6 +375,14 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
     "System Chromium does not expose WebGL2; fallback is covered separately",
   );
   await expect(page.getByRole("button", { name: /Reset View/ })).toBeVisible();
+  const scene = await page.locator(".office-scene").boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(scene?.x).toBe(0);
+  expect(scene?.y).toBe(0);
+  expect(scene?.width).toBe(viewport.width);
+  expect(scene?.height).toBe(viewport.height);
+  await expect(page.locator(".metrics, .two-columns, footer")).toHaveCount(0);
+  await expect(page.getByText("Musolla", { exact: true })).toHaveCount(0);
   await expect(page.getByText("War Room", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Area analis", exact: true }).click();
   await expect(

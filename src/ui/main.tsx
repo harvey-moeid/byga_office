@@ -4,9 +4,11 @@ import {
   BrowserRouter,
   Link,
   NavLink,
+  Navigate,
   Route,
   Routes,
   useParams,
+  useLocation,
 } from "react-router-dom";
 import {
   characterIds,
@@ -74,19 +76,58 @@ interface PublicCase {
   }[];
 }
 function App() {
-  const session = useData<{ admin: boolean }>("/auth/session");
-  const online = useOnline();
   return (
     <BrowserRouter>
-      <div className="shell">
-        {!online && (
-          <div className="connection-banner" role="status">
-            Offline · Data terakhir belum diperbarui. Akan tersambung ulang
-            otomatis.
-          </div>
-        )}
-        <aside className="sidebar">
-          <Link to="/office" className="brand">
+      <AppLayout />
+    </BrowserRouter>
+  );
+}
+function AppLayout() {
+  const session = useData<{ admin: boolean }>("/auth/session");
+  const online = useOnline();
+  const location = useLocation();
+  const home = location.pathname === "/" || location.pathname === "/office";
+  const [menuOpen, setMenuOpen] = useState(false);
+  useEffect(() => setMenuOpen(false), [location.pathname]);
+  useEffect(() => {
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, []);
+  return (
+    <div className={`shell${home ? " home-shell" : ""}`}>
+      {!online && (
+        <div className="connection-banner" role="status">
+          Offline · Data terakhir belum diperbarui. Akan tersambung ulang
+          otomatis.
+        </div>
+      )}
+      {home && (
+        <button
+          className="home-menu-button"
+          aria-expanded={menuOpen}
+          aria-controls={menuOpen ? "app-navigation" : undefined}
+          onClick={() => setMenuOpen(!menuOpen)}
+        >
+          {menuOpen ? "Tutup" : "Menu"}{" "}
+          <span aria-hidden="true">{menuOpen ? "×" : "☰"}</span>
+        </button>
+      )}
+      {home && menuOpen && (
+        <button
+          className="home-menu-dismiss"
+          aria-label="Tutup menu"
+          onClick={() => setMenuOpen(false)}
+        />
+      )}
+      {(!home || menuOpen) && (
+        <aside
+          id="app-navigation"
+          className={`sidebar${home ? " home-menu" : ""}`}
+        >
+          <Link to="/" className="brand">
             <b>
               BG<span> / </span>
             </b>
@@ -97,7 +138,8 @@ function App() {
           <span className="nav-label">OPERATIONS</span>
           <nav>
             {[
-              ["/office", "◈", "Trading Office"],
+              ["/", "◈", "Home"],
+              ["/operations", "▤", "Operations"],
               ["/scanners", "▦", "Scanners"],
               ["/signals", "↗", "Signals"],
               ["/cases", "▤", "Cases"],
@@ -105,8 +147,8 @@ function App() {
               ["/simulation", "▷", "Simulation"],
               ["/admin", "⚙", "Admin"],
             ].map(([path, icon, title]) => (
-              <NavLink key={path} to={path}>
-                <span>{icon}</span>
+              <NavLink key={path} to={path} end={path === "/"}>
+                <span aria-hidden="true">{icon}</span>
                 {title}
               </NavLink>
             ))}
@@ -116,7 +158,9 @@ function App() {
             <small>Asia/Jakarta · WIB</small>
           </div>
         </aside>
-        <main>
+      )}
+      <main>
+        {!home && (
           <header className="topbar">
             <span>
               BYGA / OPERATIONS <i>●</i>
@@ -128,56 +172,47 @@ function App() {
               </Link>
             </div>
           </header>
-          <Suspense fallback={<Empty>Memuat halaman…</Empty>}>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/office" element={<Dashboard />} />
-              <Route path="/scanners" element={<Scanners />} />
-              <Route path="/scanners/:id" element={<ScannerDetail />} />
-              <Route path="/signals" element={<Signals />} />
-              <Route path="/signals/:id" element={<SignalDetail />} />
-              <Route path="/cases" element={<Cases />} />
-              <Route path="/cases/:id" element={<CaseDetail />} />
-              <Route path="/characters" element={<Characters />} />
-              <Route path="/characters/:id" element={<CharacterDetail />} />
-              <Route path="/simulation" element={<Simulation />} />
-              <Route
-                path="/simulation/history"
-                element={<SimulationHistory />}
-              />
-              <Route
-                path="/simulation/:id"
-                element={<CaseDetail simulation />}
-              />
-              <Route
-                path="/admin/*"
-                element={<Admin onSessionChange={session.retry} />}
-              />
-              <Route
-                path="*"
-                element={<Empty>Halaman tidak ditemukan.</Empty>}
-              />
-            </Routes>
-          </Suspense>
+        )}
+        <Suspense fallback={<Empty>Memuat halaman…</Empty>}>
+          <Routes>
+            <Route path="/" element={<Dashboard immersive />} />
+            <Route path="/office" element={<Navigate to="/" replace />} />
+            <Route path="/operations" element={<Dashboard />} />
+            <Route path="/scanners" element={<Scanners />} />
+            <Route path="/scanners/:id" element={<ScannerDetail />} />
+            <Route path="/signals" element={<Signals />} />
+            <Route path="/signals/:id" element={<SignalDetail />} />
+            <Route path="/cases" element={<Cases />} />
+            <Route path="/cases/:id" element={<CaseDetail />} />
+            <Route path="/characters" element={<Characters />} />
+            <Route path="/characters/:id" element={<CharacterDetail />} />
+            <Route path="/simulation" element={<Simulation />} />
+            <Route path="/simulation/history" element={<SimulationHistory />} />
+            <Route path="/simulation/:id" element={<CaseDetail simulation />} />
+            <Route
+              path="/admin/*"
+              element={<Admin onSessionChange={session.retry} />}
+            />
+            <Route path="*" element={<Empty>Halaman tidak ditemukan.</Empty>} />
+          </Routes>
+        </Suspense>
+        {!home && (
           <footer>
             AI Analysts. Deterministic Systems. One Trading Office.
             <span>Analisis trading · tanpa eksekusi order</span>
           </footer>
-        </main>
-      </div>
-    </BrowserRouter>
+        )}
+      </main>
+    </div>
   );
 }
-function Dashboard() {
+function Dashboard({ immersive = false }: { immersive?: boolean }) {
   const state = useOfficeState<OfficeState>(),
     market = useData<Market>("/market/status", true),
-    characters = useData<{ id: CharacterId; avatar: AvatarPreset }[]>(
-      "/characters",
-    );
+    characters =
+      useData<{ id: CharacterId; avatar: AvatarPreset }[]>("/characters");
   const [view, setView] = useState("3D");
   const [selected, setSelected] = useState<string>();
-  const [prayer, setPrayer] = useState(false);
-  const [pendingPrayer, setPendingPrayer] = useState(false);
   const [tf, setTf] = useState("M5");
   const busy = !!state.data?.active;
   useEffect(() => {
@@ -185,44 +220,11 @@ function Dashboard() {
     window.addEventListener("byga:webgl-lost", fallback);
     return () => window.removeEventListener("byga:webgl-lost", fallback);
   }, []);
-  useEffect(() => {
-    if (pendingPrayer && !busy) {
-      setPrayer(true);
-      setPendingPrayer(false);
-    }
-    if (busy) setPrayer(false);
-  }, [busy, pendingPrayer]);
-  useEffect(() => {
-    if (!prayer) return;
-    const t = setTimeout(() => setPrayer(false), 16000);
-    return () => clearTimeout(t);
-  }, [prayer]);
   const office = state.data?.office ?? "CONNECTING";
   const health = useData<Record<string, string>>("/health", true);
-  return (
-    <>
-      <Heading
-        eyebrow="LIVE OPERATIONS"
-        title="Trading Office"
-        description="Enam sistem deterministik. Delapan perspektif AI."
-        action={
-          <div className="actions">
-            <button
-              onClick={() => (busy ? setPendingPrayer(true) : setPrayer(true))}
-              disabled={prayer || pendingPrayer}
-            >
-              {pendingPrayer
-                ? "Sholat dalam antrean"
-                : prayer
-                  ? "Menuju Musolla"
-                  : "Sholat"}
-            </button>
-            <Link className="button primary" to="/admin">
-              Emergency Meeting ↗
-            </Link>
-          </div>
-        }
-      />
+  const render3D = view === "3D" && supportsWebGL();
+  const notices = (
+    <div className={immersive ? "home-notices" : undefined}>
       <Notice error={state.error} retry={state.retry} />
       <Notice error={market.error} retry={market.retry} />
       {market.data?.development && (
@@ -231,54 +233,91 @@ function Dashboard() {
           produksi.
         </div>
       )}
-      <div className="metrics">
-        <div>
-          <span>MARKET</span>
-          <strong>
-            BTC<span className="muted"> / USDT</span>
-          </strong>
-          <small>H1 → M15 → M5</small>
-        </div>
-        <div>
-          <span>LAST CLOSED PRICE</span>
-          <strong>
-            {market.data
-              ? formatPrice(market.data.price, market.data.tickSize)
-              : "—"}
-          </strong>
-          <small>
-            {market.data
-              ? formatWib(market.data.candle_timestamp)
-              : "Menunggu data pasar"}
-          </small>
-        </div>
-        <div>
-          <span>OFFICE STATE</span>
-          <strong>
-            <span className="dot" />
-            {office.replaceAll("_", " ")}
-          </strong>
-          <small>
-            {busy ? state.data?.active?.id : "Tidak ada meeting aktif"}
-          </small>
-        </div>
-        <div>
-          <span>SCANNER CONSENSUS</span>
-          <strong>
-            {state.data?.scanners.filter((s) => s.direction === "BUY").length ??
-              0}
-            <em> BUY </em>
-            {state.data?.scanners.filter((s) => s.direction === "SELL")
-              .length ?? 0}
-            <em> SELL</em>
-          </strong>
-          <small>Minimal 2 · majority unik</small>
-        </div>
-      </div>
-      <section className="office-panel">
-        <div className="panel-title">
+    </div>
+  );
+  return (
+    <>
+      {!immersive && (
+        <Heading
+          eyebrow="LIVE OPERATIONS"
+          title="Trading Office"
+          description="Enam sistem deterministik. Delapan perspektif AI."
+          action={
+            <div className="actions">
+              <Link className="button primary" to="/admin">
+                Emergency Meeting ↗
+              </Link>
+            </div>
+          }
+        />
+      )}
+      {!immersive && notices}
+      {!immersive && (
+        <div className="metrics">
           <div>
-            <span className="dot" /> BYGA / LIVING OFFICE
+            <span>MARKET</span>
+            <strong>
+              BTC<span className="muted"> / USDT</span>
+            </strong>
+            <small>H1 → M15 → M5</small>
+          </div>
+          <div>
+            <span>LAST CLOSED PRICE</span>
+            <strong>
+              {market.data
+                ? formatPrice(market.data.price, market.data.tickSize)
+                : "—"}
+            </strong>
+            <small>
+              {market.data
+                ? formatWib(market.data.candle_timestamp)
+                : "Menunggu data pasar"}
+            </small>
+          </div>
+          <div>
+            <span>OFFICE STATE</span>
+            <strong>
+              <span className="dot" />
+              {office.replaceAll("_", " ")}
+            </strong>
+            <small>
+              {busy ? state.data?.active?.id : "Tidak ada meeting aktif"}
+            </small>
+          </div>
+          <div>
+            <span>SCANNER CONSENSUS</span>
+            <strong>
+              {state.data?.scanners.filter((s) => s.direction === "BUY")
+                .length ?? 0}
+              <em> BUY </em>
+              {state.data?.scanners.filter((s) => s.direction === "SELL")
+                .length ?? 0}
+              <em> SELL</em>
+            </strong>
+            <small>Minimal 2 · majority unik</small>
+          </div>
+        </div>
+      )}
+      <section
+        className={`office-panel${immersive ? " home-stage" : ""}${immersive && !render3D ? " home-fallback" : ""}`}
+        aria-label="Kantor BYGA"
+      >
+        <div className={`panel-title${immersive ? " home-hud" : ""}`}>
+          <div>
+            {immersive ? (
+              <>
+                <span className="eyebrow">BYGA / AI TRADING OFFICE</span>
+                <h1>Trading Office</h1>
+                <span className="home-state">
+                  <span className="dot" />
+                  {office.replaceAll("_", " ")}
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="dot" /> BYGA / LIVING OFFICE
+              </>
+            )}
           </div>
           <div className="segmented">
             {["3D", "Operations"].map((v) => (
@@ -292,12 +331,12 @@ function Dashboard() {
             ))}
           </div>
         </div>
-        {view === "3D" && supportsWebGL() ? (
+        {immersive && notices}
+        {render3D ? (
           <SceneBoundary>
             <Suspense fallback={<Empty>Memuat kantor 3D…</Empty>}>
               <OfficeScene
                 state={office}
-                prayer={prayer}
                 onSelect={setSelected}
                 prices={market.data?.timeframes.M5.map((c) => c.close) ?? []}
                 avatars={Object.fromEntries(
@@ -309,7 +348,7 @@ function Dashboard() {
             </Suspense>
           </SceneBoundary>
         ) : (
-          <div className="operations-grid">
+          <div className="operations-grid" aria-label="Tim operasi">
             {characterIds.map((id) => (
               <button key={id} onClick={() => setSelected(id)}>
                 <span className="avatar">
@@ -326,41 +365,45 @@ function Dashboard() {
             ))}
           </div>
         )}
-        <div className="office-caption">
-          <span>
-            ISOMETRIC VIEW ·{" "}
-            {view === "3D" ? "Drag to orbit · pinch to zoom" : "2D dashboard"}
-          </span>
-          <span>{busy ? "Meeting berjalan" : "Monitoring market"}</span>
-        </div>
+        {!immersive && (
+          <div className="office-caption">
+            <span>
+              ISOMETRIC VIEW ·{" "}
+              {view === "3D" ? "Drag to orbit · pinch to zoom" : "2D dashboard"}
+            </span>
+            <span>{busy ? "Meeting berjalan" : "Monitoring market"}</span>
+          </div>
+        )}
       </section>
-      <div className="two-columns">
-        <section className="panel">
-          <div className="panel-title">
-            <h2>Scanner Command Center</h2>
-            <Link to="/scanners">Lihat semua ↗</Link>
-          </div>
-          <ScannerGrid scanners={state.data?.scanners ?? []} />
-        </section>
-        <section className="panel">
-          <div className="panel-title">
-            <h2>Market Wall</h2>
-            <div className="segmented">
-              {["H1", "M15", "M5"].map((t) => (
-                <button
-                  key={t}
-                  className={tf === t ? "selected" : ""}
-                  onClick={() => setTf(t)}
-                >
-                  {t}
-                </button>
-              ))}
+      {!immersive && (
+        <div className="two-columns">
+          <section className="panel">
+            <div className="panel-title">
+              <h2>Scanner Command Center</h2>
+              <Link to="/scanners">Lihat semua ↗</Link>
             </div>
-          </div>
-          <Chart candles={market.data?.timeframes[tf] ?? []} />
-          <p className="muted">Candle tertutup · {tf} · WIB</p>
-        </section>
-      </div>
+            <ScannerGrid scanners={state.data?.scanners ?? []} />
+          </section>
+          <section className="panel">
+            <div className="panel-title">
+              <h2>Market Wall</h2>
+              <div className="segmented">
+                {["H1", "M15", "M5"].map((t) => (
+                  <button
+                    key={t}
+                    className={tf === t ? "selected" : ""}
+                    onClick={() => setTf(t)}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Chart candles={market.data?.timeframes[tf] ?? []} />
+            <p className="muted">Candle tertutup · {tf} · WIB</p>
+          </section>
+        </div>
+      )}
       {selected && (
         <div className="modal-backdrop" onClick={() => setSelected(undefined)}>
           <section className="modal" onClick={(e) => e.stopPropagation()}>

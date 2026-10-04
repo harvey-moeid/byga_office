@@ -6,7 +6,7 @@ import {
   RepeatWrapping,
   SRGBColorSpace,
 } from "three";
-import { desks, partitions } from "./navigation";
+import { desks, partitions, meetingSeats } from "./navigation";
 
 type Triple = [number, number, number];
 type Finish =
@@ -46,7 +46,7 @@ const finishes: Record<
   oak: { color: "#b59166", roughness: 0.65 },
   walnut: { color: "#705039", roughness: 0.5 },
   metal: { color: "#343b40", roughness: 0.35, metalness: 0.72 },
-  fabric: { color: "#adb2a5", roughness: 0.98 },
+  fabric: { color: "#2b675c", roughness: 0.98 },
   leather: { color: "#343e3d", roughness: 0.72 },
   screen: { color: "#142a34", roughness: 0.3, emissive: "#152b35" },
   paper: { color: "#f3f1e8", roughness: 0.9 },
@@ -54,8 +54,8 @@ const finishes: Record<
   leaf: { color: "#365d42", roughness: 0.9 },
   ceramic: { color: "#d2c5b1", roughness: 0.42 },
   light: { color: "#fff4d7", roughness: 0.35, emissive: "#fff2d6" },
-  led: { color: "#76bfae", roughness: 0.3, emissive: "#589587" },
-  rug: { color: "#858b7c", roughness: 1 },
+  led: { color: "#58d9be", roughness: 0.3, emissive: "#46bba2" },
+  rug: { color: "#405b57", roughness: 1 },
   soil: { color: "#332921", roughness: 1 },
 };
 
@@ -243,9 +243,8 @@ function buildOffice(detail: boolean): Part[] {
   });
   box([5, 0.76, 1], [3, 0.09, 1.4], "walnut");
   for (const x of [4, 6]) box([x, 0.38, 1], [0.08, 0.72, 0.8], "metal");
+  meetingSeats.forEach(({ position: [x, z], facing }) => chair(x, z, facing));
   for (let i = 0; i < 4; i++) {
-    chair(4 + i * 0.65, 0, Math.PI);
-    chair(4 + i * 0.65, 2, 0);
     if (detail)
       box(
         [4 + i * 0.65, 0.812, i % 2 ? 1.3 : 0.65],
@@ -288,11 +287,6 @@ function buildOffice(detail: boolean): Part[] {
       box([-7.265, y, z], [0.02, 0.12, 0.57], "leather");
       box([-7.25, y, z + 0.22], [0.025, 0.025, 0.04], "led");
     }
-  }
-  // Prayer room rugs remain flat and do not obstruct the shared actor routes.
-  for (let i = 0; i < 4; i++) {
-    box([0.3 + i * 0.45, 0.041, 5.95], [0.4, 0.012, 1.5], "rug");
-    box([0.3 + i * 0.45, 0.049, 5.45], [0.26, 0.008, 0.1], "fabric");
   }
   // Storage in back offices and framed acoustic/art panels on the right wall.
   for (const z of [-4, 6]) {

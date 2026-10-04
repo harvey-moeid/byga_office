@@ -792,7 +792,6 @@ Account dan kedua database telah diperiksa melalui GET/SELECT konektor Cloudflar
 - [~] Server/Data Room
 - [~] Lounge / Pantry
 - [~] Hallway / walking paths
-- [~] Musolla
 
 ---
 
@@ -822,7 +821,6 @@ Account dan kedua database telah diperiksa melalui GET/SELECT konektor Cloudflar
 - [~] Buat waypoint graph
 - [~] Desk → War Room path
 - [~] Desk → Lounge path
-- [~] Desk → Musolla path
 - [~] Risk Office routes
 - [~] Boss Office routes
 - [x] Prevent obvious collision terhadap meja/dinding (antar-karakter masih terbuka)
@@ -888,15 +886,15 @@ Account dan kedua database telah diperiksa melalui GET/SELECT konektor Cloudflar
 
 ---
 
-# Milestone 35 — Musolla
+# Milestone 35 — Home 3D (scope diperbarui 4 Oktober 2026)
 
-- [~] Buat tombol `Sholat`
-- [~] Manual trigger only
-- [~] Available characters berjalan ke Musolla
-- [~] Trading workflow priority
-- [~] Queue Sholat request jika case aktif
-- [~] Return characters setelah sequence selesai
-- [~] Pastikan tidak mengubah trading state/data
+- [x] Home `/` menampilkan kantor 3D pada seluruh viewport
+- [x] `/office` mengarah ke Home
+- [x] Dashboard market/scanner tetap tersedia di `/operations`
+- [x] Menu overlay untuk navigasi tanpa sidebar permanen pada Home
+- [x] Posisi dan arah kursi/karakter meeting menggunakan seating plan bersama
+- [x] Fallback 2D dan pemulihan kehilangan WebGL tetap tersedia
+- [ ] Validasi performa pada perangkat fisik
 
 ---
 
@@ -1207,3 +1205,4 @@ MVP selesai jika seluruh berikut terpenuhi:
 8. [~] Milestone 26–37: Realtime + 3D Office
 9. [~] Milestone 38–39: Emergency + Simulation
 10. [~] Milestone 40–47: Usage, retention, testing, security, production
+

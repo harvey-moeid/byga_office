@@ -170,7 +170,6 @@ export function SimulationPlayback({
           <Suspense fallback={<Empty>Memuat playback…</Empty>}>
             <OfficeScene
               state={stage}
-              prayer={false}
               prices={prices}
               onSelect={(id) => setSelected(roles[id] ?? id)}
             />

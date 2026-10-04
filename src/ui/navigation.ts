@@ -15,8 +15,26 @@ export const rooms = [
   { label: "Boss Office", x: 6, z: 6, w: 4, d: 3 },
   { label: "Server / Data", x: -7, z: 0, w: 2, d: 3 },
   { label: "Lounge", x: -2, z: 5.5, w: 3, d: 3 },
-  { label: "Musolla", x: 1, z: 6, w: 3, d: 3 },
 ];
+// Local model +Z points forward. Both characters and chairs use the same
+// seating plan, with each row looking across the table instead of away.
+export const meetingSeats = Array.from({ length: 8 }, (_, index) => ({
+  position: [4 + (index % 4) * 0.65, Math.floor(index / 4) * 2] as Point,
+  facing: index < 4 ? 0 : Math.PI,
+}));
+export function isMeeting(state: string) {
+  return [
+    "TRIGGERED",
+    "AI_ANALYSIS",
+    "AI_DEGRADED",
+    "RISK_REVIEW",
+    "BOSS_DECISION",
+    "DISCORD",
+  ].includes(state);
+}
+export function seatedFacing(index: number, state: string) {
+  return isMeeting(state) ? meetingSeats[index].facing : Math.PI;
+}
 export const desks: Point[] = [
   [-4, -2],
   [-1, -2],
@@ -158,22 +176,9 @@ export function planMovement(
 export function destination(
   index: number,
   state: string,
-  prayer: boolean,
   coffee = false,
 ): Point {
-  if (prayer)
-    return [0.3 + (index % 4) * 0.45, 5.6 + Math.floor(index / 4) * 0.65];
-  if (
-    [
-      "TRIGGERED",
-      "AI_ANALYSIS",
-      "AI_DEGRADED",
-      "RISK_REVIEW",
-      "BOSS_DECISION",
-      "DISCORD",
-    ].includes(state)
-  )
-    return [4 + (index % 4) * 0.65, Math.floor(index / 4) * 2];
+  if (isMeeting(state)) return meetingSeats[index].position;
   if (coffee) return [-2 + (index % 2) * 0.55, 5 + (index % 3) * 0.5];
   return [desks[index][0], desks[index][1] + 0.72];
 }

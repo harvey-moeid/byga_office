@@ -6,6 +6,8 @@ import {
   desks,
   destination as actorDestination,
   planMovement,
+  isMeeting,
+  seatedFacing,
 } from "./navigation";
 
 const appearances: Record<
@@ -147,7 +149,6 @@ const shirt: [number, number][] = [
 export function OfficeCharacter({
   index,
   state,
-  prayer,
   coffee,
   decorative,
   avatar,
@@ -155,7 +156,6 @@ export function OfficeCharacter({
 }: {
   index: number;
   state: string;
-  prayer: boolean;
   coffee: boolean;
   decorative: boolean;
   avatar: AvatarPreset;
@@ -173,9 +173,9 @@ export function OfficeCharacter({
     new Vector3(desks[index][0], 0, desks[index][1] + 0.72),
   );
   const destination = useMemo(() => {
-    const [x, z] = actorDestination(index, state, prayer, coffee);
+    const [x, z] = actorDestination(index, state, coffee);
     return new Vector3(x, 0, z);
-  }, [index, state, prayer, coffee]);
+  }, [index, state, coffee]);
   const path = useRef<Vector3[]>([]);
   const direction = useRef(new Vector3());
   const [reduced, setReduced] = useState(
@@ -202,14 +202,7 @@ export function OfficeCharacter({
         ...([movement.destination[0], 0, movement.destination[1]] as Triple),
       );
   }, [destination]);
-  const meeting = [
-    "TRIGGERED",
-    "AI_ANALYSIS",
-    "AI_DEGRADED",
-    "RISK_REVIEW",
-    "BOSS_DECISION",
-    "DISCORD",
-  ].includes(state);
+  const meeting = isMeeting(state);
   useFrame(({ clock }, dt) => {
     if (!root.current || !body.current) return;
     const delta = Math.min(dt, 0.06);
@@ -233,13 +226,9 @@ export function OfficeCharacter({
         root.current.rotation.y += difference * Math.min(1, delta * 10);
       }
     }
-    const sitting = !walking && !path.current.length && !prayer && !coffee;
+    const sitting = !walking && !path.current.length && !coffee;
     if (!walking) {
-      const target = prayer
-        ? Math.PI
-        : sitting && meeting && index > 3
-          ? 0
-          : Math.PI;
+      const target = seatedFacing(index, state);
       const difference = Math.atan2(
         Math.sin(target - root.current.rotation.y),
         Math.cos(target - root.current.rotation.y),
@@ -252,12 +241,8 @@ export function OfficeCharacter({
         ? Math.sin(clock.elapsedTime * 1.6 + index) * 0.003
         : 0;
     body.current.position.y =
-      MathUtils.damp(
-        body.current.position.y,
-        sitting ? -0.445 : prayer && !walking ? -0.06 : 0,
-        9,
-        delta,
-      ) + breathe;
+      MathUtils.damp(body.current.position.y, sitting ? -0.445 : 0, 9, delta) +
+      breathe;
     const gait =
       walking && !reduced ? Math.sin(clock.elapsedTime * 8 + index) * 0.42 : 0;
     for (let side = 0; side < 2; side++) {

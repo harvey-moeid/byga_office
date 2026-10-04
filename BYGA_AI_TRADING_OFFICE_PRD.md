@@ -1364,7 +1364,6 @@ Style karakter:
 8. Server/Data Room
 9. Lounge / Pantry
 10. Hallway / walking paths
-11. Musolla
 
 ---
 
@@ -1564,23 +1563,13 @@ Trading logic tidak dipengaruhi graphics quality.
 
 ---
 
-## 84. Musolla
+## 84. Home 3D
 
-Musolla manual only.
-
-Button:
-
-`Sholat`
-
-Saat ditekan:
-- available characters berjalan menuju musolla
-- setelah sequence selesai, kembali ke state sebelumnya
-
-Jika trading case sedang aktif:
-- Sholat request masuk queue
-- trading workflow memiliki prioritas
-
-Musolla tidak memengaruhi scanner atau signal.
+Home (`/`) menampilkan kantor 3D pada seluruh viewport desktop dan mobile.
+Navigasi halaman lain tersedia melalui menu overlay; panel market/scanner tersedia di `/operations`.
+URL `/office` mengarah ke Home. Kamera overview, analis, dan meeting tetap tersedia.
+Karakter dan kursi meeting memakai posisi serta arah duduk yang sama, menghadap meja.
+Jika WebGL tidak tersedia, gunakan fallback operasi 2D yang tetap interaktif.
 
 ---
 
@@ -2174,7 +2163,7 @@ Meeting and Final Signal notification pipeline.
 Admin, scanners, cases, signals, configuration, provider health.
 
 ### Milestone 8 — 3D Trading Office
-Office model, rooms, characters, animations, HUD, Market Wall, Server Room, Musolla.
+Office model, rooms, characters, animations, HUD, Market Wall, Server Room, Home 3D layar penuh.
 
 ### Milestone 9 — Simulation & Emergency
 Simulation replay, historical configs, Emergency Meeting.
@@ -2222,3 +2211,4 @@ Suggested internal technical name:
 Suggested tagline:
 
 **AI Analysts. Deterministic Systems. One Trading Office.**
+

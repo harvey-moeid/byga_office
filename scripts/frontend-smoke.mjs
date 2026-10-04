@@ -28,14 +28,16 @@ async function get(path, status = 200) {
 const localHtml = await readFile("dist/index.html", "utf8");
 const entry = localHtml.match(/src="([^"]+\.js)"/)?.[1];
 assert.ok(entry?.startsWith("/assets/"), "Built frontend entry missing");
-for (let attempt = 0; attempt < 5; attempt++) {
-  const html = await (await get("/office")).text();
-  if (html.includes(entry)) break;
-  assert.ok(
-    attempt < 4,
-    "Production still serves a different frontend revision",
-  );
-  await wait(2000 * 2 ** attempt);
+for (const path of ["/", "/office", "/operations"]) {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const html = await (await get(path)).text();
+    if (html.includes(entry)) break;
+    assert.ok(
+      attempt < 4,
+      `${path}: production still serves a different frontend revision`,
+    );
+    await wait(2000 * 2 ** attempt);
+  }
 }
 let checked = 0;
 for (const name of await readdir("dist/assets")) {
