@@ -2,7 +2,7 @@ name: Publish validated frontend
 on:
   push:
     branches: [main]
-    paths: ["src/ui/**", ".github/workflows/frontend.yml", "scripts/frontend-smoke.mjs"]
+    paths: ["src/ui/**", "browser-tests/**", "playwright.config.ts", ".github/workflows/frontend.yml", "scripts/frontend-smoke.mjs"]
   workflow_dispatch:
 
 permissions:

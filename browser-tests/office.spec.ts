@@ -346,6 +346,9 @@ test("Admin reviews ambiguous deliveries with explicit confirmation and no resen
 test("3D renderer mounts rooms and reset controls when WebGL is available", async ({
   page,
 }, testInfo) => {
+  // Software WebGL on CI also renders three camera views, captures the scene,
+  // and verifies native context-loss recovery within this single test.
+  test.setTimeout(60_000);
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/office");
