@@ -12,7 +12,13 @@ import {
   walkable,
   type Point,
 } from "../src/ui/navigation";
-import { initialQuality, adaptQuality, profiles } from "../src/ui/quality";
+import {
+  initialQuality,
+  adaptQuality,
+  parseQualityMode,
+  profiles,
+  qualityModes,
+} from "../src/ui/quality";
 import {
   FIRST_ACTIVITY_DELAY,
   NEXT_ACTIVITY_DELAY,
@@ -157,10 +163,19 @@ describe("adaptive quality", () => {
     expect(initialQuality(16, 16)).toBe("high");
   });
   it("steps down after a slow sample and does not oscillate upward", () => {
+    expect(adaptQuality("ultra", 24)).toBe("high");
     expect(adaptQuality("high", 24)).toBe("medium");
     expect(adaptQuality("medium", 22)).toBe("low");
     expect(adaptQuality("low", 60)).toBe("low");
     expect(profiles.low.shadows).toBe(false);
     expect(profiles.low.decorative).toBe(false);
+    expect(profiles.ultra.dpr).toBeGreaterThan(profiles.high.dpr);
+    expect(profiles.ultra.shadowSize).toBeGreaterThan(profiles.high.shadowSize);
+  });
+  it("accepts only supported persistent quality modes", () => {
+    expect(qualityModes).toEqual(["auto", "low", "medium", "high", "ultra"]);
+    for (const mode of qualityModes) expect(parseQualityMode(mode)).toBe(mode);
+    expect(parseQualityMode("cinematic")).toBe("auto");
+    expect(parseQualityMode(null)).toBe("auto");
   });
 });
