@@ -2,12 +2,16 @@ import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Html, OrbitControls } from "@react-three/drei";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Group, Vector3, TOUCH, Matrix4, InstancedMesh } from "three";
-import { characterIds } from "../core/contracts";
+import {
+  characterIds,
+  type AvatarPreset,
+  type CharacterId,
+} from "../core/contracts";
 import {
   rooms,
   desks,
   destination as actorDestination,
-  planRoute,
+  planMovement,
 } from "./navigation";
 import {
   initialQuality,
@@ -16,6 +20,41 @@ import {
   type Quality,
 } from "./quality";
 import type { ComponentRef, RefObject } from "react";
+const avatarAppearance: Record<
+  AvatarPreset,
+  { suit: string; accent: string; skin: string; hair: string }
+> = {
+  professional: {
+    suit: "#627f89",
+    accent: "#7c8f83",
+    skin: "#c29b7c",
+    hair: "#352a23",
+  },
+  emerald: {
+    suit: "#315f50",
+    accent: "#86ad91",
+    skin: "#a9785d",
+    hair: "#211b18",
+  },
+  navy: {
+    suit: "#344966",
+    accent: "#7189a8",
+    skin: "#d0a283",
+    hair: "#403229",
+  },
+  gold: {
+    suit: "#806b3f",
+    accent: "#c2a96b",
+    skin: "#8f6048",
+    hair: "#1f1a18",
+  },
+  plum: {
+    suit: "#624765",
+    accent: "#a17ca4",
+    skin: "#c58e72",
+    hair: "#33242b",
+  },
+};
 function Box({
   at,
   size,
@@ -80,6 +119,7 @@ function Person({
   prayer,
   coffee,
   decorative,
+  avatar,
   onSelect,
 }: {
   index: number;
@@ -87,8 +127,10 @@ function Person({
   prayer: boolean;
   coffee: boolean;
   decorative: boolean;
+  avatar: AvatarPreset;
   onSelect: (id: string) => void;
 }) {
+  const appearance = avatarAppearance[avatar];
   const ref = useRef<Group>(null);
   const position = useRef(
     new Vector3(desks[index][0], 0, desks[index][1] + 0.65),
@@ -114,11 +156,22 @@ function Person({
   }, []);
   useEffect(() => {
     const current = position.current;
-    path.current = planRoute(
+    const movement = planMovement(
       [current.x, current.z],
       [destination.x, destination.z],
-    ).map(([x, z]) => new Vector3(x, 0, z));
-    // A blocked destination leaves the character at its last valid location.
+    );
+    if (movement.mode === "walk") {
+      path.current = movement.route.map(([x, z]) => new Vector3(x, 0, z));
+    } else {
+      path.current = [];
+      if (movement.mode === "teleport") {
+        position.current.set(
+          movement.destination[0],
+          0,
+          movement.destination[1],
+        );
+      }
+    }
   }, [destination]);
   useFrame(({ clock }, delta) => {
     if (!ref.current) return;
@@ -173,32 +226,17 @@ function Person({
     >
       <mesh position={[0, 0.9, 0]} castShadow>
         <capsuleGeometry args={[0.16, 0.35, 4, 8]} />
-        <meshStandardMaterial
-          color={
-            index === 7
-              ? "#b1a087"
-              : index === 6
-                ? "#677d70"
-                : [
-                    "#627f89",
-                    "#788369",
-                    "#807060",
-                    "#696983",
-                    "#768e80",
-                    "#837a66",
-                  ][index]
-          }
-        />
+        <meshStandardMaterial color={appearance.suit} />
       </mesh>
       <mesh position={[0, 1.32, 0]} castShadow>
         <sphereGeometry
           args={[0.15, decorative ? 12 : 8, decorative ? 12 : 6]}
         />
-        <meshStandardMaterial color="#c29b7c" />
+        <meshStandardMaterial color={appearance.skin} />
       </mesh>
       <mesh position={[0, 1.42, -0.02]}>
         <sphereGeometry args={[0.145, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2]} />
-        <meshStandardMaterial color="#352a23" />
+        <meshStandardMaterial color={appearance.hair} />
       </mesh>
       <group ref={leftLeg} position={[-0.085, 0.54, 0]}>
         <Box at={[0, -0.24, 0]} size={[0.12, 0.48, 0.13]} color="#26302e" />
@@ -207,10 +245,18 @@ function Person({
         <Box at={[0, -0.24, 0]} size={[0.12, 0.48, 0.13]} color="#26302e" />
       </group>
       <group ref={leftArm} position={[-0.22, 1.05, 0]}>
-        <Box at={[0, -0.2, 0]} size={[0.08, 0.4, 0.1]} color="#7c8f83" />
+        <Box
+          at={[0, -0.2, 0]}
+          size={[0.08, 0.4, 0.1]}
+          color={appearance.accent}
+        />
       </group>
       <group ref={rightArm} position={[0.22, 1.05, 0]}>
-        <Box at={[0, -0.2, 0]} size={[0.08, 0.4, 0.1]} color="#7c8f83" />
+        <Box
+          at={[0, -0.2, 0]}
+          size={[0.08, 0.4, 0.1]}
+          color={appearance.accent}
+        />
         {coffee && (
           <mesh position={[0, -0.38, 0.05]}>
             <cylinderGeometry args={[0.06, 0.05, 0.12, 8]} />
@@ -306,11 +352,13 @@ export default function OfficeScene({
   prayer,
   onSelect,
   prices,
+  avatars = {},
 }: {
   state: string;
   prayer: boolean;
   onSelect: (id: string) => void;
   prices: number[];
+  avatars?: Partial<Record<CharacterId, AvatarPreset>>;
 }) {
   const [reset, setReset] = useState(0);
   const labelHost = useRef<HTMLDivElement>(null!);
@@ -436,6 +484,7 @@ export default function OfficeScene({
           <Person
             key={i}
             index={i}
+            avatar={avatars[characterIds[i]] ?? "professional"}
             state={state}
             prayer={prayer}
             coffee={

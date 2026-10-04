@@ -138,3 +138,46 @@ export function useData<T>(path: string, poll = false) {
     state.path === path ? state : { path, loading: true };
   return { ...visible, retry: () => refresh((v) => v + 1) };
 }
+
+/** SSE is an acceleration layer only; the regular request remains the fallback. */
+export function useOfficeState<T>() {
+  const fallback = useData<T>("/office/state", true);
+  const [live, setLive] = useState<{ data: T; updatedAt: number }>();
+  useEffect(() => {
+    let source: EventSource | undefined;
+    const connect = () => {
+      source?.close();
+      if (!navigator.onLine || document.hidden) return;
+      source = new EventSource("/api/v1/office/events");
+      source.addEventListener("office", (event) => {
+        try {
+          setLive({
+            data: JSON.parse((event as MessageEvent<string>).data) as T,
+            updatedAt: Date.now(),
+          });
+        } catch {
+          source?.close();
+        }
+      });
+    };
+    const offline = () => {
+      source?.close();
+      source = undefined;
+      setLive(undefined);
+    };
+    const visible = () => (document.hidden ? offline() : connect());
+    connect();
+    window.addEventListener("online", connect);
+    window.addEventListener("offline", offline);
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      source?.close();
+      window.removeEventListener("online", connect);
+      window.removeEventListener("offline", offline);
+      document.removeEventListener("visibilitychange", visible);
+    };
+  }, []);
+  return live
+    ? { ...fallback, data: live.data, updatedAt: live.updatedAt, error: undefined }
+    : fallback;
+}

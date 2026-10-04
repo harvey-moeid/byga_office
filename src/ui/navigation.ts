@@ -120,6 +120,24 @@ export function planRoute(
   return [];
 }
 
+export type MovementPlan =
+  | { mode: "walk"; route: Point[] }
+  | { mode: "teleport"; destination: Point }
+  | { mode: "stay" };
+
+// Teleport is a last-resort rendering recovery only. Never teleport into blocked
+// geometry or outside the office; an invalid destination leaves the actor put.
+export function planMovement(
+  start: Point,
+  end: Point,
+  geometry: Obstacle[] = obstacles,
+): MovementPlan {
+  const route = planRoute(start, end, geometry);
+  if (route.length) return { mode: "walk", route };
+  if (walkable(end, geometry)) return { mode: "teleport", destination: end };
+  return { mode: "stay" };
+}
+
 export function destination(
   index: number,
   state: string,

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   characterIds,
+  avatarPresets,
   defaultConfig,
   providers,
   type CharacterConfig,
@@ -339,7 +340,6 @@ function CharacterEditor() {
                 "fallback_model",
                 "custom_instructions",
                 "personality",
-                "avatar",
               ] as const
             ).map((k) => (
               <label key={k}>
@@ -363,6 +363,24 @@ function CharacterEditor() {
                 )}
               </label>
             ))}
+            <label>
+              avatar
+              <select
+                value={draft.avatar}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    avatar: e.target.value as CharacterConfig["avatar"],
+                  })
+                }
+              >
+                {avatarPresets.map((preset) => (
+                  <option key={preset} value={preset}>
+                    {preset}
+                  </option>
+                ))}
+              </select>
+            </label>
             {(
               [
                 "temperature",

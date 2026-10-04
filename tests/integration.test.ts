@@ -305,7 +305,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       ).status,
     ).toBe(204);
   });
-  it("honors the real is_closed flag even when an old candle passes the time cutoff", async () => {
+  it("rejects a gap caused by the real is_closed flag without writing market data", async () => {
     const chartDb = await mf.getD1Database("CHART_DB");
     const row = await chartDb
       .prepare(
@@ -324,9 +324,10 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       .all();
     try {
       const response = await call("/market/status");
-      expect(response.status).toBe(200);
-      const market = (await response.json()) as { candle_timestamp: number };
-      expect(market.candle_timestamp).toBe(row!.t - 300000);
+      expect(response.status).toBe(503);
+      expect(await response.json()).toMatchObject({
+        error: "Market data unavailable; check chart_db binding and candle schema",
+      });
       expect(
         (
           await chartDb
@@ -346,6 +347,37 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
   it("rejects unauthorized Admin and private signals", async () => {
     expect((await call("/admin/config", undefined, false)).status).toBe(401);
     expect((await call("/signals", undefined, false)).status).toBe(401);
+  });
+  it("publishes only sanitized character appearance presets", async () => {
+    const response = await call("/characters", undefined, false);
+    expect(response.status).toBe(200);
+    const appearances = (await response.json()) as {
+      id: string;
+      avatar: string;
+      primary_provider?: string;
+    }[];
+    expect(appearances).toHaveLength(8);
+    expect(appearances[0]).toEqual({
+      id: expect.any(String),
+      avatar: "professional",
+    });
+    expect(appearances.every((entry) => !entry.primary_provider)).toBe(true);
+  });
+  it("streams office state over SSE with no-cache event framing", async () => {
+    const response = await mf.dispatchFetch(origin + "/api/v1/office/events", {
+      headers: { "CF-Connecting-IP": "198.51.100.42" },
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toContain("text/event-stream");
+    expect(response.headers.get("Cache-Control")).toBe(
+      "no-cache, no-transform",
+    );
+    const reader = response.body!.getReader();
+    const first = await reader.read();
+    expect(new TextDecoder().decode(first.value)).toMatch(
+      /^event: office\ndata: \{.*"office":.*\}\n\n$/,
+    );
+    await reader.cancel();
   });
   it("login requires same origin and verifies hash, creates Secure session", async () => {
     expect(

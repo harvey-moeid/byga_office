@@ -147,6 +147,13 @@ test.beforeEach(async ({ page }) => {
       body: JSON.stringify(
         path.endsWith("/auth/session")
           ? { admin: false }
+          : path.endsWith("/characters")
+            ? [
+                { id: "trend", avatar: "emerald" },
+                { id: "structure", avatar: "navy" },
+                { id: "momentum", avatar: "gold" },
+                { id: "liquidity", avatar: "plum" },
+              ]
           : path.endsWith("/office/state")
             ? { office: "MONITORING", active: null, scanners: [] }
             : path.endsWith("/market/status")
