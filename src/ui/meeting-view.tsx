@@ -28,7 +28,7 @@ export function useMeetingPresentation(render3D: boolean) {
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     const advance = () => {
-      if (document.hidden || detail) return;
+      if (document.hidden || (detail && !snapshot?.cancelled)) return;
       setPlayback((previous) =>
         render3D &&
         previous?.phase === "speaking" &&
@@ -43,6 +43,9 @@ export function useMeetingPresentation(render3D: boolean) {
     return () => clearInterval(timer);
   }, [snapshot, detail, render3D]);
   useEffect(() => setDetail(undefined), [snapshot?.case_id]);
+  useEffect(() => {
+    if (snapshot?.cancelled) setDetail(undefined);
+  }, [snapshot?.cancelled]);
   const current =
     snapshot?.case_id === playback?.caseId
       ? snapshot?.turns.find((turn) => turn.character === playback?.speaker)
