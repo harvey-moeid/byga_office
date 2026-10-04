@@ -379,7 +379,7 @@ test("offline banner reconnects and refreshes office state automatically", async
   await expect(page.getByText("Trend Analyst", { exact: true })).toBeVisible();
   await expect.poll(() => hits).toBeGreaterThan(0);
   await context.setOffline(true);
-  await expect(page.getByRole("status")).toContainText("Offline");
+  await expect(page.locator(".connection-banner")).toContainText("Offline");
   const before = hits;
   office = "WATCHING";
   await context.setOffline(false);
