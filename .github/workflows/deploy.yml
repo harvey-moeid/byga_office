@@ -32,7 +32,8 @@ jobs:
       BYGA_CHART_SCHEMA: ${{ vars.BYGA_CHART_SCHEMA }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       DISCORD_MEETING_WEBHOOK: ${{ secrets.DISCORD_MEETING_WEBHOOK }}
       DISCORD_SIGNAL_WEBHOOK: ${{ secrets.DISCORD_SIGNAL_WEBHOOK }}
     steps:
@@ -40,7 +41,7 @@ jobs:
         shell: bash
         run: |
           missing=0
-          for key in CLOUDFLARE_API_TOKEN ADMIN_PASSWORD OPENAI_API_KEY; do
+          for key in CLOUDFLARE_API_TOKEN ADMIN_PASSWORD OPENROUTER_API_KEY GEMINI_API_KEY; do
             if [ -z "${!key}" ]; then
               echo "::error::Missing production environment secret: $key"
               missing=1
@@ -78,7 +79,7 @@ jobs:
           JS
       - name: Real market schema, closed candles, gaps and freshness
         run: node scripts/live-market.mjs
-      - name: Real OpenAI discovery and bounded structured inference
+      - name: Real OpenRouter and Gemini discovery and bounded structured inference
         run: node scripts/live-ai.mjs
       - name: Migrate application database only
         run: node scripts/wrangler.mjs d1 migrations apply trading_office_db --remote --config "$BYGA_DEPLOY_CONFIG"
@@ -103,7 +104,8 @@ jobs:
           const hash = pbkdf2Sync(process.env.ADMIN_PASSWORD, salt, 100000, 32, "sha256").toString("hex");
           const secrets = {
             ADMIN_PASSWORD_HASH: "pbkdf2-sha256:100000:" + salt.toString("hex") + ":" + hash,
-            OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+            OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
+            GEMINI_API_KEY: process.env.GEMINI_API_KEY,
           };
           for (const name of ["DISCORD_MEETING_WEBHOOK", "DISCORD_SIGNAL_WEBHOOK"])
             if (process.env[name]) secrets[name] = process.env[name];

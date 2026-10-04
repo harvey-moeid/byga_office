@@ -38,15 +38,18 @@ Add these secrets to the GitHub `production` environment through Settings → En
 
 - `CLOUDFLARE_API_TOKEN`: the deployment/D1 token scoped to this account.
 - `ADMIN_PASSWORD`: at least 12 characters; the workflow derives the PBKDF2 hash and installs only `ADMIN_PASSWORD_HASH` in the Worker.
-- `OPENAI_API_KEY`: the selected production provider.
+- `OPENROUTER_API_KEY`: the selected primary provider.
+- `GEMINI_API_KEY`: the selected fallback provider.
+
+Default character models are `openai/gpt-4.1-mini` through OpenRouter and `gemini-3.5-flash-lite` through the Gemini API. No direct `OPENAI_API_KEY` is required for this selection. Provider/model choices remain editable per character in Admin. New installations use these defaults; saved character settings are not overwritten by deployment.
 
 Optional: `DISCORD_MEETING_WEBHOOK` and `DISCORD_SIGNAL_WEBHOOK`. Missing webhooks remain unverified; do not call configured-only status successful delivery. Existing runtime secrets of other provider types are preserved by Wrangler but are not copied from unrelated Workers.
 
 Changing the tracked production target triggers the deployment workflow on main. Otherwise run Actions → Deploy approved environment → Run workflow → production. Missing credentials fail before checkout/build/migrations.
 
-The workflow runs code and browser checks, validates actual SELECT-only market reads through the application's reader (260 candles per timeframe with OHLC/gap/freshness guards), and makes one bounded OpenAI structured-output probe with synthetic input. The probe does not publish a signal. It then applies only application migrations, deploys initially with cron disabled, installs runtime secrets, verifies frontend/assets/D1/Durable Object/Admin login/cookie flags/origin rejection/logout, and enables cron only after acceptance. A failed initial smoke test leaves cron disabled. The final smoke test must also pass.
+The workflow runs code and browser checks, validates actual SELECT-only market reads through the application's reader (260 candles per timeframe with OHLC/gap/freshness guards), and makes a bounded structured-output probe for each selected provider with synthetic input, using the exact default models from the character configuration. Both model discovery and inference must pass. The probes do not publish a signal. It then applies only application migrations, deploys initially with cron disabled, installs runtime secrets, verifies frontend/assets/D1/Durable Object/Admin login/cookie flags/origin rejection/logout, and enables cron only after acceptance. A failed initial smoke test leaves cron disabled. The final smoke test must also pass.
 
-No full live-case AI/fallback/simulation acceptance or real Discord delivery is implied by the bounded probe. Physical device/FPS QA and premium R2/GLB assets remain separate acceptance items.
+No full live-case AI/failover/simulation acceptance or real Discord delivery is implied by the bounded probe. Physical device/FPS QA and premium R2/GLB assets remain separate acceptance items.
 
 ## Secrets
 

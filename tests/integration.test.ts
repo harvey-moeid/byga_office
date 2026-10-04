@@ -100,6 +100,7 @@ beforeAll(async () => {
         CHART_SCHEMA: JSON.stringify(chart),
         ADMIN_PASSWORD_HASH: encoded,
         OPENAI_API_KEY: "fixture-only-ai-key",
+        OPENROUTER_API_KEY: "fixture-only-openrouter",
         GEMINI_API_KEY: "fixture-only-gemini",
         DISCORD_MEETING_WEBHOOK:
           "https://discord.com/api/webhooks/fixture/meeting",
@@ -131,7 +132,7 @@ beforeAll(async () => {
         if (gate) await gate;
         if (
           failure === "all" ||
-          (failure === "primary" && u.hostname === "api.openai.com")
+          (failure === "primary" && u.hostname === "openrouter.ai")
         )
           return new MFResponse("Fixture outage", { status: 503 });
         const body = (await request.json()) as {
@@ -468,6 +469,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     const publicRes = await call(`/cases/${item.id}/public`, undefined, false);
     const text = await publicRes.text();
     expect(text).not.toContain("fixture-only-ai-key");
+    expect(text).not.toContain("fixture-only-openrouter");
     expect(text).not.toContain("primary_provider");
     expect(text).not.toContain("rendered_prompt");
     expect(text).not.toContain('"provider"');
@@ -482,7 +484,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       provider?: string;
       model?: string;
     }[];
-    expect(entries[0].provider).toBe("openai");
+    expect(entries[0].provider).toBe("openrouter");
     expect(entries[0].model).toBeTruthy();
   }, 30000);
   it("emergency SELL uses same tested pipeline and live signal contracts", async () => {

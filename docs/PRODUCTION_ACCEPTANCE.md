@@ -13,7 +13,13 @@
 - Tracked production configuration and automated predeployment/deployed checks are committed.
 - The production Worker target is now `byga-office` at `https://byga-office.harveymoeid.workers.dev`; staging uses `byga-office-staging`. This naming change does not establish deployment acceptance.
 
-## Current deployment blocker
+## Current provider selection
+
+Production now requires `OPENROUTER_API_KEY` (primary) and `GEMINI_API_KEY` (fallback), along with the existing Cloudflare deployment token and Admin password. The workflow no longer requires a direct OpenAI key. Default models are `openai/gpt-4.1-mini` through OpenRouter and `gemini-3.5-flash-lite` through Gemini; both receive real discovery/inference probes before deployment. New character seeds use this selection; stored character settings remain editable in Admin.
+
+Live validation of the newly selected credentials has not passed yet. Add these two GitHub `production` secrets, then run Deploy approved environment on latest main. Successful fixture tests do not establish provider account access or inference acceptance.
+
+## Previous OpenAI deployment blocker
 
 [Deployment 37183388460](https://github.com/harvey-moeid/byga_office/actions/runs/37183388460) passed credentials, all code/browser checks and the real market reader, then failed on its first structured inference request:
 
@@ -36,7 +42,7 @@ No BYGA production Worker exists at the latest Cloudflare check. No successful r
 
 - Exchange tick-size verification; the application's existing default precision is not exchange evidence.
 - Production deploy and postdeploy frontend/assets/D1/Durable Object/authentication/cookie/origin/logout checks.
-- Successful OpenAI structured inference, full case pipeline, configured fallback, simulation and operational recovery observations.
+- Successful OpenRouter and Gemini structured inference, full case pipeline, configured fallback, simulation and operational recovery observations.
 - Real Discord webhook configuration and explicitly authorized delivery acceptance. Configuration alone does not prove delivery.
 - Physical device/FPS and premium asset acceptance where required by the PRD.
 

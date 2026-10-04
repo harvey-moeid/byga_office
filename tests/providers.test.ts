@@ -114,6 +114,11 @@ describe("Eight provider adapters", () => {
         expect(new Headers(init?.headers).get("Authorization")).toMatch(
           /^Bearer test-/,
         );
+      if (p === "openrouter") {
+        expect(body.response_format.type).toBe("json_schema");
+        expect(body.response_format.json_schema.strict).toBe(true);
+        expect(body.provider.require_parameters).toBe(true);
+      }
       return new Response(JSON.stringify(response(p)));
     }) as typeof fetch;
     const r = await requestAI(
@@ -204,7 +209,7 @@ describe("Eight provider adapters", () => {
   });
   it("skips open primary and uses fallback", async () => {
     const { r, circuits } = runtime();
-    circuits.openai = { failures: 3, openedAt: Date.now() };
+    circuits.openrouter = { failures: 3, openedAt: Date.now() };
     const f = vi.fn(async (input: RequestInfo | URL) => {
       expect(String(input)).toContain("googleapis");
       return new Response(JSON.stringify(response("gemini")));

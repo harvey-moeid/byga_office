@@ -1,5 +1,9 @@
 # Implementation status — 4 October 2026 (WIB)
 
+## Current provider configuration
+
+Production selection is now OpenRouter (`openai/gpt-4.1-mini`) with Gemini (`gemini-3.5-flash-lite`) fallback. GitHub environment secrets `OPENROUTER_API_KEY` and `GEMINI_API_KEY` replace the direct OpenAI requirement; each selected provider must pass discovery and bounded real inference before publishing. New character seeds use these defaults; existing saved settings are not automatically changed. The validation results below predate this provider-selection change until the new CI run completes. Real credentials remain to be validated.
+
 ## Latest evidence — 4 October 2026
 
 Latest code validation: [CI 37183388465](https://github.com/harvey-moeid/byga_office/actions/runs/37183388465) passed **109 unit/integration tests and 30 browser tests**, TypeScript, ESLint, build and Worker dry run. [Deployment 37183388460](https://github.com/harvey-moeid/byga_office/actions/runs/37183388460) passed all three required secret preflight checks and the actual SELECT-only market reader (260 closed candles per H1/M15/M5; OHLC, gaps and freshness). OpenAI model discovery passed, but structured inference failed with HTTP 429, type `insufficient_quota`. Billing/quota must be restored before deployment can proceed. No production Worker has been published. See [the acceptance report](PRODUCTION_ACCEPTANCE.md).

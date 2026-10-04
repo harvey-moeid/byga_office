@@ -199,7 +199,7 @@ export async function requestAI(
       temperature: character.temperature,
       max_tokens: character.max_output_tokens,
       response_format:
-        provider === "openai"
+        (provider === "openai" || provider === "openrouter")
           ? {
               type: "json_schema",
               json_schema: {
@@ -219,7 +219,8 @@ export async function requestAI(
         response_format: { type: "json_object" },
       };
   }
-  if (["huggingface", "openrouter", "nvidia"].includes(provider))
+  if (provider === "openrouter") body.provider = { require_parameters: true };
+  if (["huggingface", "nvidia"].includes(provider))
     delete body.response_format;
   const response = await fetcher(url, {
     method: "POST",

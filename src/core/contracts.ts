@@ -206,10 +206,10 @@ export type CharacterConfig = z.infer<typeof characterSchema>;
 export function defaultCharacters(): CharacterConfig[] {
   return characterIds.map((id) => ({
     id,
-    primary_provider: "openai",
-    primary_model: "gpt-4.1-mini",
+    primary_provider: "openrouter",
+    primary_model: "openai/gpt-4.1-mini",
     fallback_provider: "gemini",
-    fallback_model: "gemini-2.5-flash",
+    fallback_model: "gemini-3.5-flash-lite",
     temperature: 0.2,
     max_output_tokens: id === "risk" || id === "boss" ? 2000 : 1500,
     primary_timeout: 30000,
