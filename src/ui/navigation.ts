@@ -27,8 +27,25 @@ export const desks: Point[] = [
   [6, -4],
   [6, 6],
 ];
+// The rendered furniture and routing share these footprints. Door openings are
+// real gaps, so actors can enter offices instead of crossing glass partitions.
+export const partitions: Obstacle[] = [
+  { x: 2.5, z: -3.9, w: 0.08, d: 5.2 },
+  { x: 2.5, z: 2.2, w: 0.08, d: 2.4 },
+  { x: 3.3, z: -1.6, w: 1.5, d: 0.08 },
+  { x: 6.8, z: -1.6, w: 2.4, d: 0.08 },
+  { x: 3.2, z: 4, w: 1.3, d: 0.08 },
+  { x: 6.7, z: 4, w: 2.6, d: 0.08 },
+];
+export const furnishings: Obstacle[] = [
+  { x: -6.2, z: 5.7, w: 2.1, d: 0.8 }, // Lobby sofa
+  { x: -6.2, z: 4.7, w: 1.3, d: 0.45 }, // Coffee table
+  { x: -7.65, z: 0, w: 0.7, d: 2.6 }, // Server racks
+  { x: -2, z: 7, w: 3, d: 0.6 }, // Pantry
+];
 export const obstacles: Obstacle[] = [
-  ...rooms.map((r) => ({ x: r.x, z: r.z - r.d / 2, w: r.w, d: 0.08 })),
+  ...partitions,
+  ...furnishings,
   ...desks.map(([x, z]) => ({ x, z, w: 1.6, d: 0.85 })),
   { x: 5, z: 1, w: 3, d: 1.4 },
 ];
@@ -158,5 +175,5 @@ export function destination(
   )
     return [4 + (index % 4) * 0.65, Math.floor(index / 4) * 2];
   if (coffee) return [-2 + (index % 2) * 0.55, 5 + (index % 3) * 0.5];
-  return [desks[index][0], desks[index][1] + 0.65];
+  return [desks[index][0], desks[index][1] + 0.72];
 }

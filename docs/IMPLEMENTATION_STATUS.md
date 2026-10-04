@@ -1,5 +1,9 @@
 # Implementation status — 4 October 2026 (WIB)
 
+## Office visual revision — 4 October 2026
+
+The 3D office now has an architectural cutaway, locally generated wood grain/reflection lighting, glazed partitions with door openings, dual-monitor desks, ergonomic chairs, meeting seating, sofa, pantry, server racks, cabinets, plants and prayer rugs. Adult-proportion characters include shaped faces/hair, clothing lapels, hands and articulated knees/elbows with sitting, typing, walking and coffee poses. Three camera presets support closer inspection; routing shares the partition and furniture footprints. These are procedural models, not photorealistic scanned/GLB characters. Static props are instanced by material/shape, and adaptive detail/2D WebGL-loss fallback remain. Physical-device FPS and character-to-character avoidance remain unaccepted. Frontend changes trigger `.github/workflows/frontend.yml`, guarded by an exact backend/config diff against the deployed `aff739c` revision, code/browser checks, and deployed asset SHA-256 verification. This presentation release does not claim real market/AI/Discord acceptance; backend changes still require the full `deploy.yml` workflow.
+
 ## Current provider configuration
 
 Production selection is now OpenRouter (`openai/gpt-4.1-mini`) with Gemini (`gemini-3.5-flash-lite`) fallback. GitHub environment secrets `OPENROUTER_API_KEY` and `GEMINI_API_KEY` replace the direct OpenAI requirement; each selected provider must pass discovery and bounded real inference before publishing. New character seeds use these defaults; existing saved settings are not automatically changed. [CI 37184871468](https://github.com/harvey-moeid/byga_office/actions/runs/37184871468) passed 109 unit/integration and 30 browser tests for the selected providers. Both real discovery/inference probes and deployed frontend/D1/Durable Object/Admin login/logout/origin smoke checks passed in [deployment 37184871525](https://github.com/harvey-moeid/byga_office/actions/runs/37184871525). Worker `byga-office` is published. Cloudflare accepted its `* * * * *` cron at 07:31:02 UTC (14:31:02 WIB), and GET schedules confirmed installation; repeated execution still needs observation. The earlier 10072 configuration blocker is resolved. Full Worker case/failover/simulation and Discord acceptance remain open. Earlier evidence below is historical.
@@ -65,3 +69,4 @@ The supplied Cloudflare account and both database IDs were subsequently verified
 The development Worker was restarted after the frozen installation and passed the HTML/API/scanner/unauthorized-Admin smoke checks again. Restoration in a fresh cloud task has not been verified; running processes must restart.
 
 The 3D chunk is about 249 kB gzip and lazy-loaded separately from the shell (about 108 kB JS gzip). The build still warns about the uncompressed 3D chunk exceeding 500 kB. Premium asset/model optimization and physical device performance have not been claimed complete.
+

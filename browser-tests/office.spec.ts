@@ -155,19 +155,19 @@ test.beforeEach(async ({ page }) => {
                 { id: "momentum", avatar: "gold" },
                 { id: "liquidity", avatar: "plum" },
               ]
-          : path.endsWith("/office/state")
-            ? { office: "MONITORING", active: null, scanners: [] }
-            : path.endsWith("/market/status")
-              ? {
-                  development: true,
-                  price: 60000,
-                  tickSize: 0.01,
-                  candle_timestamp: Date.now() - 300000,
-                  timeframes: { H1: [], M15: [], M5: [] },
-                }
-              : path.endsWith("/signals")
-                ? { items: [], total: 0, page: 1 }
-                : [],
+            : path.endsWith("/office/state")
+              ? { office: "MONITORING", active: null, scanners: [] }
+              : path.endsWith("/market/status")
+                ? {
+                    development: true,
+                    price: 60000,
+                    tickSize: 0.01,
+                    candle_timestamp: Date.now() - 300000,
+                    timeframes: { H1: [], M15: [], M5: [] },
+                  }
+                : path.endsWith("/signals")
+                  ? { items: [], total: 0, page: 1 }
+                  : [],
       ),
     });
   });
@@ -361,7 +361,20 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   );
   await expect(page.getByRole("button", { name: /Reset View/ })).toBeVisible();
   await expect(page.getByText("War Room", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Area analis", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Area analis", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page
+    .getByRole("button", { name: "Ruang meeting", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Ruang meeting", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: /Reset View/ }).click();
+  await expect(
+    page.getByRole("button", { name: "Seluruh kantor", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await page.screenshot({
     path: `/tmp/byga-scene-${testInfo.project.name}.png`,
     fullPage: true,

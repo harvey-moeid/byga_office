@@ -61,3 +61,10 @@ Use Cloudflare Worker Secrets for `ADMIN_PASSWORD_HASH`, `OPENAI_API_KEY`, `GEMI
 ## Required verification before production acceptance
 
 Verify real BTCUSDT H1/M15/M5 reads and freshness/gaps; real model discovery and inference; fallback and circuit behavior; Admin login/cookies/CSRF; public signal toggles/history; signal idempotency; Discord meeting/final delivery without duplicates; retention; simulation isolation; mobile portrait/landscape/FPS; WebGL fallback; and deployed smoke checks. Keep untested items unchecked.
+
+
+## Frontend publication
+
+Changes under `src/ui/` trigger `frontend.yml` in the same protected GitHub `production` environment and deployment concurrency group. Its first gate requires backend, core contracts, dependencies, D1 migrations and deployment configuration to match the code revision actually published by run 37184871525 (`aff739c0c93458a1fd9fa8a664aec384be9e944a`). Backend/config changes must go through the full deployment workflow; update this baseline only after an accepted backend publication.
+
+After code/integration/browser checks, this workflow publishes the frontend with the same Worker backend, existing secrets, bindings and cron. It does not migrate D1 or call AI/Discord. The smoke check verifies SHA-256 of every built JS/CSS asset on production and the existing unauthenticated API/auth boundaries. It reports market freshness separately; stale upstream data does not imply a frontend publication failure or a passing trading acceptance. Nonsecret overrides must match the production settings used for the baseline; changes to those settings require the full deployment workflow.
