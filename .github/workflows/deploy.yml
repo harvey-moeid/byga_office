@@ -2,7 +2,7 @@ name: Deploy approved environment
 on:
   push:
     branches: [main]
-    paths: ["deployment/production.json", ".github/workflows/deploy.yml", "scripts/live-ai.mjs"]
+    paths: ["deployment/production.json", ".github/workflows/deploy.yml", "scripts/live-ai.mjs", "scripts/smoke.mjs"]
   workflow_dispatch:
     inputs:
       environment:

@@ -3,9 +3,16 @@ const origin = process.env.BYGA_PUBLIC_ORIGIN;
 if (!origin || new URL(origin).origin !== origin || !origin.startsWith("https://"))
   throw new Error("BYGA_PUBLIC_ORIGIN must be an exact HTTPS origin.");
 async function get(path, status = 200) {
-  const response = await fetch(origin + path, { signal: AbortSignal.timeout(20000) });
-  assert.equal(response.status, status, `${path}: unexpected HTTP status`);
-  return response;
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const response = await fetch(origin + path, { signal: AbortSignal.timeout(20000) });
+    if (response.status === status) return response;
+    // Fresh Worker/DO deployments can briefly return 5xx while propagating.
+    // Retry safe reads only; persistent failures still block cron activation.
+    if (status !== 200 || ![500, 502, 503, 504].includes(response.status) || attempt === 4)
+      assert.equal(response.status, status, `${path}: unexpected HTTP status`);
+    await response.body?.cancel();
+    await new Promise(resolve => setTimeout(resolve, 2000 * 2 ** attempt));
+  }
 }
 const html = await (await get("/office")).text();
 assert.match(html, /<div[^>]*id="root"/, "Frontend shell missing");
