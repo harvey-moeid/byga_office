@@ -351,6 +351,7 @@ function CharacterEditor() {
               <label key={k}>
                 {k}
                 <select
+                  aria-label={k}
                   value={draft[k]}
                   onChange={(e) => {
                     const provider = e.target
