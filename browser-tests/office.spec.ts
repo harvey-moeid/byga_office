@@ -656,10 +656,7 @@ test("3D speech follows the seated character and opens the actual result detail"
   await page.goto("/");
   await expect(page.getByRole("button", { name: /Reset View/ })).toBeVisible();
   meetingEnabled = true;
-  const bubble = page.getByRole("button", {
-    name: "Baca percakapan Trend Analyst",
-    exact: true,
-  });
+  const bubble = page.locator(".meeting-bubble").filter({ hasText: "Trend Analyst" });
   await expect(bubble).toBeVisible({ timeout: 60000 });
   // Open the finite-lived speech immediately. The modal intentionally pauses
   // presentation, making the remaining assertions deterministic on slow CI.
@@ -674,10 +671,7 @@ test("3D speech follows the seated character and opens the actual result detail"
   await page
     .getByRole("button", { name: "Tutup percakapan", exact: true })
     .click();
-  const boss = page.getByRole("button", {
-    name: "Baca percakapan Head Trader",
-    exact: true,
-  });
+  const boss = page.locator(".meeting-bubble").filter({ hasText: "Head Trader" });
   await expect(boss).toBeVisible({ timeout: 60000 });
   await boss.click();
   await expect(page.getByRole("dialog")).toContainText(
