@@ -51,7 +51,8 @@ jobs:
       - name: Desktop and mobile browser acceptance
         run: |
           npx playwright install --with-deps chromium
-          npm run test:browser -- --workers=2
+          # Match CI: avoid competing software WebGL renderers on one runner.
+          npm run test:browser -- --workers=1
       - name: Generate existing production configuration
         run: |
           node scripts/configure.mjs
