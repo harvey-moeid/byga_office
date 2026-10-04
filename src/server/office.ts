@@ -177,10 +177,12 @@ export class Office extends DurableObject<Env> {
       return json({ ok: true });
     }
     if (path === "/state") {
+      const { config } = await this.config();
       const active = await this.env.DB.prepare(
         "SELECT id,status FROM cases WHERE mode='LIVE' AND status IN ('REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW') ORDER BY created_at LIMIT 1",
       ).first();
       return json({
+        scanner_consensus_min: config.scannerConsensusMin,
         office: (await this.ctx.storage.get("office")) ?? "MONITORING",
         active,
         scanners: (await this.ctx.storage.get("scanners")) ?? [],
@@ -382,7 +384,7 @@ export class Office extends DurableObject<Env> {
         id,
         "LIVE",
         "EMERGENCY",
-        trigger(scanners),
+        trigger(scanners, config.scannerConsensusMin),
         `emergency:${body.idempotencyKey}`,
         body.sendDiscord,
         body.focus,
@@ -457,7 +459,7 @@ export class Office extends DurableObject<Env> {
         id,
         "SIMULATION",
         "SIMULATION",
-        trigger(scanners),
+        trigger(scanners, config.scannerConsensusMin),
         `simulation:${body.idempotencyKey}`,
         false,
         "NONE",
@@ -515,7 +517,7 @@ export class Office extends DurableObject<Env> {
           ).bind(s.name, JSON.stringify(s), candle, id, "LIVE"),
         ),
       ]);
-      const direction = trigger(scanners);
+      const direction = trigger(scanners, config.scannerConsensusMin);
       if (direction) {
         const last =
           (await this.ctx.storage.get<number>(`cooldown:${direction}`)) ?? 0;
@@ -729,6 +731,8 @@ export class Office extends DurableObject<Env> {
     }
     await this.ctx.storage.put("active", row.uuid);
     const snapshot = JSON.parse(row.context) as CaseContext;
+    // Historical and in-flight snapshots created before this setting keep the default.
+    snapshot.config = configSchema.parse(snapshot.config);
     let nextAlarm = Date.now() + 1000;
     try {
       if (row.status === "SIGNAL_CREATED" && row.result) {
@@ -775,7 +779,7 @@ export class Office extends DurableObject<Env> {
           snapshot.config.processingDelaySeconds * 1000,
         );
         const rescanned = scan(latest, snapshot.config, row.config_version);
-        const fresh = trigger(rescanned);
+        const fresh = trigger(rescanned, snapshot.config.scannerConsensusMin);
         if (!fresh) {
           await this.status(row, "STALE");
           return;
@@ -1019,7 +1023,7 @@ export class Office extends DurableObject<Env> {
       if (r.status !== "fulfilled") throw new Error("Analyst stage incomplete");
       return r.value;
     });
-    const scanner = trigger(s.scanners);
+    const scanner = trigger(s.scanners, s.config.scannerConsensusMin);
     if (s.strict_replay && analysts.some((a) => a.status !== "SUCCESS"))
       throw new Error(
         "STRICT replay failed: historical Analyst provider/model is unavailable",

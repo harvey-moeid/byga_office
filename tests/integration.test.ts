@@ -327,7 +327,8 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       const response = await call("/market/status");
       expect(response.status).toBe(503);
       expect(await response.json()).toMatchObject({
-        error: "Market data unavailable; check chart_db binding and candle schema",
+        error:
+          "Market data unavailable; check chart_db binding and candle schema",
       });
       expect(
         (
@@ -432,6 +433,62 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
         .bind("{}")
         .run(),
     ).rejects.toThrow("immutable config");
+  });
+  it("persists Admin scanner minimum, rejects invalid values and blocks AUTO below threshold", async () => {
+    const config = {
+      ...defaultConfig,
+      publicSignals: true,
+      scannerConsensusMin: 6,
+    };
+    const saved = await call("/admin/config", {
+      config,
+      activation: "NEXT CASE",
+    });
+    expect(saved.status).toBe(200);
+    const version = (await saved.json()) as { id: string };
+    expect(await (await call("/admin/config")).json()).toMatchObject({
+      id: version.id,
+      config: { scannerConsensusMin: 6 },
+    });
+    expect(await (await call("/office/state")).json()).toMatchObject({
+      scanner_consensus_min: 6,
+    });
+    for (const minimum of [0, 7, 2.5]) {
+      expect(
+        (
+          await call("/admin/config", {
+            config: { ...config, scannerConsensusMin: minimum },
+            activation: "NEXT CASE",
+          })
+        ).status,
+      ).toBe(400);
+    }
+    expect((await call("/admin/scan", {})).status).toBe(200);
+    const state = (await (await call("/office/state")).json()) as {
+      scanners: { direction: string }[];
+    };
+    expect(state.scanners).toHaveLength(6);
+    expect(
+      Math.max(
+        ...["BUY", "SELL"].map(
+          (direction) =>
+            state.scanners.filter((s) => s.direction === direction).length,
+        ),
+      ),
+    ).toBeLessThan(6);
+    const db = await mf.getD1Database("DB");
+    expect(
+      (await db
+        .prepare(
+          "SELECT COUNT(*) AS n FROM cases WHERE source='AUTO' AND config_version=?",
+        )
+        .bind(version.id)
+        .first<{ n: number }>())!.n,
+    ).toBe(0);
+    await call("/admin/config", {
+      config: { ...defaultConfig, publicSignals: true },
+      activation: "NEXT CASE",
+    });
   });
   it("emergency BUY pipeline persists analysts/risk/boss/signal and deduplicates retry", async () => {
     scenario = "BUY";
