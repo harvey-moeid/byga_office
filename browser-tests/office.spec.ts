@@ -19,7 +19,7 @@ test("Admin and Simulation modules load only when their routes are opened", asyn
   );
   await page
     .getByRole("navigation")
-    .getByRole("link", { name: "Admin", exact: true })
+    .getByRole("link", { name: /Admin$/ })
     .click();
   await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
   expect(modules.some((path) => path.endsWith("/src/ui/admin.tsx"))).toBe(true);
@@ -28,7 +28,7 @@ test("Admin and Simulation modules load only when their routes are opened", asyn
   );
   await page
     .getByRole("navigation")
-    .getByRole("link", { name: "Simulation", exact: true })
+    .getByRole("link", { name: /Simulation$/ })
     .click();
   await expect(
     page.getByRole("heading", { name: "Simulation", exact: true }),
@@ -59,7 +59,7 @@ test("APPLY NOW cancels on dismissal and sends confirmed changes only on accepta
   });
   await page.goto("/admin");
   await page
-    .getByLabel("Activation", { exact: true })
+    .getByRole("combobox", { name: "Activation", exact: true })
     .selectOption("APPLY NOW");
   page.once("dialog", (dialog) => dialog.dismiss());
   await page
@@ -98,8 +98,9 @@ test("case and character provider metadata are visible only in Admin views", asy
   await page.route("**/api/v1/auth/session", (route) =>
     route.fulfill({ json: { admin } }),
   );
-  await page.route("**/api/v1/**/CASE-fixture*", (route) =>
-    route.fulfill({ json: caseData }),
+  await page.route(
+    /\/api\/v1\/(?:admin\/)?cases\/CASE-fixture(?:\/public)?(?:\?.*)?$/,
+    (route) => route.fulfill({ json: caseData }),
   );
   await page.route("**/api/v1/characters/trend", (route) =>
     route.fulfill({
