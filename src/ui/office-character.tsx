@@ -210,13 +210,6 @@ export function OfficeCharacter({
   useEffect(() => {
     arrivedRef.current = false;
     setArrived(false);
-    if (reduced) {
-      path.current = [];
-      position.current.copy(destination);
-      arrivedRef.current = true;
-      setArrived(true);
-      return;
-    }
     const current = position.current;
     const movement = planMovement(
       [current.x, current.z],
@@ -230,7 +223,7 @@ export function OfficeCharacter({
       position.current.set(
         ...([movement.destination[0], 0, movement.destination[1]] as Triple),
       );
-  }, [destination, reduced]);
+  }, [destination]);
   const meeting = isAttendingMeeting(index, state);
   const speechVisible = !!speech && arrived && meeting;
   useEffect(() => {
