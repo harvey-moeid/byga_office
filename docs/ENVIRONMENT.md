@@ -63,7 +63,7 @@ Untuk target produksi saat ini, kelima nilai sudah tersedia di [deployment/produ
 | `CLOUDFLARE_ACCOUNT_ID` | `07086b4d368d0a37ebcbbf186e51eecf` | Akun Cloudflare tujuan |
 | `BYGA_CHART_DB_ID` | `76f53f4c-a542-48a7-8eb8-10dbcba3c1aa` | ID D1 market `chart_db`, hanya dibaca oleh aplikasi |
 | `BYGA_OFFICE_DB_ID` | `e787a5b2-c876-4afa-beae-55bb616504be` | ID D1 aplikasi `trading_office_db` |
-| `BYGA_PUBLIC_ORIGIN` | `https://byga-office.harveymoeid.workers.dev` | Origin HTTPS untuk validasi request Admin |
+| `BYGA_PUBLIC_ORIGIN` | `https://karyawanai.muidsoft.com` | Origin HTTPS untuk validasi request Admin |
 | `BYGA_CHART_SCHEMA` | JSON schema berikut | Mapping kolom dan timeframe market |
 
 Default `BYGA_CHART_SCHEMA`:

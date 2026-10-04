@@ -31,7 +31,7 @@ npm run deploy
 ## Production workflow
 
 Worker name: `byga-office` (production); `byga-office-staging` for staging. The generator uses the base name from `wrangler.jsonc`, adding an environment suffix only for staging.
-Target: `https://byga-office.harveymoeid.workers.dev`.
+Target: `https://karyawanai.muidsoft.com`. The production generator declares this Custom Domain in Wrangler and uses it as the exact `PUBLIC_ORIGIN` for Admin mutations and deployed smoke checks. If `BYGA_PUBLIC_ORIGIN` is overridden in GitHub, it must match `custom_domain` in `deployment/production.json`.
 Current status: published with passing deployed smoke checks. Cron `* * * * *` was installed through the Cloudflare schedules API and read back successfully at 07:31:02 UTC on 4 October 2026, matching `wrangler.jsonc`. The earlier 10072 limit error no longer prevents this schedule update. No other Worker's triggers were changed and the account plan was not changed by this action. Allow propagation before checking repeated automatic scans.
 GitHub environment: `production`. Nonsecret defaults come from `deployment/production.json`; environment variables override them. Staging requires its own settings and a distinct application database.
 

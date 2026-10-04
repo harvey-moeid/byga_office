@@ -25,6 +25,8 @@ describe("production configuration guards", () => {
     expect(result.status).toBe(0);
     const config = JSON.parse(readFileSync(join(directory, ".wrangler/deploy-production.json"), "utf8"));
     expect(config.ai).toEqual({ binding: "AI" });
+    expect(config.vars.PUBLIC_ORIGIN).toBe("https://karyawanai.muidsoft.com");
+    expect(config.routes).toEqual([{ pattern: "karyawanai.muidsoft.com", custom_domain: true }]);
     const chart = config.d1_databases.find((db: { binding: string }) => db.binding === "CHART_DB");
     const application = config.d1_databases.find((db: { binding: string }) => db.binding === "DB");
     expect(chart.database_id).toBe(defaults.chart_db_id);

@@ -54,6 +54,11 @@ source.account_id = settings.account;
 source.main = resolve("src/server/index.ts");
 source.assets.directory = resolve("dist");
 source.workers_dev = true;
+if (defaults.custom_domain) {
+  if (origin.hostname !== defaults.custom_domain || origin.port)
+    throw new Error("PUBLIC_ORIGIN must match the deployment custom_domain.");
+  source.routes = [{ pattern: defaults.custom_domain, custom_domain: true }];
+}
 chart.database_id = settings.chart;
 application.database_id = settings.application;
 application.migrations_dir = resolve("migrations");
