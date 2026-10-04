@@ -2,7 +2,7 @@
 
 React + TypeScript + React Three Fiber frontend, Cloudflare Worker API, D1 audit database, and two persistent Durable Object orchestrators (live and simulation). Built against [PRD v1.0](BYGA_AI_TRADING_OFFICE_PRD.md). Progress is recorded in [the checklist](BYGA_AI_TRADING_OFFICE_CHECKLIST.md).
 
-Production setup now has a verified Cloudflare account/chart schema, five applied remote application migrations, and a tracked nonsecret production target. CI passes 109 unit/integration tests and 30 desktop/mobile browser tests using isolated fixtures. Production deployment and real inference are gated by credentials and live checks; this is not a completed production acceptance. Deployment is currently blocked by three missing GitHub production secrets; see [the acceptance report](docs/PRODUCTION_ACCEPTANCE.md). See [deployment setup](docs/DEPLOYMENT.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).
+Production setup now has a verified Cloudflare account/chart schema, five applied remote application migrations, and a tracked nonsecret production target. CI passes 109 unit/integration tests and 30 desktop/mobile browser tests using isolated fixtures. Required production secrets and live candle validation now pass. Production deployment is blocked by OpenAI HTTP 429 `insufficient_quota` during real inference; this is not a completed production acceptance; see [the acceptance report](docs/PRODUCTION_ACCEPTANCE.md). See [deployment setup](docs/DEPLOYMENT.md) and [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
 ## Local development
 

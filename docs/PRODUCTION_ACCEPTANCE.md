@@ -2,32 +2,41 @@
 
 ## Confirmed
 
-- Code commit: `cb1b66a21f889d0df58ce8e8ca68bde695781b1d`.
-- [CI 37182406627](https://github.com/harvey-moeid/byga_office/actions/runs/37182406627): success; **109 unit/integration tests**, **30 browser tests**, TypeScript, ESLint, frontend build and Worker dry run passed.
-- Cloudflare connector verified the account, workers.dev subdomain and both database IDs.
-- All five application migrations are applied remotely and recorded in `d1_migrations`. 22 application tables verified.
-- Latest 260 closed candles per H1/M15/M5: zero gaps and zero invalid OHLC/volume rows. Chart queries were SELECT-only.
+- Code commit: `9345f9a3d34aab949095f12c99e3afdbaefff667`.
+- [CI 37183388465](https://github.com/harvey-moeid/byga_office/actions/runs/37183388465): success; **109 unit/integration tests**, **30 browser tests**, TypeScript, ESLint, frontend build and Worker dry run passed.
+- All three required GitHub production secrets are present and pass preflight. Admin password meets the minimum length. Secret values were not exposed.
+- Cloudflare account, workers.dev subdomain and both database IDs were verified.
+- All five application migrations are applied remotely and recorded in `d1_migrations`. 22 application tables verified. No migrations or seeds were applied to `chart_db`.
+- Actual application market reader passed through the supplied Cloudflare API token at 06:34:08 and 06:41:08 UTC: 260 closed BTCUSDT candles per H1/M15/M5, OHLC/volume, gaps and freshness. Queries were SELECT-only and verified not to write data. These are point-in-time checks; boundary ingestion lag can still cause strict freshness rejection.
+- Real OpenAI model discovery passed, including availability of `gpt-4.1-mini`.
+- Live inference diagnostics log only allowlisted error codes/types and HTTP status. Only identified temporary rate limits receive bounded retries; quota errors stop immediately.
 - Tracked production configuration and automated predeployment/deployed checks are committed.
 
-## Deployment blocker
+## Current deployment blocker
 
-[Deployment 37182406624](https://github.com/harvey-moeid/byga_office/actions/runs/37182406624) failed in the credential preflight, before checkout/build/deployment. These GitHub `production` environment secrets are missing:
+[Deployment 37183388460](https://github.com/harvey-moeid/byga_office/actions/runs/37183388460) passed credentials, all code/browser checks and the real market reader, then failed on its first structured inference request:
 
-1. `CLOUDFLARE_API_TOKEN`
-2. `ADMIN_PASSWORD` (minimum 12 characters)
-3. `OPENAI_API_KEY`
+```
+provider: openai
+http_status: 429
+type: insufficient_quota
+attempt: 1
+```
 
-Configure them at repository Settings → Environments → production → Environment secrets, then run Actions → Deploy approved environment → production. Runtime Admin hashing and Worker secret installation are handled by the workflow. Nonsecret account/database/schema/origin defaults are already tracked.
+The provider's specific code was not in the logging allowlist and was reported as `unclassified`; the exact credit/spend/usage-limit cause was not established. This is no longer a missing-secret failure. Check billing balance and enforced usage/spend limits for the organization/project owning `OPENAI_API_KEY`. Restore API access or replace that GitHub production secret with a key belonging to a funded project.
 
-No production Worker was published, no real OpenAI inference occurred, and no real Discord message was sent by this task.
+Official guidance: [OpenAI 429 troubleshooting](https://help.openai.com/en/articles/5955604-troubleshooting-api-rate-limits-and-429-errors). Retrying quota/billing errors does not restore access.
+
+After fixing API access, re-run failed jobs in the linked deployment run, or run Actions → Deploy approved environment → production. The workflow retains its required real-inference gate, then performs app-only migrations, deployment with cron disabled, runtime secret installation, deployed smoke checks and final cron activation.
+
+No BYGA production Worker exists at the latest Cloudflare check. No successful real inference or real Discord delivery occurred. Worker write/deploy permissions and deployed acceptance are still unverified because execution stopped before those steps. Discord webhook environment variables were empty in this run.
 
 ## Still requiring live acceptance
 
-- Passing exact application-reader freshness checks; boundary snapshots can fail under the existing five-second tolerance.
 - Exchange tick-size verification; the application's existing default precision is not exchange evidence.
 - Production deploy and postdeploy frontend/assets/D1/Durable Object/authentication/cookie/origin/logout checks.
-- Real OpenAI structured inference, full case pipeline, configured fallback, simulation and operational recovery observations.
-- Real Discord webhook configuration and explicitly authorized delivery acceptance. Optional webhook secrets are documented; configuration alone does not prove delivery.
+- Successful OpenAI structured inference, full case pipeline, configured fallback, simulation and operational recovery observations.
+- Real Discord webhook configuration and explicitly authorized delivery acceptance. Configuration alone does not prove delivery.
 - Physical device/FPS and premium asset acceptance where required by the PRD.
 
 Do not label production or all MVP integration acceptance complete until the relevant live results exist.

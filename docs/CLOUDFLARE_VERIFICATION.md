@@ -2,6 +2,12 @@
 
 Account ID: `07086b4d368d0a37ebcbbf186e51eecf`.
 
+## Hasil deployment terbaru
+
+Ketiga secret wajib GitHub produksi sudah tersedia. Token Cloudflare yang dipakai workflow berhasil menjalankan reader aplikasi nyata melalui API D1 pada 06:34 dan 06:41 UTC: 260 candle tertutup per H1/M15/M5 lolos OHLC, gap, dan freshness. Seluruh query chart SELECT-only. Ini membuktikan akses baca D1, belum membuktikan izin deploy Worker.
+
+CI terbaru 37183388465 lolos 109 tes unit/integrasi dan 30 tes browser. Deployment 37183388460 berhenti pada inferensi OpenAI HTTP 429 dengan tipe `insufficient_quota`; model discovery berhasil. Worker BYGA tetap belum ada dan pemeriksaan endpoint produksi belum dijalankan. Pulihkan billing/kuota proyek pemilik API key lalu rerun deployment. Lihat [laporan penerimaan produksi](PRODUCTION_ACCEPTANCE.md).
+
 ## Pembaruan setup produksi
 
 Akses akun `07086b4d368d0a37ebcbbf186e51eecf`, Workers subdomain `harveymoeid`, dan kedua D1 kembali berhasil diperiksa. Worker BYGA belum ada pada pemeriksaan ini.
