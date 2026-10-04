@@ -147,7 +147,12 @@ function AppLayout() {
               ["/simulation", "▷", "Simulation"],
               ["/admin", "⚙", "Admin"],
             ].map(([path, icon, title]) => (
-              <NavLink key={path} to={path} end={path === "/"}>
+              <NavLink
+                key={path}
+                to={path}
+                end={path === "/"}
+                onClick={() => setMenuOpen(false)}
+              >
                 <span aria-hidden="true">{icon}</span>
                 {title}
               </NavLink>

@@ -193,6 +193,14 @@ test("operations, scanner navigation, admin login and mobile layout remain usabl
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page
     .getByRole("navigation")
+    .getByRole("link", { name: "Home", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Menu", exact: true }),
+  ).toHaveAttribute("aria-expanded", "false");
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await page
+    .getByRole("navigation")
     .getByRole("link", { name: "Operations", exact: true })
     .click();
   await expect(
