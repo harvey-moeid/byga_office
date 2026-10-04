@@ -10,6 +10,8 @@ import {
 } from "react-router-dom";
 import {
   characterIds,
+  type AvatarPreset,
+  type CharacterId,
   formatPrice,
   formatWib,
   scannerNames,
@@ -17,7 +19,7 @@ import {
   type Signal,
 } from "../core/contracts";
 import "./style.css";
-import { useData, useOnline } from "./data";
+import { useData, useOfficeState, useOnline } from "./data";
 import {
   Badge,
   Empty,
@@ -167,8 +169,11 @@ function App() {
   );
 }
 function Dashboard() {
-  const state = useData<OfficeState>("/office/state", true),
-    market = useData<Market>("/market/status", true);
+  const state = useOfficeState<OfficeState>(),
+    market = useData<Market>("/market/status", true),
+    characters = useData<{ id: CharacterId; avatar: AvatarPreset }[]>(
+      "/characters",
+    );
   const [view, setView] = useState("3D");
   const [selected, setSelected] = useState<string>();
   const [prayer, setPrayer] = useState(false);
@@ -295,6 +300,11 @@ function Dashboard() {
                 prayer={prayer}
                 onSelect={setSelected}
                 prices={market.data?.timeframes.M5.map((c) => c.close) ?? []}
+                avatars={Object.fromEntries(
+                  (Array.isArray(characters.data) ? characters.data : []).map(
+                    (character) => [character.id, character.avatar],
+                  ),
+                )}
               />
             </Suspense>
           </SceneBoundary>

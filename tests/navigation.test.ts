@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { characterIds } from "../src/core/contracts";
 import {
   destination,
+  planMovement,
   planRoute,
   segmentClear,
   walkable,
@@ -37,6 +38,15 @@ describe("office navigation", () => {
   it("blocked destinations fail safely without a teleport route", () => {
     expect(planRoute([0, 0], [5, 1])).toEqual([]);
     expect(planRoute([0, 0], [20, 20])).toEqual([]);
+    expect(planMovement([0, 0], [5, 1])).toEqual({ mode: "stay" });
+    expect(planMovement([0, 0], [20, 20])).toEqual({ mode: "stay" });
+  });
+  it("uses a safe teleport only when routing to a walkable destination fails", () => {
+    const impassableDivider = [{ x: 0, z: 0, w: 20, d: 0.1 }];
+    expect(planMovement([0, -1], [0, 1], impassableDivider)).toEqual({
+      mode: "teleport",
+      destination: [0, 1],
+    });
   });
   it("decorative behavior yields to the trading workflow", () => {
     expect(destination(0, "AI_ANALYSIS", false, true)).toEqual(

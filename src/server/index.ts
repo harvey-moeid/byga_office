@@ -29,6 +29,54 @@ async function office(
     }),
   );
 }
+function officeEvents(request: Request, env: Env) {
+  const encoder = new TextEncoder();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let stopped = false;
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const stop = () => {
+        if (stopped) return;
+        stopped = true;
+        clearTimeout(timer);
+        try {
+          controller.close();
+        } catch {
+          // The client can cancel while an office-state request is in flight.
+        }
+      };
+      request.signal.addEventListener("abort", stop, { once: true });
+      const emit = async () => {
+        if (stopped) return;
+        try {
+          const state = await office(env, "/state");
+          if (!state.ok) throw new Error("Office state unavailable");
+          controller.enqueue(
+            encoder.encode(`event: office\ndata: ${await state.text()}\n\n`),
+          );
+        } catch {
+          controller.enqueue(
+            encoder.encode("event: unavailable\ndata: {}\n\n"),
+          );
+        }
+        timer = setTimeout(emit, 5000);
+      };
+      await emit();
+    },
+    cancel() {
+      stopped = true;
+      clearTimeout(timer);
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    },
+  });
+}
 export function publicSignal(signal: Signal) {
   const {
     basis: _basis,
@@ -263,12 +311,24 @@ async function route(request: Request, env: Env): Promise<Response> {
           : "NOT_CONFIGURED",
     });
   }
+  if (path === "/api/v1/office/events") return officeEvents(request, env);
   if (path === "/api/v1/office/state") return office(env, "/state");
   if (path === "/api/v1/scanners") {
     const state = (await (await office(env, "/state")).json()) as {
       scanners: unknown[];
     };
     return json(state.scanners);
+  }
+  if (path === "/api/v1/characters") {
+    const characters = (await (
+      await office(env, "/characters")
+    ).json()) as { id: string; avatar: string }[];
+    return json(
+      characters.map((character) => ({
+        id: character.id,
+        avatar: character.avatar,
+      })),
+    );
   }
   if (path.startsWith("/api/v1/scanners/")) {
     const id = path.split("/").at(-1);

@@ -747,7 +747,7 @@ Account dan kedua database telah diperiksa melalui GET/SELECT konektor Cloudflar
 # Milestone 26 — Realtime Office State
 
 - [x] Buat office state endpoint
-- [ ] Implement SSE jika stabil
+- [x] Implement SSE dengan polling fallback dan reconnect
 - [x] Implement polling fallback
 - [~] State MONITORING
 - [~] State WATCHING
@@ -806,7 +806,7 @@ Account dan kedua database telah diperiksa melalui GET/SELECT konektor Cloudflar
 - [~] Model/preset Quant Analyst
 - [~] Model/preset Risk Manager
 - [~] Model/preset Boss
-- [ ] Character customization config
+- [x] Character customization config (preset warna tersimpan, divalidasi, dan digunakan scene 3D)
 - [~] Idle animation
 - [~] Typing animation
 - [~] Monitor animation
@@ -827,7 +827,7 @@ Account dan kedua database telah diperiksa melalui GET/SELECT konektor Cloudflar
 - [~] Boss Office routes
 - [x] Prevent obvious collision terhadap meja/dinding (antar-karakter masih terbuka)
 - [~] Character walk instead of teleport
-- [ ] Implement safe teleport fallback only jika path gagal
+- [x] Implement safe teleport fallback only jika path gagal
 
 ---
 

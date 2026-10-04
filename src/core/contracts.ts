@@ -179,6 +179,14 @@ export const characterIds = [
   "boss",
 ] as const;
 export type CharacterId = (typeof characterIds)[number];
+export const avatarPresets = [
+  "professional",
+  "emerald",
+  "navy",
+  "gold",
+  "plum",
+] as const;
+export type AvatarPreset = (typeof avatarPresets)[number];
 export const characterSchema = z.object({
   id: z.enum(characterIds),
   primary_provider: z.enum(providers),
@@ -191,7 +199,7 @@ export const characterSchema = z.object({
   fallback_timeout: z.number().min(1000).max(120000),
   custom_instructions: z.string().max(8000),
   personality: z.string().max(2000),
-  avatar: z.string().max(100),
+  avatar: z.enum(avatarPresets),
   prompt_version: z.string().min(1),
 });
 export type CharacterConfig = z.infer<typeof characterSchema>;
