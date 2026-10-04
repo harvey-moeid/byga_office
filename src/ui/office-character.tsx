@@ -232,7 +232,10 @@ export function OfficeCharacter({
   }, [index, speechVisible, onSpeechReady]);
   useFrame(({ clock }, dt) => {
     if (!root.current || !body.current) return;
+    // Keep pose damping conservative, but let locomotion follow wall-clock time.
+    // Otherwise low-FPS/software WebGL makes characters move in slow motion.
     const delta = Math.min(dt, 0.06);
+    const movementDelta = Math.min(dt, reduced ? 0.25 : 0.5);
     const point = path.current[0];
     let walking = false;
     if (point) {
@@ -243,7 +246,7 @@ export function OfficeCharacter({
         direction.current.copy(point).sub(position.current).normalize();
         position.current.addScaledVector(
           direction.current,
-          Math.min(distance, delta * (reduced ? 4 : 1.25)),
+          Math.min(distance, movementDelta * (reduced ? 4 : 1.25)),
         );
         const target = Math.atan2(direction.current.x, direction.current.z);
         const difference = Math.atan2(
