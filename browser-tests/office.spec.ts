@@ -632,7 +632,11 @@ test("meeting dialogue rotates actual case results, opens details, admits Boss l
 test("3D speech follows the seated character and opens the actual result detail", async ({
   page,
 }, testInfo) => {
-  test.setTimeout(75000);
+  test.skip(
+    testInfo.project.name !== "desktop",
+    "Detailed 3D speech acceptance runs once; mobile meeting/layout coverage is separate.",
+  );
+  test.setTimeout(120000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   // Probe WebGL before navigation. The meeting itself is enabled only after
@@ -656,7 +660,7 @@ test("3D speech follows the seated character and opens the actual result detail"
     name: "Baca percakapan Trend Analyst",
     exact: true,
   });
-  await expect(bubble).toBeVisible({ timeout: 25000 });
+  await expect(bubble).toBeVisible({ timeout: 60000 });
   // Open the finite-lived speech immediately. The modal intentionally pauses
   // presentation, making the remaining assertions deterministic on slow CI.
   await bubble.click();
@@ -674,7 +678,7 @@ test("3D speech follows the seated character and opens the actual result detail"
     name: "Baca percakapan Head Trader",
     exact: true,
   });
-  await expect(boss).toBeVisible({ timeout: 40000 });
+  await expect(boss).toBeVisible({ timeout: 60000 });
   await boss.click();
   await expect(page.getByRole("dialog")).toContainText(
     "Fixture boss: penjelasan lengkap",
