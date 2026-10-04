@@ -1,12 +1,24 @@
 import { useFrame } from "@react-three/fiber";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Html } from "@react-three/drei";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { Group, Vector2, Vector3, MathUtils, Shape } from "three";
-import { characterIds, type AvatarPreset } from "../core/contracts";
+import {
+  characterIds,
+  type AvatarPreset,
+  type CharacterId,
+} from "../core/contracts";
 import {
   desks,
   destination as actorDestination,
   planMovement,
-  isMeeting,
+  isAttendingMeeting,
   seatedFacing,
 } from "./navigation";
 
@@ -153,6 +165,9 @@ export function OfficeCharacter({
   decorative,
   avatar,
   onSelect,
+  speech,
+  labelHost,
+  onSpeechReady,
 }: {
   index: number;
   state: string;
@@ -160,6 +175,9 @@ export function OfficeCharacter({
   decorative: boolean;
   avatar: AvatarPreset;
   onSelect: (id: string) => void;
+  speech?: ReactNode;
+  labelHost?: RefObject<HTMLDivElement>;
+  onSpeechReady?: (id: CharacterId, visible: boolean) => void;
 }) {
   const appearance = appearances[avatar];
   const root = useRef<Group>(null);
@@ -172,6 +190,8 @@ export function OfficeCharacter({
   const position = useRef(
     new Vector3(desks[index][0], 0, desks[index][1] + 0.72),
   );
+  const [arrived, setArrived] = useState(false);
+  const arrivedRef = useRef(false);
   const destination = useMemo(() => {
     const [x, z] = actorDestination(index, state, coffee);
     return new Vector3(x, 0, z);
@@ -188,6 +208,8 @@ export function OfficeCharacter({
     return () => media.removeEventListener("change", update);
   }, []);
   useEffect(() => {
+    arrivedRef.current = false;
+    setArrived(false);
     const current = position.current;
     const movement = planMovement(
       [current.x, current.z],
@@ -202,10 +224,18 @@ export function OfficeCharacter({
         ...([movement.destination[0], 0, movement.destination[1]] as Triple),
       );
   }, [destination]);
-  const meeting = isMeeting(state);
+  const meeting = isAttendingMeeting(index, state);
+  const speechVisible = !!speech && arrived && meeting;
+  useEffect(() => {
+    onSpeechReady?.(characterIds[index], speechVisible);
+    return () => onSpeechReady?.(characterIds[index], false);
+  }, [index, speechVisible, onSpeechReady]);
   useFrame(({ clock }, dt) => {
     if (!root.current || !body.current) return;
+    // Keep pose damping conservative, but let locomotion follow wall-clock time.
+    // Otherwise low-FPS/software WebGL makes characters move in slow motion.
     const delta = Math.min(dt, 0.06);
+    const movementDelta = Math.min(dt, reduced ? 0.25 : 0.5);
     const point = path.current[0];
     let walking = false;
     if (point) {
@@ -216,7 +246,7 @@ export function OfficeCharacter({
         direction.current.copy(point).sub(position.current).normalize();
         position.current.addScaledVector(
           direction.current,
-          Math.min(distance, delta * (reduced ? 4 : 1.25)),
+          Math.min(distance, movementDelta * (reduced ? 4 : 1.25)),
         );
         const target = Math.atan2(direction.current.x, direction.current.z);
         const difference = Math.atan2(
@@ -227,6 +257,10 @@ export function OfficeCharacter({
       }
     }
     const sitting = !walking && !path.current.length && !coffee;
+    if (arrivedRef.current !== sitting) {
+      arrivedRef.current = sitting;
+      setArrived(sitting);
+    }
     if (!walking) {
       const target = seatedFacing(index, state);
       const difference = Math.atan2(
@@ -276,7 +310,11 @@ export function OfficeCharacter({
           drinking
             ? -1.1
             : sitting
-              ? (meeting ? -0.5 : -0.96) + typing
+              ? (meeting ? -0.5 : -0.96) +
+                typing +
+                (speech && !reduced && side === 1
+                  ? Math.sin(clock.elapsedTime * 3) * 0.12
+                  : 0)
               : -swing * 0.6,
           10,
           delta,
@@ -294,7 +332,12 @@ export function OfficeCharacter({
         decorative && !reduced && !walking
           ? Math.sin(clock.elapsedTime * 0.5 + index * 3) * 0.08
           : 0;
-      head.current.rotation.x = sitting && !meeting ? 0.08 : 0;
+      head.current.rotation.x =
+        sitting && !meeting
+          ? 0.08
+          : speech && !reduced && sitting
+            ? Math.sin(clock.elapsedTime * 2) * 0.03
+            : 0;
     }
   });
   const longHair = index === 1 || index === 4;
@@ -308,6 +351,16 @@ export function OfficeCharacter({
         onSelect(characterIds[index]);
       }}
     >
+      {labelHost && (
+        <Html
+          portal={labelHost}
+          position={[0, 1.82, 0]}
+          center
+          zIndexRange={[4, 3]}
+        >
+          {speechVisible ? speech : null}
+        </Html>
+      )}
       <group
         ref={body}
         scale={[index === 6 ? 1.05 : 1, index === 1 ? 0.98 : 1, 1]}

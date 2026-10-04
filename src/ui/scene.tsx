@@ -25,6 +25,8 @@ import {
 import { OfficeEnvironment } from "./office-environment";
 import { OfficeCharacter } from "./office-character";
 import type { ComponentRef, RefObject } from "react";
+import type { MeetingTurn } from "../core/meeting";
+import { SpeechBubble } from "./meeting-view";
 
 // Generate reflection lighting locally; no external HDR download is needed.
 function softwareRendering(gl: WebGLRenderer) {
@@ -211,14 +213,41 @@ export default function OfficeScene({
   onSelect,
   prices,
   avatars = {},
+  meetingId,
+  speech,
+  onSpeechDetails,
+  onSpeechReady,
 }: {
   state: string;
   onSelect: (id: string) => void;
   prices: number[];
   avatars?: Partial<Record<CharacterId, AvatarPreset>>;
+  meetingId?: string;
+  speech?: MeetingTurn;
+  onSpeechDetails?: (turn: MeetingTurn) => void;
+  onSpeechReady?: (id: CharacterId, visible: boolean) => void;
 }) {
   const [view, setView] = useState<View>("overview");
   const [reset, setReset] = useState(0);
+  const beforeMeetingView = useRef<View>("overview");
+  const meetingWasActive = useRef(false);
+  useEffect(() => {
+    if (meetingId) {
+      if (!meetingWasActive.current) {
+        meetingWasActive.current = true;
+        setView((current) => {
+          beforeMeetingView.current = current;
+          return "meeting";
+        });
+      }
+      return;
+    }
+    if (meetingWasActive.current) {
+      meetingWasActive.current = false;
+      setView(beforeMeetingView.current);
+      setReset((value) => value + 1);
+    }
+  }, [meetingId]);
   const labelHost = useRef<HTMLDivElement>(null!);
   const [quality, setQuality] = useState<Quality>(() =>
     initialQuality(
@@ -348,6 +377,13 @@ export default function OfficeScene({
             }
             decorative={profile.decorative}
             onSelect={onSelect}
+            labelHost={labelHost}
+            onSpeechReady={onSpeechReady}
+            speech={
+              speech?.character === id && onSpeechDetails ? (
+                <SpeechBubble turn={speech} onDetails={onSpeechDetails} />
+              ) : undefined
+            }
           />
         ))}
         <PerformanceMonitor quality={quality} onQuality={setQuality} />

@@ -11,6 +11,7 @@ import type { Env } from "./env";
 import { isProviderConfigured } from "./providers";
 import { chartSchema, readMarket } from "./market";
 import type { CaseRow } from "./office";
+import { meetingTurns } from "../core/meeting";
 export { Office } from "./office";
 async function office(
   env: Env,
@@ -293,6 +294,40 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (path === "/api/v1/office/events") return officeEvents(request, env);
   if (path === "/api/v1/office/state") return office(env, "/state");
+  if (path === "/api/v1/office/meeting") {
+    const activeStatuses =
+      "'REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED'";
+    let current = await env.DB.prepare(
+      `SELECT uuid,id,status FROM cases WHERE mode='LIVE' AND status IN (${activeStatuses}) ORDER BY created_at LIMIT 1`,
+    ).first<{ uuid: string; id: string; status: string }>();
+    // Keep a just-finished meeting available long enough for the visual dialogue
+    // to finish, even when the actual AI pipeline completes between UI polls.
+    current ??= await env.DB.prepare(
+      "SELECT uuid,id,status FROM cases WHERE mode='LIVE' AND status IN ('COMPLETED','NO_CONSENSUS','FAILED','CONFIG_CHANGED') AND updated_at>=? ORDER BY created_at DESC LIMIT 1",
+    )
+      .bind(Date.now() - 180000)
+      .first<{ uuid: string; id: string; status: string }>();
+    if (!current) return json({ meeting: null });
+    const outputs = await env.DB.prepare(
+      "SELECT snapshot FROM ai_character_outputs WHERE case_uuid=?",
+    )
+      .bind(current.uuid)
+      .all<{ snapshot: string }>();
+    return json({
+      meeting: {
+        case_id: current.id,
+        status: current.status,
+        finished: [
+          "COMPLETED",
+          "NO_CONSENSUS",
+          "FAILED",
+          "CONFIG_CHANGED",
+        ].includes(current.status),
+        cancelled: ["FAILED", "CONFIG_CHANGED"].includes(current.status),
+        ...meetingTurns(outputs.results.map((row) => row.snapshot)),
+      },
+    });
+  }
   if (path === "/api/v1/scanners") {
     const state = (await (await office(env, "/state")).json()) as {
       scanners: unknown[];

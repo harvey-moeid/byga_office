@@ -1,4 +1,5 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import type { MeetingSnapshot } from "../src/core/meeting";
 import {
   defaultConfig,
   defaultCharacters,
@@ -378,7 +379,7 @@ test("offline banner reconnects and refreshes office state automatically", async
   await expect(page.getByText("Trend Analyst", { exact: true })).toBeVisible();
   await expect.poll(() => hits).toBeGreaterThan(0);
   await context.setOffline(true);
-  await expect(page.getByRole("status")).toContainText("Offline");
+  await expect(page.locator(".connection-banner")).toContainText("Offline");
   const before = hits;
   office = "WATCHING";
   await context.setOffline(false);
@@ -537,5 +538,145 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   });
   expect(lost).toBe(true);
   await expect(page.getByText("Head Trader", { exact: true })).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+async function fixtureMeeting(page: Page, enabled: () => boolean = () => true) {
+  const snapshot: MeetingSnapshot = {
+    case_id: "CASE-meeting-fixture",
+    status: "COMPLETED",
+    finished: true,
+    cancelled: false,
+    turns: (["trend", "risk", "boss"] as const).map((character) => ({
+      character,
+      analysis: {
+        vote: "BUY",
+        confidence: 74,
+        summary: `Fixture ${character}: ringkasan hasil AI tersimpan. Kalimat kedua. Kalimat ketiga hanya di detail.`,
+        reasoning: `Fixture ${character}: penjelasan lengkap dari case ini.`,
+        evidence: [],
+        risk_flags: [],
+        price_levels: null,
+      },
+    })),
+    unavailable: [],
+  };
+  await page.route("**/api/v1/office/meeting", (route) =>
+    route.fulfill({ json: { meeting: enabled() ? snapshot : null } }),
+  );
+  return snapshot;
+}
+test("meeting dialogue rotates actual case results, opens details, admits Boss last and closes on mobile", async ({
+  page,
+}, testInfo) => {
+  await page.addInitScript(() => {
+    HTMLCanvasElement.prototype.getContext = (() =>
+      null) as typeof HTMLCanvasElement.prototype.getContext;
+  });
+  await page.clock.install();
+  await fixtureMeeting(page);
+  await page.goto("/");
+  await expect(
+    page.getByText("Tim menuju ruang meeting", { exact: true }),
+  ).toBeVisible();
+  await page.clock.fastForward(15000);
+  const trend = page.getByRole("button", {
+    name: "Baca percakapan Trend Analyst",
+    exact: true,
+  });
+  await expect(trend).toBeVisible();
+  await expect(page.locator(".meeting-bubble")).toHaveCount(1);
+  await expect(trend).not.toContainText("Kalimat ketiga");
+  await trend.click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Kalimat ketiga hanya di detail.");
+  await expect(dialog).toContainText("Fixture trend: penjelasan lengkap");
+  await page.clock.fastForward(30000);
+  await expect(dialog).toContainText("Trend Analyst");
+  const bounds = await dialog.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(
+    page.viewportSize()!.width,
+  );
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: "Baca percakapan Risk Manager",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.clock.fastForward(7500);
+  await expect(
+    page.getByText("Bos masuk untuk menutup meeting", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".meeting-bubble")).toHaveCount(0);
+  await page.clock.fastForward(8500);
+  const boss = page.getByRole("button", {
+    name: "Baca percakapan Head Trader",
+    exact: true,
+  });
+  await expect(boss).toContainText("Keputusan akhir");
+  await expect(page.locator(".meeting-bubble")).toHaveCount(1);
+  await page.screenshot({
+    path: testInfo.outputPath("meeting-boss-fallback.png"),
+  });
+  await page.clock.fastForward(7500);
+  await expect(
+    page.getByText("Meeting ditutup · kembali ke meja", { exact: true }),
+  ).toBeVisible();
+  await expect(page.locator(".meeting-bubble")).toHaveCount(0);
+  await page.clock.fastForward(8500);
+  await expect(page.locator(".meeting-status")).toHaveCount(0);
+});
+test("3D speech follows the seated character and opens the actual result detail", async ({
+  page,
+}, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "desktop",
+    "Detailed 3D speech acceptance runs once; mobile meeting/layout coverage is separate.",
+  );
+  test.setTimeout(120000);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  // Probe WebGL before navigation. The meeting itself is enabled only after
+  // the 3D renderer is ready, so production walking/timing stays realistic.
+  const supported = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl2");
+    gl?.getExtension("WEBGL_lose_context")?.loseContext();
+    return !!gl;
+  });
+  test.skip(
+    !supported,
+    "WebGL unavailable; meeting fallback is tested separately",
+  );
+  let meetingEnabled = false;
+  await fixtureMeeting(page, () => meetingEnabled);
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: /Reset View/ })).toBeVisible();
+  meetingEnabled = true;
+  const bubble = page.locator(".meeting-bubble").filter({ hasText: "Trend Analyst" });
+  await expect(bubble).toBeVisible({ timeout: 60000 });
+  // Open the finite-lived speech immediately. The modal intentionally pauses
+  // presentation, making the remaining assertions deterministic on slow CI.
+  await bubble.click();
+  await expect(page.getByRole("dialog")).toContainText(
+    "Fixture trend: penjelasan lengkap",
+  );
+  await expect(page.locator(".meeting-bubble")).toHaveCount(1);
+  await expect(
+    page.getByRole("button", { name: "Ruang meeting", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page
+    .getByRole("button", { name: "Tutup percakapan", exact: true })
+    .click();
+  const boss = page.locator(".meeting-bubble").filter({ hasText: "Head Trader" });
+  await expect(boss).toBeVisible({ timeout: 60000 });
+  await boss.click();
+  await expect(page.getByRole("dialog")).toContainText(
+    "Fixture boss: penjelasan lengkap",
+  );
+  await page.screenshot({ path: testInfo.outputPath("meeting-boss-3d.png") });
   expect(errors).toEqual([]);
 });

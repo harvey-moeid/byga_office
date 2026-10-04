@@ -2,6 +2,8 @@ import { describe, it, expect } from "vitest";
 import { characterIds } from "../src/core/contracts";
 import {
   destination,
+  isAttendingMeeting,
+  desks,
   meetingSeats,
   seatedFacing,
   planMovement,
@@ -41,6 +43,14 @@ describe("office navigation", () => {
       "DISCORD",
     ]) {
       characterIds.forEach((_, index) => {
+        if (index === 7 && !isAttendingMeeting(index, state)) {
+          expect(destination(index, state)).toEqual([
+            desks[index][0],
+            desks[index][1] + 0.72,
+          ]);
+          expect(seatedFacing(index, state)).toBe(Math.PI);
+          return;
+        }
         const [x, z] = destination(index, state);
         const yaw = seatedFacing(index, state);
         expect(
@@ -50,6 +60,24 @@ describe("office navigation", () => {
         expect(meetingSeats[index].facing).toBe(yaw);
         expect(seatedFacing(index, "MONITORING")).toBe(Math.PI);
       });
+    }
+  });
+  it("Boss enters at the final stage and returns through a walkable route", () => {
+    const desk = destination(7, "AI_ANALYSIS");
+    const seat = destination(7, "BOSS_DECISION");
+    expect(seat).toEqual(meetingSeats[7].position);
+    for (const [start, end] of [
+      [desk, seat],
+      [seat, destination(7, "RETURN_TO_DESK")],
+    ]) {
+      const route = planRoute(start, end);
+      expect(route.length).toBeGreaterThan(0);
+      let last = start;
+      for (const point of route) {
+        expect(segmentClear(last, point)).toBe(true);
+        last = point;
+      }
+      expect(last).toEqual(end);
     }
   });
   it("blocked destinations fail safely without a teleport route", () => {
