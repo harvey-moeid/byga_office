@@ -157,6 +157,10 @@ Workflow deployment saat ini **tidak menyalin key provider tambahan tersebut** d
 
 ## 7. Status operasional
 
+Cloudflare Workers AI tersedia sebagai provider `workers-ai` melalui binding `AI` di `wrangler.jsonc`. Tidak memerlukan API key AI tambahan di Worker. Pilih **Cloudflare Workers AI** pada primary atau fallback di Admin → AI Characters, lalu gunakan model Text Generation yang mendukung JSON Mode; model awal yang disarankan di UI adalah `@cf/meta/llama-3.3-70b-instruct-fp8-fast`. Discovery primary/fallback memuat katalog model dari binding. Test connection menjalankan probe JSON sintetis yang dibatasi, tanpa membuat sinyal. Request analisis memakai retry, circuit breaker, budget, dan audit yang sama dengan provider lain.
+
+Binding AI menggunakan akun Cloudflare tujuan dan kuota Workers AI akun tersebut. Untuk pengembangan lokal, Workers AI memerlukan akses Cloudflare untuk inference; unit/integration tests menggunakan fixture dan tidak melakukan inference nyata. Deployment mempertahankan binding AI dari konfigurasi dasar dan smoke test memverifikasi binding dengan probe nyata melalui sesi Admin sementara. Pilihan karakter yang sudah tersimpan tidak diubah otomatis.
+
 Pada 4 Oktober 2026, inference nyata OpenRouter dan Gemini serta smoke test Worker produksi sudah lulus. Cron `* * * * *` untuk `byga-office` berhasil dipasang pada 14:31:02 WIB (07:31:02 UTC) dan dikonfirmasi lewat pembacaan ulang API Cloudflare. Batas cron yang sebelumnya menghambat sudah tidak menolak konfigurasi ini; tidak ada cron Worker lain yang dihapus atau paket akun yang diubah oleh tindakan ini. Cron tidak memerlukan env tambahan.
 
 Konfigurasi jadwal sudah terkonfirmasi. Pada pemeriksaan 14:34 WIB, tick telah mencapai pemeriksaan data dan office melaporkan `Stale M5 data`; candle M5 tertutup terakhir pada snapshot chart baru sampai penutupan 14:25 WIB. Scan sukses berulang masih membutuhkan data upstream yang segar. Perubahan cron dapat membutuhkan waktu propagasi [hingga 15 menit menurut Cloudflare](https://developers.cloudflare.com/workers/configuration/cron-triggers/).

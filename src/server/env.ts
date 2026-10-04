@@ -1,4 +1,5 @@
 export interface Env {
+  AI?: Ai;
   DB: D1Database;
   CHART_DB: D1Database;
   OFFICE: DurableObjectNamespace;

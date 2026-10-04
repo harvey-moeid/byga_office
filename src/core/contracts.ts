@@ -160,6 +160,7 @@ export const scannerOutputSchema = z.object({
   config_version: z.string().min(1),
 });
 export const providers = [
+  "workers-ai",
   "openai",
   "gemini",
   "groq",
@@ -170,6 +171,10 @@ export const providers = [
   "nvidia",
 ] as const;
 export type Provider = (typeof providers)[number];
+export const workersAIModel = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+export function providerLabel(provider: string) {
+  return provider === "workers-ai" ? "Cloudflare Workers AI" : provider;
+}
 export const characterIds = [
   "trend",
   "structure",

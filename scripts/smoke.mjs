@@ -59,6 +59,14 @@ if (process.env.ADMIN_PASSWORD) {
     });
     assert.equal(config.status, 200);
     const activeConfig = await config.json();
+    const aiProbe = await fetch(origin + "/api/v1/admin/test-provider", {
+      method: "POST",
+      headers: { Cookie: cookie, Origin: origin, "Content-Type": "application/json" },
+      body: JSON.stringify({ id: "workers-ai" }),
+      signal: AbortSignal.timeout(30000),
+    });
+    assert.equal(aiProbe.status, 200, "Deployed Workers AI binding/model probe failed");
+    assert.equal((await aiProbe.json()).inference, "PASS");
     assert.equal(
       activeConfig.config.scannerConsensusMin, state.scanner_consensus_min,
       "Admin config and Operations must agree on the Scanner Consensus minimum",

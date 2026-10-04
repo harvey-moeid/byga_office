@@ -60,7 +60,7 @@ Admin → Trading Config → **Minimal Scanner Consensus** sets the minimum numb
 - `src/core`: OHLC validation, EMA/RSI/ADX/MACD/ATR/Bollinger/structure, six scanners, trigger, risk, voting, confidence, context compression.
 - `src/server/market.ts`: SELECT-only market repository, validated SQL identifiers, configurable timestamp units/timeframe names, gap and freshness checks. Indicators read sufficient warm-up history; raw AI context defaults to 50/100/100.
 - `src/server/office.ts`: durable live and independent simulation queues; immutable config/prompt snapshots; parallel Analysts; Risk Manager then Boss; persistent per-character outputs; revalidation/cooldown; atomic signal publication with cancellation protection.
-- `src/server/providers.ts`: eight provider wire adapters, model discovery, timeout/retry/jitter, fallback, semantic warnings, persistent circuit state and half-open probe lease.
+- `src/server/providers.ts`: nine provider adapters including Cloudflare Workers AI, model discovery, timeout/retry/jitter, fallback, semantic warnings, persistent circuit state and half-open probe lease.
 - `src/server/auth.ts`: PBKDF2-SHA256 hash verification, hashed random sessions, Secure/HttpOnly/SameSite cookies, expiry, persistent login throttling and same-origin mutations.
 - `src/ui`: operational dashboard, scanners, signal filters, case audit, Admin/config/prompt rollback, emergency/simulation, lazily loaded primitive office and 2D fallback.
 - `migrations`: application/audit tables and global WIB-day sequences. Never applied to `chart_db`.
@@ -76,4 +76,3 @@ The office is a furnished architectural cutaway with oak/walnut materials, glass
 ## Deployment
 
 See [required environment variables](docs/ENVIRONMENT.md) and [deployment and permission requirements](docs/DEPLOYMENT.md). `npm run deploy` requires a generated real staging/production configuration and rejects the local placeholder config. No production resource is created automatically during local setup.
-

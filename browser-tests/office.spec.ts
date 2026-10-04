@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { defaultConfig } from "../src/core/contracts";
+import {
+  defaultConfig,
+  defaultCharacters,
+  workersAIModel,
+} from "../src/core/contracts";
 test("Admin and Simulation modules load only when their routes are opened", async ({
   page,
 }) => {
@@ -193,6 +197,66 @@ test("Admin saves scanner minimum and Operations shows the stored threshold", as
   await expect(
     page.getByText("Minimal 4 · majority unik", { exact: true }),
   ).toBeVisible();
+});
+test("Admin selects Workers AI for primary and fallback and persists model IDs", async ({
+  page,
+}) => {
+  let characters = defaultCharacters();
+  await page.route("**/api/v1/auth/session", (r) =>
+    r.fulfill({ json: { admin: true } }),
+  );
+  await page.route("**/api/v1/admin/characters", (route) => {
+    if (route.request().method() === "POST") {
+      const updated = route.request().postDataJSON();
+      expect(updated).toMatchObject({
+        primary_provider: "workers-ai",
+        fallback_provider: "workers-ai",
+        primary_model: workersAIModel,
+        fallback_model: workersAIModel,
+      });
+      characters = characters.map((c) => (c.id === updated.id ? updated : c));
+      return route.fulfill({ json: { ok: true } });
+    }
+    return route.fulfill({ json: characters });
+  });
+  await page.route("**/api/v1/admin/models", (route) => {
+    expect(route.request().postDataJSON().id).toBe("workers-ai");
+    return route.fulfill({ json: { models: [workersAIModel] } });
+  });
+  await page.goto("/admin");
+  await page
+    .getByRole("button", { name: "AI Characters", exact: true })
+    .click();
+  for (const role of ["primary", "fallback"]) {
+    await page
+      .getByLabel(`${role}_provider`, { exact: true })
+      .selectOption({ label: "Cloudflare Workers AI" });
+    await expect(page.getByLabel(`${role}_model`, { exact: true })).toHaveValue(
+      workersAIModel,
+    );
+    await page
+      .getByRole("button", { name: `Discover ${role} models`, exact: true })
+      .click();
+    await expect(page.locator(`#${role}_model-options option`)).toHaveCount(1);
+  }
+  await page
+    .getByRole("button", { name: "Save character & prompt", exact: true })
+    .click();
+  await expect(
+    page.getByText("Karakter tersimpan dengan prompt version baru.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.reload();
+  await page
+    .getByRole("button", { name: "AI Characters", exact: true })
+    .click();
+  await expect(
+    page.getByLabel("primary_provider", { exact: true }),
+  ).toHaveValue("workers-ai");
+  await expect(
+    page.getByLabel("fallback_provider", { exact: true }),
+  ).toHaveValue("workers-ai");
 });
 // UI contract fixtures are explicitly local tests; production data still comes from D1.
 test.beforeEach(async ({ page }) => {

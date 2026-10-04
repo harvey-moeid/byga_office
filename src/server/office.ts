@@ -4,6 +4,7 @@ import {
   characterSchema,
   configSchema,
   defaultCharacters,
+  workersAIModel,
   defaultConfig,
   providers,
   wibDate,
@@ -35,6 +36,8 @@ import {
   circuitState,
   defaultPolicy,
   discoverModels,
+  parseOutput,
+  requestAI,
   redact,
   runCharacter,
   type AIRuntime,
@@ -345,12 +348,38 @@ export class Office extends DurableObject<Env> {
             ? cache.models
             : await discoverModels(this.env, id);
         await this.ctx.storage.put(`models:${id}`, { at: Date.now(), models });
+        let inference: "PASS" | undefined;
+        if (path === "/test-provider" && id === "workers-ai") {
+          const response = await requestAI(
+            this.env,
+            id,
+            workersAIModel,
+            "Synthetic connection test only. Return JSON: vote BUY, confidence 0, summary Connectivity verified, reasoning Synthetic probe only, evidence [], risk_flags [CONNECTIVITY_TEST], price_levels null. Do not analyze markets or create a trading signal.",
+            {
+              ...defaultCharacters()[0],
+              temperature: 0,
+              max_output_tokens: 512,
+            },
+            10000,
+          );
+          const output = parseOutput(response.text);
+          if (
+            output.vote !== "BUY" ||
+            !output.risk_flags.includes("CONNECTIVITY_TEST")
+          )
+            throw new Error("WORKERS_AI_PROBE_INVALID");
+          inference = "PASS";
+        }
         if (path === "/test-provider")
           await this.ctx.storage.put(`circuit:${id}`, {
             failures: 0,
             openedAt: 0,
           });
-        return json({ models, ok: true });
+        return json({
+          models,
+          ok: true,
+          ...(inference ? { inference, model: workersAIModel } : {}),
+        });
       } catch (error) {
         return json(
           {

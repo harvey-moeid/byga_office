@@ -8,6 +8,7 @@ import { reviewDelivery } from "./discord";
 import { consumeApiLimit, limitHeaders, limitedResponse } from "./rate-limit";
 import { isAdmin, json, login, logout, sameOrigin } from "./auth";
 import type { Env } from "./env";
+import { isProviderConfigured } from "./providers";
 import { chartSchema, readMarket } from "./market";
 import type { CaseRow } from "./office";
 export { Office } from "./office";
@@ -254,21 +255,7 @@ async function route(request: Request, env: Env): Promise<Response> {
         discordSignal: !!env.DISCORD_SIGNAL_WEBHOOK,
         configured: providers.map((id) => ({
           id,
-          configured:
-            !!env[
-              (
-                {
-                  openai: "OPENAI_API_KEY",
-                  gemini: "GEMINI_API_KEY",
-                  groq: "GROQ_API_KEY",
-                  openrouter: "OPENROUTER_API_KEY",
-                  mistral: "MISTRAL_API_KEY",
-                  huggingface: "HF_TOKEN",
-                  cohere: "COHERE_API_KEY",
-                  nvidia: "NVIDIA_API_KEY",
-                } as const
-              )[id]
-            ],
+          configured: isProviderConfigured(env, id),
         })),
       });
     return json({ error: "Not found" }, 404);
@@ -287,16 +274,9 @@ async function route(request: Request, env: Env): Promise<Response> {
       state: string;
       failures: number;
     }[];
-    const configured = [
-      env.OPENAI_API_KEY,
-      env.GEMINI_API_KEY,
-      env.GROQ_API_KEY,
-      env.OPENROUTER_API_KEY,
-      env.MISTRAL_API_KEY,
-      env.HF_TOKEN,
-      env.COHERE_API_KEY,
-      env.NVIDIA_API_KEY,
-    ].filter(Boolean).length;
+    const configured = providers.filter((id) =>
+      isProviderConfigured(env, id),
+    ).length;
     return json({
       chart_db: chart,
       api: "OK",
@@ -320,9 +300,10 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json(state.scanners);
   }
   if (path === "/api/v1/characters") {
-    const characters = (await (
-      await office(env, "/characters")
-    ).json()) as { id: string; avatar: string }[];
+    const characters = (await (await office(env, "/characters")).json()) as {
+      id: string;
+      avatar: string;
+    }[];
     return json(
       characters.map((character) => ({
         id: character.id,
