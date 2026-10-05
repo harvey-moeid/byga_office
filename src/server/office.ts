@@ -38,7 +38,7 @@ import {
 } from "../core/engine";
 import { json } from "./auth";
 import type { Env } from "./env";
-import { chartSchema, readMarket } from "./market";
+import { chartSchema, readDerivatives, readMarket } from "./market";
 import {
   circuitResult,
   circuitState,
@@ -112,17 +112,17 @@ export class Office extends DurableObject<Env> {
         await env.DB.prepare(
           "INSERT OR IGNORE INTO system_state VALUES ('active_config','TRADING-CONFIG-v1')",
         ).run();
-        for (const c of defaultCharacters()) {
-          await env.DB.batch([
-            env.DB.prepare(
-              "INSERT OR IGNORE INTO character_configs VALUES (?,?)",
-            ).bind(c.id, JSON.stringify(c)),
-            env.DB.prepare(
-              "INSERT OR IGNORE INTO prompt_versions VALUES (?,?,?,?)",
-            ).bind(c.prompt_version, c.id, JSON.stringify(c), Date.now()),
-          ]);
-        }
         await ctx.storage.put("initialized", true);
+      }
+      for (const c of defaultCharacters()) {
+        await env.DB.batch([
+          env.DB.prepare(
+            "INSERT OR IGNORE INTO character_configs VALUES (?,?)",
+          ).bind(c.id, JSON.stringify(c)),
+          env.DB.prepare(
+            "INSERT OR IGNORE INTO prompt_versions VALUES (?,?,?,?)",
+          ).bind(c.prompt_version, c.id, JSON.stringify(c), Date.now()),
+        ]);
       }
     });
   }
@@ -147,6 +147,21 @@ export class Office extends DurableObject<Env> {
     return rows.results.map((r) =>
       characterSchema.parse(JSON.parse(r.snapshot)),
     );
+  }
+  private async marketData(config: TradingConfig, at = Date.now()) {
+    const delay = config.processingDelaySeconds * 1000;
+    const count = Math.max(
+      260,
+      ...config.scanner.ema,
+      config.context.H1,
+      config.context.M15,
+      config.context.M5,
+    );
+    const [market, derivatives] = await Promise.all([
+      readMarket(this.env, at, count, delay),
+      readDerivatives(this.env, at, 24, delay),
+    ]);
+    return { market, derivatives };
   }
   private async id(prefix: "CASE" | "SIG") {
     const day = wibDate();
@@ -243,20 +258,16 @@ export class Office extends DurableObject<Env> {
         ).first<CaseRow>();
         if (old) {
           await this.status(old, "CONFIG_CHANGED");
-          const market = await readMarket(
-            this.env,
-            Date.now(),
-            Math.max(
-              260,
-              ...body.config.scanner.ema,
-              body.config.context.H1,
-              body.config.context.M15,
-              body.config.context.M5,
-            ),
-            body.config.processingDelaySeconds * 1000,
-          );
+          const { market, derivatives } = await this.marketData(body.config);
           const scanners = scan(market, body.config, id);
-          const groups = analyzeGroups(market, scanners, body.config, id);
+          const groups = analyzeGroups(
+            market,
+            scanners,
+            body.config,
+            id,
+            Date.now(),
+            derivatives,
+          );
           await this.createCase(
             market,
             scanners,
@@ -409,20 +420,16 @@ export class Office extends DurableObject<Env> {
     if (path === "/emergency") {
       const body = emergencySchema.parse(await request.json()),
         { id, config } = await this.config();
-      const market = await readMarket(
-        this.env,
-        Date.now(),
-        Math.max(
-          260,
-          ...config.scanner.ema,
-          config.context.H1,
-          config.context.M15,
-          config.context.M5,
-        ),
-        config.processingDelaySeconds * 1000,
-      );
+      const { market, derivatives } = await this.marketData(config);
       const scanners = scan(market, config, id);
-      const groups = analyzeGroups(market, scanners, config, id);
+      const groups = analyzeGroups(
+        market,
+        scanners,
+        config,
+        id,
+        Date.now(),
+        derivatives,
+      );
       const item = await this.createCase(
         market,
         scanners,
@@ -450,18 +457,7 @@ export class Office extends DurableObject<Env> {
       );
       if (body.configMode === "HISTORICAL" && !body.configVersion)
         return json({ error: "Historical config version required" }, 400);
-      const market = await readMarket(
-        this.env,
-        body.timestamp,
-        Math.max(
-          260,
-          ...config.scanner.ema,
-          config.context.H1,
-          config.context.M15,
-          config.context.M5,
-        ),
-        config.processingDelaySeconds * 1000,
-      );
+      const { market, derivatives } = await this.marketData(config, body.timestamp);
       const scanners = scan(market, config, id, body.timestamp);
       const groups = analyzeGroups(
         market,
@@ -469,6 +465,7 @@ export class Office extends DurableObject<Env> {
         config,
         id,
         body.timestamp,
+        derivatives,
       );
       let historical: CharacterConfig[] | undefined;
       if (body.replayMode === "STRICT") {
@@ -543,24 +540,20 @@ export class Office extends DurableObject<Env> {
     await retryDeliveries(this.env);
     const { id, config } = await this.config();
     try {
-      const market = await readMarket(
-        this.env,
-        Date.now(),
-        Math.max(
-          260,
-          ...config.scanner.ema,
-          config.context.H1,
-          config.context.M15,
-          config.context.M5,
-        ),
-        config.processingDelaySeconds * 1000,
-      );
+      const { market, derivatives } = await this.marketData(config);
       await this.ctx.storage.delete("market_error");
       const candle = market.M5.at(-1)!.timestamp;
       if (candle === (await this.ctx.storage.get("last_processed_candle")))
         return;
       const scanners = scan(market, config, id);
-      const groups = analyzeGroups(market, scanners, config, id);
+      const groups = analyzeGroups(
+        market,
+        scanners,
+        config,
+        id,
+        Date.now(),
+        derivatives,
+      );
       await this.ctx.storage.put("scanners", scanners);
       await this.ctx.storage.put("groups", groups);
       const run = crypto.randomUUID();
@@ -826,24 +819,15 @@ export class Office extends DurableObject<Env> {
         row.source === "AUTO"
       ) {
         await this.status(row, "REVALIDATING");
-        const latest = await readMarket(
-          this.env,
-          Date.now(),
-          Math.max(
-            260,
-            ...snapshot.config.scanner.ema,
-            snapshot.config.context.H1,
-            snapshot.config.context.M15,
-            snapshot.config.context.M5,
-          ),
-          snapshot.config.processingDelaySeconds * 1000,
-        );
+        const { market: latest, derivatives } = await this.marketData(snapshot.config);
         const rescanned = scan(latest, snapshot.config, row.config_version);
         const regrouped = analyzeGroups(
           latest,
           rescanned,
           snapshot.config,
           row.config_version,
+          Date.now(),
+          derivatives,
         );
         const fresh = groupTrigger(
           regrouped,
@@ -1076,7 +1060,7 @@ export class Office extends DurableObject<Env> {
   private async pipeline(row: CaseRow, s: CaseContext) {
     const context = buildContext(s.market, s.scanners, s.config);
     const groups =
-      s.groups?.length === 3
+      s.groups?.length
         ? s.groups
         : analyzeGroups(s.market, s.scanners, s.config, row.config_version);
     const settled = await Promise.allSettled(

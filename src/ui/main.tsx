@@ -12,6 +12,7 @@ import {
 } from "react-router-dom";
 import {
   MARKET,
+  analysisGroups,
   characterIds,
   defaultConfig,
   type AvatarPreset,
@@ -259,7 +260,7 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
         <Heading
           eyebrow="LIVE OPERATIONS"
           title="Trading Office"
-          description="Enam sistem deterministik. Delapan perspektif AI."
+          description="Enam scanner deterministik. Sepuluh perspektif AI."
           action={
             <div className="actions">
               <Link className="button primary" to="/admin">
@@ -317,7 +318,7 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
               {state.data?.group_consensus_min ??
                 state.data?.scanner_consensus_min ??
                 defaultConfig.scannerConsensusMin}{" "}
-              · 3 group
+              · {analysisGroups.length} group
             </small>
           </div>
         </div>
@@ -925,7 +926,7 @@ function Characters() {
       <Heading
         eyebrow="ONE ANALYST = ONE VOTE"
         title="AI Team"
-        description="Enam Analyst independen, Risk Manager, dan Head Trader."
+        description="Delapan Analyst independen, Risk Manager, dan Head Trader."
       />
       <div className="character-grid">
         {characterIds.map((id) => (
@@ -966,7 +967,7 @@ function CharacterDetail() {
             ? "Final review dan tie-breaker; tidak boleh membalik majority AI."
             : id === "risk"
               ? "Evaluasi proposal risk deterministik; midpoint entry tidak diubah subjektif."
-              : "Analisis independen terhadap context H1 / M15 / M5 dan enam scanner."}
+              : "Analisis independen terhadap snapshot grup deterministik dan konteks pasar yang ditugaskan."}
         </p>
         {state.data?.active ? (
           <Link to={`/cases/${state.data.active.id}`}>

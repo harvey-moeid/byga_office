@@ -7,6 +7,8 @@ export const roles: Record<string, string> = {
   liquidity: "Liquidity Analyst",
   volume: "Volume Analyst",
   quant: "Quant Analyst",
+  derivatives: "Derivatives Analyst",
+  positioning: "Market Positioning Analyst",
   risk: "Risk Manager",
   boss: "Head Trader",
 };

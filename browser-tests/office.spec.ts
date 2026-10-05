@@ -177,6 +177,7 @@ test("Admin saves group minimum and Operations shows the stored threshold", asyn
           { group: "SMC_ICT", direction: "BUY" },
           { group: "INDICATORS", direction: "BUY" },
           { group: "VOLUME", direction: "NONE" },
+          { group: "DERIVATIVES_POSITIONING", direction: "NONE" },
         ],
       },
     }),
@@ -190,7 +191,7 @@ test("Admin saves group minimum and Operations shows the stored threshold", asyn
     name: "Minimal Group Consensus",
   });
   await expect(minimum).toHaveValue("2");
-  await expect(minimum.locator("option")).toHaveCount(3);
+  await expect(minimum.locator("option")).toHaveCount(4);
   await minimum.selectOption("3");
   await page
     .getByRole("button", { name: "Save new version", exact: true })
@@ -202,7 +203,7 @@ test("Admin saves group minimum and Operations shows the stored threshold", asyn
   await expect(minimum).toHaveValue("3");
   await page.goto("/operations");
   await expect(
-    page.getByText("Minimal 3 · 3 group", { exact: true }),
+    page.getByText("Minimal 3 · 4 group", { exact: true }),
   ).toBeVisible();
 });
 test("Admin selects Workers AI for primary and fallback and persists model IDs", async ({

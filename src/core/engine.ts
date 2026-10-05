@@ -17,6 +17,7 @@ import {
   type AnalystResult,
   type AnalysisGroup,
   type CharacterId,
+  type DerivativesContext,
   type Direction,
   type GroupSnapshot,
   type MarketContext,
@@ -171,12 +172,118 @@ function groupStrength(scanners: ScannerOutput[], direction: Direction) {
     ? Math.round(matching.reduce((sum, s) => sum + s.strength, 0) / matching.length)
     : 0;
 }
+function derivativeChange(points: DerivativesContext["open_interest"]) {
+  const sample = points.slice(-13);
+  const first = sample[0]?.value;
+  const last = sample.at(-1)?.value;
+  return first && last !== undefined ? ((last - first) / first) * 100 : null;
+}
+function analyzeDerivatives(
+  context: MarketContext,
+  derivatives?: DerivativesContext,
+): Pick<GroupSnapshot, "direction" | "strength" | "reasons" | "payload"> {
+  const candleTimestamp = context.M5.at(-1)!.timestamp;
+  const fresh = <T extends { timestamp: number }>(rows: T[], maxAge: number) =>
+    rows.filter(
+      (row) => row.timestamp <= candleTimestamp && candleTimestamp - row.timestamp <= maxAge,
+    );
+  const openInterest = fresh(derivatives?.open_interest ?? [], 20 * 60_000);
+  const positioning = fresh(derivatives?.long_short_ratio ?? [], 20 * 60_000);
+  const liquidations = fresh(derivatives?.liquidation ?? [], 35 * 60_000);
+  const funding = fresh(derivatives?.funding_rate ?? [], 12 * 60 * 60_000);
+  const priceBase = context.M5.at(-7)?.close ?? context.M5[0].close;
+  const price = context.M5.at(-1)!.close;
+  const priceChangePct = ((price - priceBase) / priceBase) * 100;
+  const oiChangePct = derivativeChange(openInterest);
+  const fundingRate = funding.at(-1)?.value ?? null;
+  const longShortRatio = positioning.at(-1)?.value ?? null;
+  const longLiquidation = liquidations.reduce(
+    (sum, row) => sum + Math.max(0, row.value2 ?? 0),
+    0,
+  );
+  const shortLiquidation = liquidations.reduce(
+    (sum, row) => sum + Math.max(0, row.value3 ?? 0),
+    0,
+  );
+  let score = 0;
+  let components = 0;
+  const reasons: string[] = [];
+  if (
+    oiChangePct !== null &&
+    Math.abs(oiChangePct) >= 0.15 &&
+    Math.abs(priceChangePct) >= 0.05
+  ) {
+    const weight = oiChangePct > 0 ? (Math.abs(oiChangePct) >= 1 ? 1.5 : 1) : 0.5;
+    score += priceChangePct > 0 ? weight : -weight;
+    components++;
+    reasons.push(
+      `Open interest ${oiChangePct >= 0 ? "+" : ""}${oiChangePct.toFixed(2)}% with price ${priceChangePct >= 0 ? "+" : ""}${priceChangePct.toFixed(2)}%`,
+    );
+  }
+  if (fundingRate !== null && Math.abs(fundingRate) >= 0.0001) {
+    score += fundingRate > 0 ? -1 : 1;
+    components++;
+    reasons.push(
+      `Funding ${(fundingRate * 100).toFixed(4)}% indicates ${fundingRate > 0 ? "long" : "short"} crowding`,
+    );
+  }
+  if (longShortRatio !== null && (longShortRatio >= 1.1 || longShortRatio <= 0.9)) {
+    score += longShortRatio >= 1.1 ? -1 : 1;
+    components++;
+    reasons.push(
+      `Long/short ratio ${longShortRatio.toFixed(3)} shows ${longShortRatio >= 1.1 ? "long" : "short"} crowding`,
+    );
+  }
+  const liquidationTotal = longLiquidation + shortLiquidation;
+  if (liquidationTotal > 0) {
+    const dominant = Math.max(longLiquidation, shortLiquidation);
+    const other = Math.min(longLiquidation, shortLiquidation);
+    if (dominant >= Math.max(1, other * 1.25)) {
+      score += shortLiquidation > longLiquidation ? 1 : -1;
+      components++;
+      reasons.push(
+        `${shortLiquidation > longLiquidation ? "Short" : "Long"} liquidations dominate recent M5 buckets`,
+      );
+    }
+  }
+  const direction: Direction =
+    components < 2 ? "NONE" : score >= 2 ? "BUY" : score <= -2 ? "SELL" : "NONE";
+  if (!reasons.length)
+    reasons.push("Derivatives: insufficient fresh positioning data for a directional edge");
+  else if (direction === "NONE")
+    reasons.push("Derivatives: signals are mixed or below the deterministic threshold");
+  return {
+    direction,
+    strength:
+      direction === "NONE"
+        ? 0
+        : Math.min(100, Math.round(45 + Math.abs(score) * 15 + components * 2)),
+    reasons,
+    payload: {
+      score,
+      components,
+      price_change_pct: priceChangePct,
+      open_interest_change_pct: oiChangePct,
+      funding_rate: fundingRate,
+      long_short_ratio: longShortRatio,
+      long_liquidation_usd: longLiquidation,
+      short_liquidation_usd: shortLiquidation,
+      sources: [...new Set([
+        ...openInterest,
+        ...funding,
+        ...positioning,
+        ...liquidations,
+      ].map((row) => row.source))],
+    },
+  };
+}
 export function analyzeGroups(
   context: MarketContext,
   scanners: ScannerOutput[],
   config: TradingConfig,
   version: string,
   now = Date.now(),
+  derivatives?: DerivativesContext,
 ): GroupSnapshot[] {
   const byName = Object.fromEntries(scanners.map((s) => [s.name, s])) as Record<
     ScannerOutput["name"],
@@ -207,6 +314,7 @@ export function analyzeGroups(
           fast.roc < 0
         ? "SELL"
         : "NONE";
+  const derivative = analyzeDerivatives(context, derivatives);
   const common = {
     timestamp: now,
     candle_timestamp: context.M5.at(-1)!.timestamp,
@@ -268,6 +376,11 @@ export function analyzeGroups(
       },
       ...common,
     },
+    {
+      group: "DERIVATIVES_POSITIONING",
+      ...derivative,
+      ...common,
+    },
   ];
 }
 export function groupComposition(groups: GroupSnapshot[]) {
@@ -308,6 +421,8 @@ export function analystGroup(id: CharacterId): AnalysisGroup | null {
   if (id === "structure" || id === "liquidity") return "SMC_ICT";
   if (id === "trend" || id === "momentum") return "INDICATORS";
   if (id === "volume" || id === "quant") return "VOLUME";
+  if (id === "derivatives" || id === "positioning")
+    return "DERIVATIVES_POSITIONING";
   return null;
 }
 export function buildGroupContext(
@@ -355,9 +470,10 @@ export function voting(
 ) {
   const counts = { BUY: 0, SELL: 0, NO_TRADE: 0, UNAVAILABLE: 0 };
   for (const r of results) counts[r.output?.vote ?? "UNAVAILABLE"]++;
-  counts.UNAVAILABLE += Math.max(0, 6 - results.length);
+  const expected = Math.max(1, results.length);
   const success = counts.BUY + counts.SELL + counts.NO_TRADE;
-  const degraded = success < 3;
+  const minimumSuccess = Math.ceil(expected / 2);
+  const degraded = success < minimumSuccess;
   let direction: TradeDirection | null = null;
   const flags: string[] = [];
   if (degraded) {
@@ -365,7 +481,7 @@ export function voting(
     flags.push("AI_DEGRADED", "SCANNER_FALLBACK");
   } else if (counts.BUY > counts.SELL) direction = "BUY";
   else if (counts.SELL > counts.BUY) direction = "SELL";
-  else if (counts.NO_TRADE === 6) {
+  else if (counts.NO_TRADE === expected) {
     direction = scanner;
     flags.push("SCANNER_FALLBACK");
   } else if (boss !== "NO_TRADE") direction = boss;
@@ -378,7 +494,10 @@ export function voting(
     counts,
     flags,
     degraded,
-    tie: success >= 3 && counts.BUY === counts.SELL && counts.NO_TRADE !== 6,
+    tie:
+      success >= minimumSuccess &&
+      counts.BUY === counts.SELL &&
+      counts.NO_TRADE !== expected,
   };
 }
 export function confidence(
@@ -388,12 +507,14 @@ export function confidence(
   mtf: Direction[],
   config: TradingConfig,
 ) {
-  if (groups.length !== 3 || analysts.length !== 6 || mtf.length !== 3)
-    throw new Error("Confidence requires 3 groups, 6 analysts, 3 timeframes");
+  if (!groups.length || !analysts.length || mtf.length !== 3)
+    throw new Error("Confidence requires groups, analysts and 3 timeframes");
   const sc =
-      (groups.filter((s) => s.direction === direction).length / 3) * 100,
+      (groups.filter((s) => s.direction === direction).length / groups.length) * 100,
     ai =
-      (analysts.filter((a) => a.output?.vote === direction).length / 6) * 100;
+      (analysts.filter((a) => a.output?.vote === direction).length /
+        analysts.length) *
+      100;
   const alignment = mtf.reduce(
     (sum, d, i) =>
       sum +

@@ -28,7 +28,7 @@ import {
 } from "../src/ui/office-activity";
 describe("office navigation", () => {
   for (const state of ["AI_ANALYSIS", "MONITORING", "COFFEE"])
-    it(`all eight characters reach ${state} without crossing furniture/walls`, () => {
+    it(`all ten characters reach ${state} without crossing furniture/walls`, () => {
       characterIds.forEach((_, i) => {
         const start = destination(
           i,
@@ -56,7 +56,7 @@ describe("office navigation", () => {
       "DISCORD",
     ]) {
       characterIds.forEach((_, index) => {
-        if (index === 7 && !isAttendingMeeting(index, state)) {
+        if (index === characterIds.indexOf("boss") && !isAttendingMeeting(index, state)) {
           expect(destination(index, state)).toEqual([
             desks[index][0],
             desks[index][1] + 0.72,
@@ -76,12 +76,13 @@ describe("office navigation", () => {
     }
   });
   it("Boss enters at the final stage and returns through a walkable route", () => {
-    const desk = destination(7, "AI_ANALYSIS");
-    const seat = destination(7, "BOSS_DECISION");
-    expect(seat).toEqual(meetingSeats[7].position);
+    const bossIndex = characterIds.indexOf("boss");
+    const desk = destination(bossIndex, "AI_ANALYSIS");
+    const seat = destination(bossIndex, "BOSS_DECISION");
+    expect(seat).toEqual(meetingSeats[bossIndex].position);
     for (const [start, end] of [
       [desk, seat],
-      [seat, destination(7, "RETURN_TO_DESK")],
+      [seat, destination(bossIndex, "RETURN_TO_DESK")],
     ]) {
       const route = planRoute(start, end);
       expect(route.length).toBeGreaterThan(0);
