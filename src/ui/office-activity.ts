@@ -30,6 +30,7 @@ export interface OfficeActivityEvent {
 export const FIRST_ACTIVITY_DELAY = { min: 30_000, max: 60_000 } as const;
 export const NEXT_ACTIVITY_DELAY = { min: 240_000, max: 360_000 } as const;
 export const ACTIVITY_TRAVEL_BUFFER_MS = 15_000;
+export const ACTIVITY_TRAVEL_TIMEOUT_MS = 90_000;
 
 type RandomSource = () => number;
 type Range = readonly [number, number];
