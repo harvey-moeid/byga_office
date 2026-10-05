@@ -195,7 +195,7 @@ export function OfficeCharacter({
   );
   const [arrived, setArrived] = useState(false);
   const arrivedRef = useRef(false);
-  const activityArrivedRef = useRef<OfficeActivity>();
+  const activityArrivedRef = useRef<OfficeActivity | undefined>(undefined);
   const meeting = isAttendingMeeting(index, state);
   const activeActivity = meeting ? undefined : activity;
   const coffee =
