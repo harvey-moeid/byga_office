@@ -65,3 +65,20 @@ BEGIN
   UPDATE candle_stats SET total_candles = total_candles + 1 WHERE id = 1;
 END;
 
+
+
+CREATE TABLE derivative_metrics (
+  symbol TEXT NOT NULL,
+  metric TEXT NOT NULL CHECK (metric IN ('open_interest', 'funding_rate', 'liquidation', 'long_short_ratio')),
+  timeframe TEXT NOT NULL DEFAULT '',
+  ts INTEGER NOT NULL,
+  value REAL NOT NULL,
+  value2 REAL,
+  value3 REAL,
+  source TEXT NOT NULL,
+  created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+  PRIMARY KEY (symbol, metric, timeframe, ts)
+);
+
+CREATE INDEX idx_derivative_metrics_query
+  ON derivative_metrics (symbol, metric, timeframe, ts DESC);
