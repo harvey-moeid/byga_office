@@ -159,9 +159,10 @@ function ConfigEditor() {
                 ))}
               </select>
               <small id="scanner-consensus-help" className="muted">
-                Konsensus deterministik SMC/ICT, Indikator, dan Volume. Minimal
-                2 dari 3 group harus searah untuk memicu analisis otomatis.
-                Scanner tetap aktif sebagai telemetry. Default: 2 dari 3.
+                Konsensus deterministik SMC/ICT, Indikator, Volume, dan
+                Derivatives / Market Positioning. Minimal 2 dari 4 group harus
+                searah untuk memicu analisis otomatis. Scanner tetap aktif
+                sebagai telemetry. Default: 2 dari 4.
               </small>
             </label>
             {(
