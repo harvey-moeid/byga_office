@@ -124,7 +124,7 @@ export class Office extends DurableObject<Env> {
           ).bind(c.prompt_version, c.id, JSON.stringify(c), Date.now()),
         ]);
       }
-        });
+    });
   }
   private async config(version?: string) {
     const id =
