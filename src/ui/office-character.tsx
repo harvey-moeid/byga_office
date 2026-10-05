@@ -169,6 +169,7 @@ export function OfficeCharacter({
   speech,
   labelHost,
   onSpeechReady,
+  onActivityArrive,
 }: {
   index: number;
   state: string;
@@ -179,6 +180,7 @@ export function OfficeCharacter({
   speech?: ReactNode;
   labelHost?: RefObject<HTMLDivElement>;
   onSpeechReady?: (id: CharacterId, visible: boolean) => void;
+  onActivityArrive?: (id: CharacterId, activity: OfficeActivity) => void;
 }) {
   const appearance = appearances[avatar];
   const root = useRef<Group>(null);
@@ -193,6 +195,7 @@ export function OfficeCharacter({
   );
   const [arrived, setArrived] = useState(false);
   const arrivedRef = useRef(false);
+  const activityArrivedRef = useRef<OfficeActivity>();
   const meeting = isAttendingMeeting(index, state);
   const activeActivity = meeting ? undefined : activity;
   const coffee =
@@ -218,6 +221,7 @@ export function OfficeCharacter({
   }, []);
   useEffect(() => {
     arrivedRef.current = false;
+    activityArrivedRef.current = undefined;
     setArrived(false);
     const current = position.current;
     const movement = planMovement(
@@ -265,6 +269,14 @@ export function OfficeCharacter({
       }
     }
     const atActivity = !!activeActivity && !walking && !path.current.length;
+    if (
+      atActivity &&
+      activeActivity &&
+      activityArrivedRef.current !== activeActivity
+    ) {
+      activityArrivedRef.current = activeActivity;
+      onActivityArrive?.(characterIds[index], activeActivity);
+    }
     const sitting = !walking && !path.current.length && !atActivity;
     if (arrivedRef.current !== sitting) {
       arrivedRef.current = sitting;
