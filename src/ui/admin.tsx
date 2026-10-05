@@ -7,7 +7,7 @@ import {
   providers,
   providerLabel,
   workersAIModel,
-  scannerNames,
+  analysisGroups,
   type CharacterConfig,
   type TradingConfig,
 } from "../core/contracts";
@@ -144,7 +144,7 @@ function ConfigEditor() {
         <>
           <div className="form-grid">
             <label>
-              Minimal Scanner Consensus
+              Minimal Group Consensus
               <select
                 value={draft.scannerConsensusMin}
                 onChange={(e) =>
@@ -152,16 +152,16 @@ function ConfigEditor() {
                 }
                 aria-describedby="scanner-consensus-help"
               >
-                {scannerNames.map((_, i) => (
+                {analysisGroups.map((_, i) => (
                   <option key={i + 1} value={i + 1}>
-                    {i + 1} dari {scannerNames.length} scanner
+                    {i + 1} dari {analysisGroups.length} group
                   </option>
                 ))}
               </select>
               <small id="scanner-consensus-help" className="muted">
-                Jumlah minimal scanner BUY atau SELL untuk memicu analisis
-                otomatis. Jumlah searah harus lebih besar dari arah lawan; hasil
-                seri tidak memicu. Default: 2 dari 6.
+                Konsensus deterministik SMC/ICT, Indikator, dan Volume. Minimal
+                2 dari 3 group harus searah untuk memicu analisis otomatis.
+                Scanner tetap aktif sebagai telemetry. Default: 2 dari 3.
               </small>
             </label>
             {(
