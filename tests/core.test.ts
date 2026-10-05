@@ -211,15 +211,15 @@ describe("Scanner telemetry and group trigger contract", () => {
     const scannerOutput = scan(market, defaultConfig, "v1", 42);
     const output = analyzeGroups(market, scannerOutput, defaultConfig, "v1", 42);
     expect(output.map((group) => group.group)).toEqual([...analysisGroups]);
-    expect(["structure", "liquidity"].map(analystGroup)).toEqual([
+    expect((["structure", "liquidity"] as const).map(analystGroup)).toEqual([
       "SMC_ICT",
       "SMC_ICT",
     ]);
-    expect(["trend", "momentum"].map(analystGroup)).toEqual([
+    expect((["trend", "momentum"] as const).map(analystGroup)).toEqual([
       "INDICATORS",
       "INDICATORS",
     ]);
-    expect(["volume", "quant"].map(analystGroup)).toEqual([
+    expect((["volume", "quant"] as const).map(analystGroup)).toEqual([
       "VOLUME",
       "VOLUME",
     ]);
