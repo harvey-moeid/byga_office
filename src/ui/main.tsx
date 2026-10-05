@@ -11,6 +11,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import {
+  MARKET,
   characterIds,
   defaultConfig,
   type AvatarPreset,
@@ -167,7 +168,7 @@ function AppLayout() {
             ))}
           </nav>
           <div className="sidebar-bottom">
-            <span className="dot" /> BTCUSDT ONLY
+            <span className="dot" /> BTCUSDT.P ONLY
             <small>Asia/Jakarta · WIB</small>
           </div>
         </aside>
@@ -723,7 +724,7 @@ function Signals() {
                 <span>{s.signal_id}</span>
                 <strong>{Math.round(s.confidence)}%</strong>
               </div>
-              <h3>BTCUSDT</h3>
+              <h3>{s.market}</h3>
               <p>
                 Entry {formatPrice(s.entry_low, s.tick_size)} –{" "}
                 {formatPrice(s.entry_high, s.tick_size)}
@@ -765,7 +766,7 @@ function SignalView({ signal: s }: { signal: Signal }) {
         <Badge value={s.direction} />
         <strong className="big-number">{Math.round(s.confidence)}%</strong>
       </div>
-      <h2>BTCUSDT · {s.signal_id}</h2>
+      <h2>{s.market} · {s.signal_id}</h2>
       <div className="risk-grid">
         {[
           ["Entry Low", s.entry_low],
