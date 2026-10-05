@@ -24,6 +24,19 @@ export const candleSchema = z
   });
 export type Candle = z.infer<typeof candleSchema>;
 export type MarketContext = Record<Timeframe, Candle[]>;
+export interface DerivativeMetricPoint {
+  timestamp: number;
+  value: number;
+  value2: number | null;
+  value3: number | null;
+  source: string;
+}
+export interface DerivativesContext {
+  open_interest: DerivativeMetricPoint[];
+  funding_rate: DerivativeMetricPoint[];
+  liquidation: DerivativeMetricPoint[];
+  long_short_ratio: DerivativeMetricPoint[];
+}
 const weights = z
   .tuple([
     z.number().min(0).max(100),
@@ -35,7 +48,7 @@ const weights = z
     "Weights must total 100",
   );
 export const configSchema = z.object({
-  scannerConsensusMin: z.number().int().min(1).max(3).default(2),
+  scannerConsensusMin: z.number().int().min(1).max(4).default(2),
   scanner: z.object({
     ema: z.tuple([
       z.number().int().min(2).max(500),
@@ -161,7 +174,12 @@ export const scannerOutputSchema = z.object({
   candle_timestamp: z.number().int().nonnegative(),
   config_version: z.string().min(1),
 });
-export const analysisGroups = ["SMC_ICT", "INDICATORS", "VOLUME"] as const;
+export const analysisGroups = [
+  "SMC_ICT",
+  "INDICATORS",
+  "VOLUME",
+  "DERIVATIVES_POSITIONING",
+] as const;
 export type AnalysisGroup = (typeof analysisGroups)[number];
 export interface GroupSnapshot {
   group: AnalysisGroup;
@@ -196,6 +214,8 @@ export const characterIds = [
   "liquidity",
   "volume",
   "quant",
+  "derivatives",
+  "positioning",
   "risk",
   "boss",
 ] as const;
