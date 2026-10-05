@@ -69,20 +69,30 @@ function runtime() {
   return { r, audit, circuits };
 }
 describe("Provider adapters", () => {
-  it("bounds a stalled Workers AI catalog request", async () => {
+  it("falls back to the pinned Workers AI model when catalog discovery stalls", async () => {
     vi.useFakeTimers();
     try {
       const models = vi.fn(() => new Promise<never>(() => {}));
-      const cloudflare = { ...env, AI: { models } as unknown as Ai };
-      const pending = discoverModels(cloudflare, "workers-ai").catch(
-        (e) => e.message,
-      );
+      const cloudflare = {
+        ...env,
+        AI: { run: vi.fn(), models } as unknown as Ai,
+      };
+      const pending = discoverModels(cloudflare, "workers-ai");
       await vi.advanceTimersByTimeAsync(10001);
-      expect(await pending).toBe("MODEL_DISCOVERY_TIMEOUT");
+      expect(await pending).toEqual([workersAIModel]);
       expect(vi.getTimerCount()).toBe(0);
     } finally {
       vi.useRealTimers();
     }
+  });
+  it("uses the pinned Workers AI model when the runtime exposes no catalog method", async () => {
+    const cloudflare = {
+      ...env,
+      AI: { run: vi.fn() } as unknown as Ai,
+    };
+    expect(await discoverModels(cloudflare, "workers-ai")).toEqual([
+      workersAIModel,
+    ]);
   });
   const binding = (
     run = vi.fn(async () => ({
