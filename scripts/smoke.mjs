@@ -27,7 +27,7 @@ await get("/api/v1/__test/alarm", 404);
 let state;
 for (let attempt = 0; attempt < 10; attempt++) {
   state = await (await get("/api/v1/office/state")).json();
-  if (Array.isArray(state.group_names) && state.group_names.length === 3) break;
+  if (Array.isArray(state.group_names) && state.group_names.length === 4) break;
   if (attempt < 9) await new Promise(resolve => setTimeout(resolve, 3000));
 }
 const meeting = await (await get("/api/v1/office/meeting")).json();
@@ -36,23 +36,23 @@ if (meeting.meeting) {
   assert.equal(typeof meeting.meeting.case_id, "string");
   assert.ok(Array.isArray(meeting.meeting.turns));
   assert.ok(meeting.meeting.turns.every(turn =>
-    ["trend", "structure", "momentum", "liquidity", "volume", "quant", "risk", "boss"].includes(turn.character) &&
+    ["trend", "structure", "momentum", "liquidity", "volume", "quant", "derivatives", "positioning", "risk", "boss"].includes(turn.character) &&
     typeof turn.analysis.summary === "string" && typeof turn.analysis.reasoning === "string"));
 }
 assert.equal(typeof state.office, "string", "Durable Object state missing");
 assert.ok(
   Number.isInteger(state.group_consensus_min) &&
-    state.group_consensus_min >= 1 && state.group_consensus_min <= 3,
+    state.group_consensus_min >= 1 && state.group_consensus_min <= 4,
   "Deployed backend must expose the deterministic group consensus minimum",
 );
 assert.deepEqual(
   state.group_names,
-  ["SMC_ICT", "INDICATORS", "VOLUME"],
-  "Deployed backend must expose all three deterministic analysis groups",
+  ["SMC_ICT", "INDICATORS", "VOLUME", "DERIVATIVES_POSITIONING"],
+  "Deployed backend must expose all four deterministic analysis groups",
 );
 assert.ok(Array.isArray(state.groups), "Latest deterministic group snapshots must be an array");
 const characters = await (await get("/api/v1/characters")).json();
-assert.equal(characters.length, 8);
+assert.equal(characters.length, 10);
 assert.ok(characters.every(c => !("primary_provider" in c) && !("primary_model" in c)));
 const health = await (await get("/api/v1/health")).json();
 assert.equal(health.api, "OK");
