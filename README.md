@@ -2,7 +2,7 @@
 
 React + TypeScript + React Three Fiber frontend, Cloudflare Worker API, D1 audit database, and two persistent Durable Object orchestrators (live and simulation). Built against [PRD v1.0](BYGA_AI_TRADING_OFFICE_PRD.md). Progress is recorded in [the checklist](BYGA_AI_TRADING_OFFICE_CHECKLIST.md).
 
-Production uses a verified Cloudflare account/chart schema and five applied application migrations. CI passes 109 unit/integration tests and 30 desktop/mobile browser tests using isolated fixtures. Real OpenRouter and Gemini inference and the deployed Worker smoke tests pass. The Worker is published and its one-minute cron schedule was accepted and read back from Cloudflare at 07:31 UTC on 4 October 2026. Repeated scheduled execution and full production acceptance still require observation. See [required environment variables](docs/ENVIRONMENT.md), [the acceptance report](docs/PRODUCTION_ACCEPTANCE.md), [deployment setup](docs/DEPLOYMENT.md), and [implementation status](docs/IMPLEMENTATION_STATUS.md).
+Production is designed around the read-only `chart_db` market **BTCUSDT.P**. Repository configuration schedules the Worker every five minutes (`*/5 * * * *`) and the deployment workflow validates real market freshness, provider inference, application smoke checks, and frontend integrity before completing. Historical production observations remain in the acceptance report; the latest deployment result is the source of truth for whether a new revision is live. See [required environment variables](docs/ENVIRONMENT.md), [the acceptance report](docs/PRODUCTION_ACCEPTANCE.md), [deployment setup](docs/DEPLOYMENT.md), and [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
 ## Local development
 
@@ -23,7 +23,7 @@ The default Wrangler IDs are **local-only placeholders**. Local `chart_db` is em
 npm run db:fixture
 ```
 
-This command is explicitly `--local`; it never accesses or migrates the existing remote market database. It writes synthetic BTCUSDT candles to local `candles`, replacing overlapping fixture timestamps. Do not use it on a local database containing data you want to preserve. Refresh fixtures when they become stale. No scheduler fabricates new market data.
+This command is explicitly `--local`; it never accesses or migrates the existing remote market database. It writes synthetic BTCUSDT.P candles to local `candles`, replacing overlapping fixture timestamps. Do not use it on a local database containing data you want to preserve. Refresh fixtures when they become stale. No scheduler fabricates new market data.
 
 For Admin access, copy `.env.example` to the ignored `.dev.vars`. Generate a password hash with `npm run password:hash` (input hidden, minimum 12 characters), and put the resulting hash in `ADMIN_PASSWORD_HASH`. Do not commit the file. There is no default admin password. AI/provider and Discord variables are optional for read-only exploration, required for real calls. Configure provider/model per character in Admin. Never put keys in `VITE_*` variables.
 
@@ -55,15 +55,17 @@ Browser tests cover desktop/mobile layout, the 3D renderer, WebGL fallback, offl
 
 ## Architecture
 
-Admin → Trading Config → **Minimal Scanner Consensus** sets the minimum number of aligned BUY or SELL scanners (1–6, default 2). A trigger still requires more votes than the opposite direction; ties never trigger. The saved value applies to automatic triggers, revalidation, simulations, and scanner fallback. NEXT CASE preserves in-flight case snapshots; legacy configurations use 2. The Operations consensus card displays the active threshold. No environment variable or database migration is required.
+Admin → Trading Config → **Minimal Group Consensus** controls three deterministic groups: **SMC/ICT**, **Indicators**, and **Volume**. Automatic analysis starts only when the configured minimum aligns in one direction (default **2 of 3**). The six deterministic scanners remain available as telemetry/audit inputs but no longer vote directly on the AUTO trigger. Revalidation and simulations use the same group rule. NEXT CASE preserves in-flight snapshots; no database migration is required.
 
-- `src/core`: OHLC validation, EMA/RSI/ADX/MACD/ATR/Bollinger/structure, six scanners, trigger, risk, voting, confidence, context compression.
+- `src/core`: OHLC validation, EMA/RSI/ADX/MACD/ATR/Bollinger/structure, six telemetry scanners, three deterministic analysis groups, 2-of-3 trigger, risk, voting, confidence, context compression.
 - `src/server/market.ts`: SELECT-only market repository, validated SQL identifiers, configurable timestamp units/timeframe names, gap and freshness checks. Indicators read sufficient warm-up history; raw AI context defaults to 50/100/100.
-- `src/server/office.ts`: durable live and independent simulation queues; immutable config/prompt snapshots; parallel Analysts; Risk Manager then Boss; persistent per-character outputs; revalidation/cooldown; atomic signal publication with cancellation protection.
+- `src/server/office.ts`: durable live and independent simulation queues; immutable snapshots; two specialist Analysts per group (SMC/ICT, Indicators, Volume); Risk Manager then Boss; persistent per-character outputs; revalidation/cooldown; atomic BUY/SELL signal publication with cancellation protection.
 - `src/server/providers.ts`: nine provider adapters including Cloudflare Workers AI, model discovery, timeout/retry/jitter, fallback, semantic warnings, persistent circuit state and half-open probe lease.
 - `src/server/auth.ts`: PBKDF2-SHA256 hash verification, hashed random sessions, Secure/HttpOnly/SameSite cookies, expiry, persistent login throttling and same-origin mutations.
 - `src/ui`: operational dashboard, scanners, signal filters, case audit, Admin/config/prompt rollback, emergency/simulation, lazily loaded primitive office and 2D fallback.
 - `migrations`: application/audit tables and global WIB-day sequences. Never applied to `chart_db`.
+
+Analyst specialization is fixed while provider/model choice remains configurable per character: **structure + liquidity → SMC/ICT**, **trend + momentum → Indicators**, and **volume + quant → Volume**. Each pair receives only its assigned deterministic snapshot plus a bounded recent-candle context. Risk Manager and Boss receive the consolidated group/analyst result. Discord output includes group composition for auditability.
 
 Live and simulation use separate Durable Objects; IDs are allocated centrally in D1 to prevent collisions. A live case captures all configs, model choices, market and scanner snapshots; changes use NEXT CASE or confirmed APPLY NOW. Saved character outputs are reused on recovery. Crashes during an in-flight AI request may cause a repeated paid request; persisted responses prevent repeating completed stages. Remote provider calls cannot be made exactly-once.
 
