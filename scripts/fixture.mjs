@@ -13,7 +13,7 @@ for (const [tf, duration] of [
   for (let i = 0; i < 600; i++) {
     const close = 60000 + Math.sin(i / 8) * 800 + i * 2;
     statements.push(
-      `INSERT OR REPLACE INTO candles VALUES ('BTCUSDT','${tf}',${Math.floor((latest - (599 - i) * duration) / 1000)},${close - 30},${close + 100},${close - 100},${close},${100 + (i % 7)});`,
+      `INSERT OR REPLACE INTO candles VALUES ('BTCUSDT.P','${tf}',${Math.floor((latest - (599 - i) * duration) / 1000)},${close - 30},${close + 100},${close - 100},${close},${100 + (i % 7)});`,
     );
   }
 }
