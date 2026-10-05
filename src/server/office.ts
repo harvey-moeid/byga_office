@@ -6,11 +6,13 @@ import {
   defaultCharacters,
   workersAIModel,
   defaultConfig,
+  MARKET,
   providers,
   wibDate,
   type AnalystResult,
   type CharacterConfig,
   type Direction,
+  type GroupSnapshot,
   type MarketContext,
   type ScannerOutput,
   type Signal,
@@ -18,14 +20,19 @@ import {
   type TradingConfig,
 } from "../core/contracts";
 import {
+  analyzeGroups,
+  analystGroup,
   bias,
   buildContext,
+  buildGroupContext,
   composition,
   confidence,
+  fallbackDirection,
+  groupComposition,
+  groupTrigger,
   indicators,
   risk,
   scan,
-  trigger,
   voting,
 } from "../core/engine";
 import { json } from "./auth";
@@ -48,6 +55,7 @@ import { notify, retryDeliveries } from "./discord";
 interface CaseContext {
   market: MarketContext;
   scanners: ScannerOutput[];
+  groups?: GroupSnapshot[];
   config: TradingConfig;
   characters: CharacterConfig[];
   sendDiscord: boolean;
@@ -186,6 +194,8 @@ export class Office extends DurableObject<Env> {
       ).first();
       return json({
         scanner_consensus_min: config.scannerConsensusMin,
+        group_consensus_min: config.scannerConsensusMin,
+        groups: (await this.ctx.storage.get("groups")) ?? [],
         office: (await this.ctx.storage.get("office")) ?? "MONITORING",
         active,
         scanners: (await this.ctx.storage.get("scanners")) ?? [],
@@ -244,9 +254,11 @@ export class Office extends DurableObject<Env> {
             body.config.processingDelaySeconds * 1000,
           );
           const scanners = scan(market, body.config, id);
+          const groups = analyzeGroups(market, scanners, body.config, id);
           await this.createCase(
             market,
             scanners,
+            groups,
             body.config,
             id,
             old.mode,
@@ -408,14 +420,16 @@ export class Office extends DurableObject<Env> {
         config.processingDelaySeconds * 1000,
       );
       const scanners = scan(market, config, id);
+      const groups = analyzeGroups(market, scanners, config, id);
       const item = await this.createCase(
         market,
         scanners,
+        groups,
         config,
         id,
         "LIVE",
         "EMERGENCY",
-        trigger(scanners, config.scannerConsensusMin),
+        groupTrigger(groups, config.scannerConsensusMin),
         `emergency:${body.idempotencyKey}`,
         body.sendDiscord,
         body.focus,
@@ -447,6 +461,13 @@ export class Office extends DurableObject<Env> {
         config.processingDelaySeconds * 1000,
       );
       const scanners = scan(market, config, id, body.timestamp);
+      const groups = analyzeGroups(
+        market,
+        scanners,
+        config,
+        id,
+        body.timestamp,
+      );
       let historical: CharacterConfig[] | undefined;
       if (body.replayMode === "STRICT") {
         if (!body.historicalCaseId)
@@ -486,11 +507,12 @@ export class Office extends DurableObject<Env> {
       const item = await this.createCase(
         market,
         scanners,
+        groups,
         config,
         id,
         "SIMULATION",
         "SIMULATION",
-        trigger(scanners, config.scannerConsensusMin),
+        groupTrigger(groups, config.scannerConsensusMin),
         `simulation:${body.idempotencyKey}`,
         false,
         "NONE",
@@ -536,7 +558,9 @@ export class Office extends DurableObject<Env> {
       if (candle === (await this.ctx.storage.get("last_processed_candle")))
         return;
       const scanners = scan(market, config, id);
+      const groups = analyzeGroups(market, scanners, config, id);
       await this.ctx.storage.put("scanners", scanners);
+      await this.ctx.storage.put("groups", groups);
       const run = crypto.randomUUID();
       await this.env.DB.batch([
         this.env.DB.prepare(
@@ -548,7 +572,7 @@ export class Office extends DurableObject<Env> {
           ).bind(s.name, JSON.stringify(s), candle, id, "LIVE"),
         ),
       ]);
-      const direction = trigger(scanners, config.scannerConsensusMin);
+      const direction = groupTrigger(groups, config.scannerConsensusMin);
       if (direction) {
         const last =
           (await this.ctx.storage.get<number>(`cooldown:${direction}`)) ?? 0;
@@ -556,12 +580,13 @@ export class Office extends DurableObject<Env> {
           const item = await this.createCase(
             market,
             scanners,
+            groups,
             config,
             id,
             "LIVE",
             "AUTO",
             direction,
-            `BTCUSDT:${candle}:LIVE`,
+            `${MARKET}:${candle}:LIVE`,
             true,
             "NONE",
           );
@@ -592,6 +617,7 @@ export class Office extends DurableObject<Env> {
   private async createCase(
     market: MarketContext,
     scanners: ScannerOutput[],
+    groups: GroupSnapshot[],
     config: TradingConfig,
     version: string,
     mode: CaseRow["mode"],
@@ -613,6 +639,7 @@ export class Office extends DurableObject<Env> {
     const context: CaseContext = {
       market,
       scanners,
+      groups,
       config,
       characters: characters ?? (await this.characters()),
       sendDiscord,
@@ -810,7 +837,16 @@ export class Office extends DurableObject<Env> {
           snapshot.config.processingDelaySeconds * 1000,
         );
         const rescanned = scan(latest, snapshot.config, row.config_version);
-        const fresh = trigger(rescanned, snapshot.config.scannerConsensusMin);
+        const regrouped = analyzeGroups(
+          latest,
+          rescanned,
+          snapshot.config,
+          row.config_version,
+        );
+        const fresh = groupTrigger(
+          regrouped,
+          snapshot.config.scannerConsensusMin,
+        );
         if (!fresh) {
           await this.status(row, "STALE");
           return;
@@ -820,6 +856,7 @@ export class Office extends DurableObject<Env> {
           await this.createCase(
             latest,
             rescanned,
+            regrouped,
             snapshot.config,
             row.config_version,
             "LIVE",
@@ -833,6 +870,7 @@ export class Office extends DurableObject<Env> {
         }
         snapshot.market = latest;
         snapshot.scanners = rescanned;
+        snapshot.groups = regrouped;
         row.context = JSON.stringify(snapshot);
         await this.env.DB.prepare(
           "UPDATE cases SET context=?,candle_timestamp=? WHERE uuid=?",
@@ -1035,17 +1073,31 @@ export class Office extends DurableObject<Env> {
   }
   private async pipeline(row: CaseRow, s: CaseContext) {
     const context = buildContext(s.market, s.scanners, s.config);
+    const groups =
+      s.groups?.length === 3
+        ? s.groups
+        : analyzeGroups(s.market, s.scanners, s.config, row.config_version);
     const settled = await Promise.allSettled(
       s.characters
         .filter((c) => c.id !== "risk" && c.id !== "boss")
-        .map((c) =>
-          this.character(
+        .map((c) => {
+          const specialization = analystGroup(c.id);
+          if (!specialization)
+            throw new Error(`No analysis group assigned to ${c.id}`);
+          const group = groups.find((item) => item.group === specialization);
+          if (!group)
+            throw new Error(`Missing ${specialization} deterministic snapshot`);
+          return this.character(
             row,
             c,
-            { ...context.payload, case_id: row.id, focus: s.focus },
+            {
+              ...buildGroupContext(s.market, group, s.config),
+              case_id: row.id,
+              focus: s.focus,
+            },
             s.config,
-          ),
-        ),
+          );
+        }),
     );
     // Do not start recovery while sibling provider requests are still running.
     const rejected = settled.find((r) => r.status === "rejected");
@@ -1054,12 +1106,21 @@ export class Office extends DurableObject<Env> {
       if (r.status !== "fulfilled") throw new Error("Analyst stage incomplete");
       return r.value;
     });
-    const scanner = trigger(s.scanners, s.config.scannerConsensusMin);
+    const consensus = groupTrigger(groups, s.config.scannerConsensusMin);
+    const fallback =
+      consensus ??
+      (s.focus !== "NONE" ? s.focus : fallbackDirection(groups, s.market));
     if (s.strict_replay && analysts.some((a) => a.status !== "SUCCESS"))
       throw new Error(
         "STRICT replay failed: historical Analyst provider/model is unavailable",
       );
-    let vote = voting(analysts, scanner);
+    let vote = voting(analysts, fallback);
+    if (!consensus && vote.direction === fallback)
+      vote.flags.push(
+        s.focus !== "NONE"
+          ? "MANUAL_FOCUS_FALLBACK"
+          : "DETERMINISTIC_DIRECTION_FALLBACK",
+      );
     if (vote.degraded) await this.status(row, "AI_DEGRADED");
     await this.status(row, "RISK_REVIEW");
     const proposals: Partial<Record<TradeDirection, ReturnType<typeof risk>>> =
@@ -1073,7 +1134,13 @@ export class Office extends DurableObject<Env> {
     const riskReview = await this.character(
       row,
       s.characters.find((c) => c.id === "risk")!,
-      { ...context.payload, analysts, voting: vote, risk_proposals: proposals },
+      {
+        ...context.payload,
+        analysis_groups: groups,
+        analysts,
+        voting: vote,
+        risk_proposals: proposals,
+      },
       s.config,
     );
     if (s.strict_replay && riskReview.status !== "SUCCESS")
@@ -1089,6 +1156,7 @@ export class Office extends DurableObject<Env> {
       s.characters.find((c) => c.id === "boss")!,
       {
         ...context.payload,
+        analysis_groups: groups,
         analysts,
         voting: vote,
         risk_proposals: proposals,
@@ -1106,7 +1174,7 @@ export class Office extends DurableObject<Env> {
       .bind(row.uuid, JSON.stringify(boss))
       .run();
     if (vote.tie)
-      vote = voting(analysts, scanner, boss.output?.vote ?? "NO_TRADE");
+      vote = voting(analysts, fallback, boss.output?.vote ?? "NO_TRADE");
     const current = await this.env.DB.prepare(
       "SELECT status FROM cases WHERE uuid=?",
     )
@@ -1138,7 +1206,7 @@ export class Office extends DurableObject<Env> {
       bias(indicators(s.market.M15, s.config)),
       bias(indicators(s.market.M5, s.config)),
     ];
-    const score = confidence(d, s.scanners, analysts, mtf, s.config);
+    const score = confidence(d, groups, analysts, mtf, s.config);
     const flags = [
       ...r.flags,
       ...vote.flags,
@@ -1153,13 +1221,14 @@ export class Office extends DurableObject<Env> {
       signal_id: await this.id("SIG"),
       case_uuid: row.uuid,
       case_id: row.id,
-      market: "BTCUSDT",
+      market: MARKET,
       direction: d,
       confidence: score.total,
       h1_bias: mtf[0],
       m15_setup: mtf[1],
       m5_trigger: mtf[2],
       scanner_composition: composition(s.scanners),
+      group_composition: groupComposition(groups),
       ai_vote_composition: vote.counts,
       flags,
       source: row.source === "EMERGENCY" ? "EMERGENCY" : "AUTO",
@@ -1178,6 +1247,7 @@ export class Office extends DurableObject<Env> {
       riskReview,
       boss,
       vote,
+      groups,
       context_compressed: context.context_compressed,
     };
     if (row.mode === "LIVE") {
