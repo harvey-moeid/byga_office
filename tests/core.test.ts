@@ -186,8 +186,8 @@ describe("Scanner telemetry and group trigger contract", () => {
     const { scannerConsensusMin: _minimum, ...legacy } = defaultConfig;
     expect(configSchema.parse(legacy).scannerConsensusMin).toBe(2);
   });
-  it.each([0, 4, 2.5, "3", null])(
-    "rejects invalid three-group consensus minimum %s",
+  it.each([0, 5, 2.5, "4", null])(
+    "rejects invalid four-group consensus minimum %s",
     (minimum) => {
       expect(
         configSchema.safeParse({
@@ -207,7 +207,7 @@ describe("Scanner telemetry and group trigger contract", () => {
       expect(s.candle_timestamp).toBe(market.M5.at(-1)!.timestamp);
     }
   });
-  it("builds SMC/ICT, indicator and volume groups and assigns two analysts each", () => {
+  it("builds four deterministic groups and assigns two analysts each", () => {
     const scannerOutput = scan(market, defaultConfig, "v1", 42);
     const output = analyzeGroups(market, scannerOutput, defaultConfig, "v1", 42);
     expect(output.map((group) => group.group)).toEqual([...analysisGroups]);
@@ -223,15 +223,20 @@ describe("Scanner telemetry and group trigger contract", () => {
       "VOLUME",
       "VOLUME",
     ]);
+    expect((["derivatives", "positioning"] as const).map(analystGroup)).toEqual([
+      "DERIVATIVES_POSITIONING",
+      "DERIVATIVES_POSITIONING",
+    ]);
     expect(analystGroup("risk")).toBeNull();
     expect(analystGroup("boss")).toBeNull();
   });
   it.each([
-    [["BUY", "BUY", "NONE"], 2, "BUY"],
-    [["SELL", "NONE", "SELL"], 2, "SELL"],
-    [["BUY", "SELL", "NONE"], 2, null],
-    [["BUY", "BUY", "SELL"], 3, null],
-    [["BUY", "BUY", "BUY"], 3, "BUY"],
+    [["BUY", "BUY", "NONE", "NONE"], 2, "BUY"],
+    [["SELL", "NONE", "SELL", "NONE"], 2, "SELL"],
+    [["BUY", "SELL", "NONE", "NONE"], 2, null],
+    [["BUY", "BUY", "SELL", "NONE"], 3, null],
+    [["BUY", "BUY", "BUY", "NONE"], 3, "BUY"],
+    [["BUY", "BUY", "SELL", "SELL"], 2, null],
   ] as const)("uses true group consensus %j minimum %s → %s", (input, minimum, expected) => {
     expect(groupTrigger(groups([...input]), minimum)).toBe(expected);
   });
@@ -254,19 +259,21 @@ describe("Consensus and confidence", () => {
   it("NO_TRADE abstains and one analyst has one vote", () =>
     expect(
       voting(
-        analysts(["BUY", "BUY", "SELL", "NO_TRADE", "NO_TRADE", "NO_TRADE"]),
+        analysts(["BUY", "BUY", "SELL", "NO_TRADE", "NO_TRADE", "NO_TRADE", "NO_TRADE", "NO_TRADE"]),
         "SELL",
         "SELL",
       ).direction,
     ).toBe("BUY"));
   it("uses scanner for all NO_TRADE and <3 successful analysts", () => {
-    expect(voting(analysts(Array(6).fill("NO_TRADE")), "SELL").direction).toBe(
+    expect(voting(analysts(Array(8).fill("NO_TRADE")), "SELL").direction).toBe(
       "SELL",
     );
     const d = voting(
       analysts([
         "BUY",
         "BUY",
+        "UNAVAILABLE",
+        "UNAVAILABLE",
         "UNAVAILABLE",
         "UNAVAILABLE",
         "UNAVAILABLE",
@@ -278,18 +285,27 @@ describe("Consensus and confidence", () => {
     expect(d.flags).toContain("AI_DEGRADED");
   });
   it("boss resolves tie; no scanner and NO_TRADE boss means no consensus", () => {
-    const a = analysts(["BUY", "BUY", "SELL", "SELL", "NO_TRADE", "NO_TRADE"]);
+    const a = analysts(["BUY", "BUY", "BUY", "SELL", "SELL", "SELL", "NO_TRADE", "NO_TRADE"]);
     expect(voting(a, "SELL", "BUY").direction).toBe("BUY");
     expect(voting(a, null).direction).toBeNull();
   });
   it("fixed denominators and exact weighted formula; model confidence ignored", () => {
-    const g = groups(["BUY", "BUY", "SELL"]),
-      a = analysts(["BUY", "BUY", "BUY", "SELL", "UNAVAILABLE", "UNAVAILABLE"]);
+    const g = groups(["BUY", "BUY", "SELL", "NONE"]),
+      a = analysts([
+        "BUY",
+        "BUY",
+        "BUY",
+        "BUY",
+        "SELL",
+        "SELL",
+        "UNAVAILABLE",
+        "UNAVAILABLE",
+      ]);
     const c = confidence("BUY", g, a, ["BUY", "NONE", "SELL"], defaultConfig);
-    expect(c.scanner).toBeCloseTo(66.6666666667);
+    expect(c.scanner).toBe(50);
     expect(c.ai).toBe(50);
     expect(c.mtf).toBe(52.5);
-    expect(c.total).toBeCloseTo(55.75);
+    expect(c.total).toBeCloseTo(50.75);
     a.forEach((x) => {
       if (x.output) x.output.confidence = 0;
     });
