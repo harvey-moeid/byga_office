@@ -633,7 +633,7 @@ export function OfficeCharacter({
                     <meshStandardMaterial color="#e2d4bf" roughness={0.4} />
                   </mesh>
                 )}
-                {index === 7 && state === "DISCORD" && limb === 1 && (
+                {index === characterIds.indexOf("boss") && state === "DISCORD" && limb === 1 && (
                   <mesh position={[0, -0.28, 0.024]}>
                     <boxGeometry args={[0.06, 0.115, 0.012]} />
                     <meshStandardMaterial color="#1d252a" roughness={0.28} />
