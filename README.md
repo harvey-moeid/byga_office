@@ -2,7 +2,7 @@
 
 React + TypeScript + React Three Fiber frontend, Cloudflare Worker API, D1 audit database, and two persistent Durable Object orchestrators (live and simulation). Built against [PRD v1.0](BYGA_AI_TRADING_OFFICE_PRD.md). Progress is recorded in [the checklist](BYGA_AI_TRADING_OFFICE_CHECKLIST.md).
 
-Production is designed around the read-only `chart_db` market **BTCUSDT.P**. Repository configuration schedules the Worker every five minutes (`*/5 * * * *`) and the deployment workflow validates real market freshness, provider inference, application smoke checks, and frontend integrity before completing. Historical production observations remain in the acceptance report; the latest deployment result is the source of truth for whether a new revision is live. See [required environment variables](docs/ENVIRONMENT.md), [the acceptance report](docs/PRODUCTION_ACCEPTANCE.md), [deployment setup](docs/DEPLOYMENT.md), and [implementation status](docs/IMPLEMENTATION_STATUS.md).
+Production presents the logical market **BTCUSDT.P**, while the read-only `chart_db` stores the corresponding source symbol as **BTCUSDT**. Repository configuration schedules the Worker every five minutes (`*/5 * * * *`) and the deployment workflow validates real market freshness, provider inference, application smoke checks, and frontend integrity before completing. Historical production observations remain in the acceptance report; the latest deployment result is the source of truth for whether a new revision is live. See [required environment variables](docs/ENVIRONMENT.md), [the acceptance report](docs/PRODUCTION_ACCEPTANCE.md), [deployment setup](docs/DEPLOYMENT.md), and [implementation status](docs/IMPLEMENTATION_STATUS.md).
 
 ## Local development
 
