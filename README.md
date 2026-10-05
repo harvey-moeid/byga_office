@@ -76,3 +76,19 @@ The office is a furnished architectural cutaway with oak/walnut materials, glass
 ## Deployment
 
 See [required environment variables](docs/ENVIRONMENT.md) and [deployment and permission requirements](docs/DEPLOYMENT.md). `npm run deploy` requires a generated real staging/production configuration and rejects the local placeholder config. No production resource is created automatically during local setup.
+
+
+## 3D Realism Upgrade (2026-10-05)
+
+The public home scene now targets a premium miniature-diorama look while keeping the office fully interactive.
+
+- Hybrid rendering stays in place: deterministic React Three Fiber architecture/routing plus local GLTF hero furniture.
+- Front branding is **BYGA OFFICE** with `TRADING · BTC · GOLD · FX`.
+- Added a dedicated **Cinematic** camera preset alongside overview, analyst floor, meeting room, and boss-office views.
+- Added contact grounding on medium/high/ultra quality so furniture and characters read as physically placed in the miniature instead of floating.
+- Premium architecture now includes warm wood-slat feature walls, reception console, layered architectural lighting, premium planters, glass/metal details, and richer lobby frontage.
+- Existing meeting logic remains authoritative: meeting events override ambient office activity, move participating staff into the meeting room, and restore the previous camera/activity state afterward.
+- Quality selector remains available for mobile/desktop balance: Auto, Low, Medium, High, and Ultra.
+- Low quality continues to use the lighter procedural fallback; richer GLTF furniture and premium accents are enabled on decorative quality profiles.
+
+The realism work intentionally avoids changing navigation obstacles and meeting routing so visual upgrades do not introduce character collision regressions.
