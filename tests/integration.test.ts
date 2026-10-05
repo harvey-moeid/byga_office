@@ -491,6 +491,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     expect(await (await call("/office/state")).json()).toMatchObject({
       scanner_consensus_min: 3,
       group_consensus_min: 3,
+      group_names: ["SMC_ICT", "INDICATORS", "VOLUME"],
     });
     for (const minimum of [0, 4, 2.5]) {
       expect(

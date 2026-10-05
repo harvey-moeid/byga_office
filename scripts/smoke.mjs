@@ -37,10 +37,15 @@ if (meeting.meeting) {
 assert.equal(typeof state.office, "string", "Durable Object state missing");
 assert.ok(
   Number.isInteger(state.group_consensus_min) &&
-    state.group_consensus_min >= 1 && state.group_consensus_min <= 3 &&
-    Array.isArray(state.groups) && state.groups.length === 3,
-  "Deployed backend must expose three deterministic groups and their consensus minimum",
+    state.group_consensus_min >= 1 && state.group_consensus_min <= 3,
+  "Deployed backend must expose the deterministic group consensus minimum",
 );
+assert.deepEqual(
+  state.group_names,
+  ["SMC_ICT", "INDICATORS", "VOLUME"],
+  "Deployed backend must expose all three deterministic analysis groups",
+);
+assert.ok(Array.isArray(state.groups), "Latest deterministic group snapshots must be an array");
 const characters = await (await get("/api/v1/characters")).json();
 assert.equal(characters.length, 8);
 assert.ok(characters.every(c => !("primary_provider" in c) && !("primary_model" in c)));

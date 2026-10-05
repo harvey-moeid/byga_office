@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { z } from "zod";
 import {
+  analysisGroups,
   characterSchema,
   configSchema,
   defaultCharacters,
@@ -194,6 +195,7 @@ export class Office extends DurableObject<Env> {
       ).first();
       return json({
         scanner_consensus_min: config.scannerConsensusMin,
+        group_names: analysisGroups,
         group_consensus_min: config.scannerConsensusMin,
         groups: (await this.ctx.storage.get("groups")) ?? [],
         office: (await this.ctx.storage.get("office")) ?? "MONITORING",
