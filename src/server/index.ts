@@ -410,7 +410,11 @@ async function route(request: Request, env: Env): Promise<Response> {
         ),
         status: "OK",
       });
-    } catch {
+    } catch (error) {
+      console.error(
+        "market_status_unavailable",
+        error instanceof Error ? error.message : String(error),
+      );
       return json(
         {
           market: MARKET,
