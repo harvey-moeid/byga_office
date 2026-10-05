@@ -73,10 +73,16 @@ export async function retryDeliveries(env: Env, fetcher: typeof fetch = fetch) {
         .run();
       continue;
     }
+    const productionWebhook =
+      parsed.hostname === "discord.com" &&
+      parsed.pathname.startsWith("/api/webhooks/");
+    const testWebhook =
+      env.APP_ENV === "test" &&
+      parsed.hostname === "discord.invalid" &&
+      parsed.pathname.startsWith("/webhooks/");
     if (
       parsed.protocol !== "https:" ||
-      parsed.hostname !== "discord.com" ||
-      !parsed.pathname.startsWith("/api/webhooks/")
+      (!productionWebhook && !testWebhook)
     ) {
       await env.DB.prepare(
         "UPDATE discord_deliveries SET status='FAILED',last_error='Invalid webhook destination' WHERE key=?",
