@@ -24,7 +24,12 @@ const session = await (await get("/api/v1/auth/session")).json();
 assert.equal(session.admin, false);
 await get("/api/v1/admin/config", 401);
 await get("/api/v1/__test/alarm", 404);
-const state = await (await get("/api/v1/office/state")).json();
+let state;
+for (let attempt = 0; attempt < 10; attempt++) {
+  state = await (await get("/api/v1/office/state")).json();
+  if (Array.isArray(state.group_names) && state.group_names.length === 3) break;
+  if (attempt < 9) await new Promise(resolve => setTimeout(resolve, 3000));
+}
 const meeting = await (await get("/api/v1/office/meeting")).json();
 assert.ok(Object.hasOwn(meeting, "meeting"), "Meeting presentation endpoint missing");
 if (meeting.meeting) {
