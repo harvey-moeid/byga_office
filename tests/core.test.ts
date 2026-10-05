@@ -11,6 +11,7 @@ import {
   wibDate,
   type AnalystResult,
   type Candle,
+  type DerivativesContext,
   type GroupSnapshot,
   type MarketContext,
   type ScannerOutput,
@@ -186,6 +187,12 @@ describe("Scanner telemetry and group trigger contract", () => {
     const { scannerConsensusMin: _minimum, ...legacy } = defaultConfig;
     expect(configSchema.parse(legacy).scannerConsensusMin).toBe(2);
   });
+  it("accepts four-group unanimity as a valid threshold", () => {
+    expect(
+      configSchema.parse({ ...defaultConfig, scannerConsensusMin: 4 })
+        .scannerConsensusMin,
+    ).toBe(4);
+  });
   it.each([0, 5, 2.5, "4", null])(
     "rejects invalid four-group consensus minimum %s",
     (minimum) => {
@@ -206,6 +213,63 @@ describe("Scanner telemetry and group trigger contract", () => {
       expect(s.indicators).toHaveProperty("H1");
       expect(s.candle_timestamp).toBe(market.M5.at(-1)!.timestamp);
     }
+  });
+  it("builds a directional derivatives snapshot from real metric semantics", () => {
+    const latest = market.M5.at(-1)!.timestamp;
+    const derivatives: DerivativesContext = {
+      open_interest: Array.from({ length: 13 }, (_, i) => ({
+        timestamp: latest - (12 - i) * 300000,
+        value: 1_000_000_000 + i * 2_000_000,
+        value2: null,
+        value3: null,
+        source: "fixture",
+      })),
+      funding_rate: [
+        {
+          timestamp: latest - 3600000,
+          value: -0.0002,
+          value2: null,
+          value3: null,
+          source: "fixture",
+        },
+      ],
+      long_short_ratio: [
+        {
+          timestamp: latest,
+          value: 0.82,
+          value2: 0.45,
+          value3: 0.55,
+          source: "fixture",
+        },
+      ],
+      liquidation: [
+        {
+          timestamp: latest,
+          value: 120000,
+          value2: 20000,
+          value3: 100000,
+          source: "fixture",
+        },
+      ],
+    };
+    const output = analyzeGroups(
+      market,
+      scan(market, defaultConfig, "v1", 42),
+      defaultConfig,
+      "v1",
+      42,
+      derivatives,
+    );
+    const group = output.find(
+      (item) => item.group === "DERIVATIVES_POSITIONING",
+    )!;
+    expect(group.direction).toBe("BUY");
+    expect(group.strength).toBeGreaterThan(0);
+    expect(group.payload).toMatchObject({
+      funding_rate: -0.0002,
+      long_short_ratio: 0.82,
+      short_liquidation_usd: 100000,
+    });
   });
   it("builds four deterministic groups and assigns two analysts each", () => {
     const scannerOutput = scan(market, defaultConfig, "v1", 42);
@@ -264,7 +328,7 @@ describe("Consensus and confidence", () => {
         "SELL",
       ).direction,
     ).toBe("BUY"));
-  it("uses scanner for all NO_TRADE and <3 successful analysts", () => {
+  it("uses scanner for all NO_TRADE and <4 successful analysts", () => {
     expect(voting(analysts(Array(8).fill("NO_TRADE")), "SELL").direction).toBe(
       "SELL",
     );
