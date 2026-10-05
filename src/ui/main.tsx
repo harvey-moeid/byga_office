@@ -16,6 +16,7 @@ import {
   defaultConfig,
   type AvatarPreset,
   type CharacterId,
+  type GroupSnapshot,
   formatPrice,
   formatWib,
   scannerNames,
@@ -50,6 +51,8 @@ const SimulationPlayback = lazy(() =>
 );
 interface OfficeState {
   scanner_consensus_min?: number;
+  group_consensus_min?: number;
+  groups?: GroupSnapshot[];
   office: string;
   active: { id: string; status: string } | null;
   scanners: ScannerOutput[];
@@ -300,20 +303,21 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
             </small>
           </div>
           <div>
-            <span>SCANNER CONSENSUS</span>
+            <span>GROUP CONSENSUS</span>
             <strong>
-              {state.data?.scanners.filter((s) => s.direction === "BUY")
+              {state.data?.groups?.filter((group) => group.direction === "BUY")
                 .length ?? 0}
               <em> BUY </em>
-              {state.data?.scanners.filter((s) => s.direction === "SELL")
+              {state.data?.groups?.filter((group) => group.direction === "SELL")
                 .length ?? 0}
               <em> SELL</em>
             </strong>
             <small>
               Minimal{" "}
-              {state.data?.scanner_consensus_min ??
+              {state.data?.group_consensus_min ??
+                state.data?.scanner_consensus_min ??
                 defaultConfig.scannerConsensusMin}{" "}
-              · majority unik
+              · 3 group
             </small>
           </div>
         </div>
