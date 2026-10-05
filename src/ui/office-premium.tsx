@@ -67,6 +67,133 @@ function GlassDoor({ x }: { x: number }) {
   );
 }
 
+
+function WoodSlatWall({
+  position,
+  rotation = [0, 0, 0],
+  width = 3.8,
+}: {
+  position: [number, number, number];
+  rotation?: [number, number, number];
+  width?: number;
+}) {
+  const count = Math.max(8, Math.floor(width / 0.16));
+  return (
+    <group position={position} rotation={rotation}>
+      <mesh position={[0, 1.36, -0.06]} receiveShadow>
+        <boxGeometry args={[width, 2.7, 0.1]} />
+        <meshPhysicalMaterial
+          color="#34261f"
+          roughness={0.5}
+          clearcoat={0.08}
+          clearcoatRoughness={0.62}
+        />
+      </mesh>
+      {Array.from({ length: count }, (_, index) => {
+        const x = -width / 2 + 0.09 + index * (width / count);
+        return (
+          <mesh key={index} position={[x, 1.38, 0.015]} castShadow>
+            <boxGeometry args={[0.055, 2.58, 0.08]} />
+            <meshPhysicalMaterial
+              color={index % 3 === 0 ? "#9b714d" : "#795437"}
+              roughness={0.52}
+              clearcoat={0.1}
+              clearcoatRoughness={0.6}
+            />
+          </mesh>
+        );
+      })}
+      <mesh position={[0, 0.12, 0.07]}>
+        <boxGeometry args={[width * 0.92, 0.035, 0.045]} />
+        <meshStandardMaterial
+          color="#f0c47c"
+          emissive="#c78a42"
+          emissiveIntensity={1.55}
+        />
+      </mesh>
+    </group>
+  );
+}
+
+function PremiumPlanter({
+  position,
+  scale = 1,
+}: {
+  position: [number, number, number];
+  scale?: number;
+}) {
+  return (
+    <group position={position} scale={scale}>
+      <mesh position={[0, 0.18, 0]} castShadow receiveShadow>
+        <cylinderGeometry args={[0.3, 0.25, 0.36, 28]} />
+        <meshPhysicalMaterial
+          color="#c7b7a0"
+          roughness={0.42}
+          clearcoat={0.12}
+        />
+      </mesh>
+      <mesh position={[0, 0.38, 0]}>
+        <cylinderGeometry args={[0.23, 0.23, 0.035, 24]} />
+        <meshStandardMaterial color="#2e261f" roughness={1} />
+      </mesh>
+      {Array.from({ length: 10 }, (_, index) => {
+        const a = index * 2.34;
+        return (
+          <mesh
+            key={index}
+            position={[
+              Math.cos(a) * 0.12,
+              0.67 + (index % 4) * 0.18,
+              Math.sin(a) * 0.12,
+            ]}
+            rotation={[0.28, a, 0.72]}
+            scale={[0.13, 0.34 + (index % 3) * 0.05, 0.055]}
+            castShadow
+          >
+            <sphereGeometry args={[1, 18, 12]} />
+            <meshStandardMaterial
+              color={index % 2 ? "#315a3e" : "#477450"}
+              roughness={0.92}
+            />
+          </mesh>
+        );
+      })}
+    </group>
+  );
+}
+
+function ReceptionConsole() {
+  return (
+    <group position={[4.85, 0, 6.78]}>
+      <mesh position={[0, 0.55, 0]} castShadow receiveShadow>
+        <boxGeometry args={[3.8, 1.05, 0.68]} />
+        <meshPhysicalMaterial
+          color="#d9d3c8"
+          roughness={0.4}
+          clearcoat={0.18}
+          clearcoatRoughness={0.48}
+        />
+      </mesh>
+      <mesh position={[0, 1.09, -0.02]} castShadow>
+        <boxGeometry args={[3.96, 0.08, 0.77]} />
+        <meshPhysicalMaterial
+          color="#6f4b32"
+          roughness={0.42}
+          clearcoat={0.15}
+        />
+      </mesh>
+      <mesh position={[0, 0.54, 0.355]}>
+        <boxGeometry args={[3.36, 0.045, 0.03]} />
+        <meshStandardMaterial
+          color="#efc276"
+          emissive="#d29545"
+          emissiveIntensity={1.35}
+        />
+      </mesh>
+    </group>
+  );
+}
+
 /**
  * Hero architecture and lighting layered over the deterministic office shell.
  * These meshes intentionally stay separate from navigation obstacles: they sit
@@ -81,6 +208,16 @@ export function PremiumOfficeAccents({
 }) {
   return (
     <group name="premium-office-accents">
+      <WoodSlatWall position={[6.55, 0, 7.46]} width={3.45} />
+      <WoodSlatWall
+        position={[8.42, 0, -4.0]}
+        rotation={[0, -Math.PI / 2, 0]}
+        width={3.0}
+      />
+      <ReceptionConsole />
+      <PremiumPlanter position={[2.95, 0, 6.74]} scale={0.92} />
+      <PremiumPlanter position={[7.72, 0, 6.7]} scale={1.05} />
+      <PremiumPlanter position={[2.95, 0, -5.85]} scale={0.86} />
       <mesh position={[0, -0.54, 0]} receiveShadow>
         <boxGeometry args={[18.9, 0.46, 16.9]} />
         <meshPhysicalMaterial
@@ -161,7 +298,7 @@ export function PremiumOfficeAccents({
         </group>
       ))}
 
-      <mesh position={[-6.2, 0.045, 5.7]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh position={[-6.2, 0.046, 5.7]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <circleGeometry args={[1.55, 48]} />
         <meshStandardMaterial color="#314944" roughness={1} />
       </mesh>
