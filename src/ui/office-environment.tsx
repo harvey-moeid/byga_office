@@ -239,11 +239,14 @@ function buildOffice(detail: boolean): Part[] {
       cylinder([x + 0.62, 0.85, z + 0.13], 0.044, 0.1, "ceramic");
       box([x - 0.75, 0.4, z - 0.25], [0.14, 0.52, 0.45], "metal");
     }
-    chair(x, z + 0.72);
+    if (!detail) chair(x, z + 0.72);
   });
   box([5, 0.76, 1], [3, 0.09, 1.4], "walnut");
   for (const x of [4, 6]) box([x, 0.38, 1], [0.08, 0.72, 0.8], "metal");
-  meetingSeats.forEach(({ position: [x, z], facing }) => chair(x, z, facing));
+  if (!detail)
+    meetingSeats.forEach(({ position: [x, z], facing }) =>
+      chair(x, z, facing),
+    );
   for (let i = 0; i < 4; i++) {
     if (detail)
       box(
@@ -253,13 +256,16 @@ function buildOffice(detail: boolean): Part[] {
         [0, 0.12, 0],
       );
   }
-  // Lobby seating, low table, reception and a framed brand panel.
-  box([-6.2, 0.24, 5.7], [2.1, 0.38, 0.8], "fabric");
-  box([-6.2, 0.68, 6.05], [2.1, 0.5, 0.13], "fabric");
-  for (const x of [-7.19, -5.21])
-    box([x, 0.5, 5.7], [0.14, 0.48, 0.8], "fabric");
-  for (const x of [-6.68, -5.72])
-    box([x, 0.46, 5.7], [0.87, 0.075, 0.62], "fabric");
+  // Lobby seating. Detailed profiles use the local GLTF sofa asset; the
+  // procedural fallback keeps low-quality/WebGL-software devices lightweight.
+  if (!detail) {
+    box([-6.2, 0.24, 5.7], [2.1, 0.38, 0.8], "fabric");
+    box([-6.2, 0.68, 6.05], [2.1, 0.5, 0.13], "fabric");
+    for (const x of [-7.19, -5.21])
+      box([x, 0.5, 5.7], [0.14, 0.48, 0.8], "fabric");
+    for (const x of [-6.68, -5.72])
+      box([x, 0.46, 5.7], [0.87, 0.075, 0.62], "fabric");
+  }
   box([-6.2, 0.34, 4.7], [1.3, 0.055, 0.45], "walnut");
   for (const x of [-6.7, -5.7])
     box([x, 0.16, 4.7], [0.055, 0.3, 0.35], "metal");
@@ -376,7 +382,7 @@ function Batch({
       ) : (
         <sphereGeometry args={[1, detail ? 14 : 8, detail ? 10 : 6]} />
       )}
-      <meshStandardMaterial
+      <meshPhysicalMaterial
         color={finish.color}
         roughness={finish.roughness}
         metalness={finish.metalness ?? 0}
@@ -384,10 +390,20 @@ function Batch({
         opacity={finish.opacity ?? 1}
         depthWrite={!finish.opacity}
         emissive={finish.emissive ?? "#000000"}
-        emissiveIntensity={first.finish === "light" ? 1.8 : 0.3}
+        emissiveIntensity={
+          first.finish === "light" ? 2.2 : first.finish === "screen" ? 0.5 : 0.3
+        }
         map={
           first.finish === "oak" || first.finish === "walnut" ? texture : null
         }
+        clearcoat={
+          first.finish === "leather" || first.finish === "ceramic" ? 0.24 : 0.05
+        }
+        clearcoatRoughness={first.finish === "leather" ? 0.55 : 0.35}
+        transmission={first.finish === "glass" && detail ? 0.42 : 0}
+        thickness={first.finish === "glass" ? 0.08 : 0}
+        ior={first.finish === "glass" ? 1.44 : 1.5}
+        envMapIntensity={first.finish === "glass" ? 1.3 : 0.85}
       />
     </instancedMesh>
   );
