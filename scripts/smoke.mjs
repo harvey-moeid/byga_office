@@ -36,9 +36,10 @@ if (meeting.meeting) {
 }
 assert.equal(typeof state.office, "string", "Durable Object state missing");
 assert.ok(
-  Number.isInteger(state.scanner_consensus_min) &&
-    state.scanner_consensus_min >= 1 && state.scanner_consensus_min <= 6,
-  "Deployed backend must expose the configurable Scanner Consensus minimum",
+  Number.isInteger(state.group_consensus_min) &&
+    state.group_consensus_min >= 1 && state.group_consensus_min <= 3 &&
+    Array.isArray(state.groups) && state.groups.length === 3,
+  "Deployed backend must expose three deterministic groups and their consensus minimum",
 );
 const characters = await (await get("/api/v1/characters")).json();
 assert.equal(characters.length, 8);
@@ -49,6 +50,7 @@ assert.equal(health.chart_db, "OK", "Deployed chart binding or freshness failed"
 assert.notEqual(health.ai_providers, "DOWN", "Runtime provider secret missing");
 const market = await (await get("/api/v1/market/status")).json();
 assert.equal(market.status, "OK");
+assert.equal(market.market, "BTCUSDT.P");
 assert.equal(market.development, false, "Production must use real candles");
 for (const tf of ["H1", "M15", "M5"]) assert.equal(market.timeframes[tf].length, 100);
 let adminAuthentication = "NOT_TESTED";
@@ -82,8 +84,8 @@ if (process.env.ADMIN_PASSWORD) {
     );
     assert.equal(JSON.parse(aiProbeBody).inference, "PASS");
     assert.equal(
-      activeConfig.config.scannerConsensusMin, state.scanner_consensus_min,
-      "Admin config and Operations must agree on the Scanner Consensus minimum",
+      activeConfig.config.scannerConsensusMin, state.group_consensus_min,
+      "Admin config and Operations must agree on the Group Consensus minimum",
     );
     const rejected = await fetch(origin + "/api/v1/admin/scan", {
       method: "POST",
