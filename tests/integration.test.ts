@@ -150,7 +150,7 @@ beforeAll(async () => {
           "";
         const vote =
           scenario === "TIE"
-            ? /^(Liquidity|Volume|Quant) Analyst/.test(prompt)
+            ? /^(Liquidity|Volume|Quant|Market Positioning) Analyst/.test(prompt)
               ? "SELL"
               : "BUY"
             : scenario === "BOSS_REVERSE"
@@ -197,6 +197,9 @@ beforeAll(async () => {
   await market.exec(
     "CREATE TABLE candles(symbol TEXT,timeframe TEXT,open_time INTEGER,open REAL,high REAL,low REAL,close REAL,volume REAL,is_closed INTEGER NOT NULL CHECK(is_closed IN (0,1)),PRIMARY KEY(symbol,timeframe,open_time));",
   );
+  await market.exec(
+    "CREATE TABLE derivative_metrics(symbol TEXT NOT NULL,metric TEXT NOT NULL,timeframe TEXT NOT NULL DEFAULT '',ts INTEGER NOT NULL,value REAL NOT NULL,value2 REAL,value3 REAL,source TEXT NOT NULL,PRIMARY KEY(symbol,metric,timeframe,ts));",
+  );
   const now = Date.now();
   for (const [tf, duration] of [
     ["H1", 3600000],
@@ -223,6 +226,65 @@ beforeAll(async () => {
     });
     await market.batch(statements);
   }
+  const derivativeBase =
+    Math.floor((now - 300000 - 5000) / 300000) * 300000;
+  const derivativeRows = [];
+  for (let i = 0; i < 13; i++) {
+    const ts = derivativeBase - (12 - i) * 300000;
+    derivativeRows.push(
+      market
+        .prepare("INSERT INTO derivative_metrics VALUES (?,?,?,?,?,?,?,?)")
+        .bind(
+          "BTCUSDT",
+          "open_interest",
+          "M5",
+          ts,
+          1_000_000_000 + i * 2_000_000,
+          null,
+          null,
+          "fixture",
+        ),
+      market
+        .prepare("INSERT INTO derivative_metrics VALUES (?,?,?,?,?,?,?,?)")
+        .bind(
+          "BTCUSDT",
+          "long_short_ratio",
+          "M5",
+          ts,
+          0.82,
+          0.45,
+          0.55,
+          "fixture",
+        ),
+    );
+  }
+  derivativeRows.push(
+    market
+      .prepare("INSERT INTO derivative_metrics VALUES (?,?,?,?,?,?,?,?)")
+      .bind(
+        "BTCUSDT",
+        "funding_rate",
+        "",
+        derivativeBase - 3600000,
+        -0.0002,
+        null,
+        null,
+        "fixture",
+      ),
+    market
+      .prepare("INSERT INTO derivative_metrics VALUES (?,?,?,?,?,?,?,?)")
+      .bind(
+        "BTCUSDT",
+        "liquidation",
+        "M5",
+        derivativeBase,
+        120000,
+        20000,
+        100000,
+        "fixture",
+      ),
+  );
+  await market.batch(derivativeRows);
 }, 60000);
 beforeEach(async () => {
   await (await mf.getD1Database("DB")).exec("DELETE FROM api_limits");
@@ -363,7 +425,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       avatar: string;
       primary_provider?: string;
     }[];
-    expect(appearances).toHaveLength(8);
+    expect(appearances).toHaveLength(10);
     expect(appearances[0]).toEqual({
       id: expect.any(String),
       avatar: "professional",
@@ -472,7 +534,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
         .run(),
     ).rejects.toThrow("immutable config");
   });
-  it("persists Admin three-group minimum and rejects invalid values", async () => {
+  it("persists Admin four-group minimum and rejects invalid values", async () => {
     const config = {
       ...defaultConfig,
       publicSignals: true,
@@ -491,9 +553,14 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     expect(await (await call("/office/state")).json()).toMatchObject({
       scanner_consensus_min: 3,
       group_consensus_min: 3,
-      group_names: ["SMC_ICT", "INDICATORS", "VOLUME"],
+      group_names: [
+        "SMC_ICT",
+        "INDICATORS",
+        "VOLUME",
+        "DERIVATIVES_POSITIONING",
+      ],
     });
-    for (const minimum of [0, 4, 2.5]) {
+    for (const minimum of [0, 5, 2.5]) {
       expect(
         (
           await call("/admin/config", {
@@ -509,8 +576,9 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       groups: { group: string; direction: string }[];
     };
     expect(state.scanners).toHaveLength(6);
-    expect(state.groups).toHaveLength(3);
+    expect(state.groups).toHaveLength(4);
     expect(state.groups.map((group) => group.group).sort()).toEqual([
+      "DERIVATIVES_POSITIONING",
       "INDICATORS",
       "SMC_ICT",
       "VOLUME",
@@ -579,6 +647,8 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       "liquidity",
       "volume",
       "quant",
+      "derivatives",
+      "positioning",
       "risk",
       "boss",
     ]);
