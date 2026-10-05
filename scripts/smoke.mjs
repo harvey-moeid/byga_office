@@ -74,8 +74,13 @@ if (process.env.ADMIN_PASSWORD) {
       body: JSON.stringify({ id: "workers-ai" }),
       signal: AbortSignal.timeout(30000),
     });
-    assert.equal(aiProbe.status, 200, "Deployed Workers AI binding/model probe failed");
-    assert.equal((await aiProbe.json()).inference, "PASS");
+    const aiProbeBody = await aiProbe.text();
+    assert.equal(
+      aiProbe.status,
+      200,
+      `Deployed Workers AI binding/model probe failed: ${aiProbeBody.slice(0, 500)}`,
+    );
+    assert.equal(JSON.parse(aiProbeBody).inference, "PASS");
     assert.equal(
       activeConfig.config.scannerConsensusMin, state.scanner_consensus_min,
       "Admin config and Operations must agree on the Scanner Consensus minimum",
