@@ -239,7 +239,7 @@ beforeAll(async () => {
           "open_interest",
           "M5",
           ts,
-          1_000_000_000 + i * 2_000_000,
+          1_000_000_000,
           null,
           null,
           "fixture",
@@ -251,9 +251,9 @@ beforeAll(async () => {
           "long_short_ratio",
           "M5",
           ts,
-          0.82,
-          0.45,
-          0.55,
+          1,
+          0.5,
+          0.5,
           "fixture",
         ),
     );
@@ -266,7 +266,7 @@ beforeAll(async () => {
         "funding_rate",
         "",
         derivativeBase - 3600000,
-        -0.0002,
+        0,
         null,
         null,
         "fixture",
@@ -279,8 +279,8 @@ beforeAll(async () => {
         "M5",
         derivativeBase,
         120000,
-        20000,
-        100000,
+        60000,
+        60000,
         "fixture",
       ),
   );
@@ -622,7 +622,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
         )
         .bind(item.uuid)
         .first<{ n: number }>())!.n,
-    ).toBe(8);
+    ).toBe(10);
     const publicRes = await call(`/cases/${item.id}/public`, undefined, false);
     const text = await publicRes.text();
     expect(text).not.toContain("fixture-only-ai-key");
@@ -1107,7 +1107,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     const db = await mf.getD1Database("DB");
     const original = (await db
       .prepare(
-        "SELECT * FROM cases WHERE status='COMPLETED' AND mode='LIVE' LIMIT 1",
+        "SELECT c.* FROM cases c WHERE c.status='COMPLETED' AND c.mode='LIVE' ORDER BY (SELECT COUNT(*) FROM ai_character_outputs a WHERE a.case_uuid=c.uuid) DESC LIMIT 1",
       )
       .first())!;
     const uuid = crypto.randomUUID();
@@ -1136,6 +1136,14 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       )
       .bind(uuid, original.uuid)
       .run();
+    expect(
+      (await db
+        .prepare(
+          "SELECT COUNT(*) n FROM ai_character_outputs WHERE case_uuid=? AND character_id NOT IN ('risk','boss')",
+        )
+        .bind(uuid)
+        .first<{ n: number }>())!.n,
+    ).toBe(8);
     const before = requests;
     const ns = await mf.getDurableObjectNamespace("OFFICE");
     const response = await ns
@@ -1197,7 +1205,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
         .prepare("SELECT COUNT(*) n FROM ai_runs WHERE case_uuid=?")
         .bind(row.uuid)
         .first<{ n: number }>())!.n,
-    ).toBe(8);
+    ).toBe(10);
   }, 15000);
   it("persistent D1 stage failure stops after three recoveries without repeated AI calls", async () => {
     const db = await mf.getD1Database("DB");
@@ -1226,7 +1234,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
           .prepare("SELECT COUNT(*) n FROM ai_runs WHERE case_uuid=?")
           .bind(row.uuid)
           .first<{ n: number }>())!.n,
-      ).toBe(6);
+      ).toBe(8);
       expect(
         (await db
           .prepare("SELECT COUNT(*) n FROM signals WHERE case_uuid=?")
