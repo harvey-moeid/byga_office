@@ -1,4 +1,5 @@
 import {
+  MARKET,
   providers,
   scannerNames,
   wibDate,
@@ -21,7 +22,7 @@ async function office(
 ) {
   return env.OFFICE.get(
     env.OFFICE.idFromName(
-      path === "/simulation" ? "BTCUSDT:simulation" : "BTCUSDT",
+      path === "/simulation" ? `${MARKET}:simulation` : MARKET,
     ),
   ).fetch(
     new Request(`https://office.internal${path}`, {
@@ -392,7 +393,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     try {
       const m = await readMarket(env);
       return json({
-        market: "BTCUSDT",
+        market: MARKET,
         development: env.APP_ENV !== "production" && env.APP_ENV !== "staging",
         price: m.M5.at(-1)!.close,
         tickSize:
@@ -406,7 +407,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     } catch {
       return json(
         {
-          market: "BTCUSDT",
+          market: MARKET,
           status: "DOWN",
           error:
             "Market data unavailable; check chart_db binding and candle schema",
