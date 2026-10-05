@@ -1,5 +1,6 @@
 import { z } from "zod";
 export const MARKET = "BTCUSDT.P" as const;
+export const CHART_DB_MARKET = "BTCUSDT" as const;
 export const directionSchema = z.enum(["BUY", "SELL", "NONE"]);
 export type Direction = z.infer<typeof directionSchema>;
 export type TradeDirection = Exclude<Direction, "NONE">;

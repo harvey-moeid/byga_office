@@ -210,7 +210,7 @@ beforeAll(async () => {
       return market
         .prepare("INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?)")
         .bind(
-          "BTCUSDT.P",
+          "BTCUSDT",
           tf,
           latest - (319 - i) * duration,
           close - 0.3,

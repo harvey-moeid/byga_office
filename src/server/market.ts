@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   candleSchema,
+  CHART_DB_MARKET,
   MARKET,
   timeframes,
   type MarketContext,
@@ -45,7 +46,7 @@ export async function readMarket(
       const closed = s.closed ? ` AND "${s.closed}" = 1` : "";
       const sql = `SELECT "${s.timestamp}" AS timestamp, "${s.open}" AS open, "${s.high}" AS high, "${s.low}" AS low, "${s.close}" AS close, "${s.volume}" AS volume FROM "${s.table}" WHERE "${s.market}" = ? AND "${s.timeframe}" = ? AND "${s.timestamp}" <= ?${closed} ORDER BY "${s.timestamp}" DESC LIMIT ?`;
       const rows = await env.CHART_DB.prepare(sql)
-        .bind(MARKET, s.timeframeValues?.[tf] ?? tf, cutoff, count)
+        .bind(CHART_DB_MARKET, s.timeframeValues?.[tf] ?? tf, cutoff, count)
         .all<Record<string, unknown>>();
       const candles = rows.results
         .reverse()
