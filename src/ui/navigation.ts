@@ -21,7 +21,7 @@ export const rooms = [
 // seating plan, with each row looking across the table instead of away.
 export const meetingSeats = Array.from({ length: characterIds.length }, (_, index) => ({
   position: [3.7 + (index % 5) * 0.65, Math.floor(index / 5) * 2] as Point,
-  facing: index < 4 ? 0 : Math.PI,
+  facing: index < 5 ? 0 : Math.PI,
 }));
 export function isMeeting(state: string) {
   return [
