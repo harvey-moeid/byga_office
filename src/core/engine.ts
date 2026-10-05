@@ -195,7 +195,7 @@ export function analyzeGroups(
   const fast = indicators(context.M5, config);
   const recent = context.M5.slice(-6);
   const previousVolume =
-    mean(recent.slice(0, -1).map((c) => c.volume)) || fast.price;
+    mean(recent.slice(0, -1).map((c) => c.volume)) || 1;
   const volumeExpansion = context.M5.at(-1)!.volume / previousVolume;
   const volumeDirection: Direction =
     volumeExpansion >= config.scanner.volumeRatio &&
