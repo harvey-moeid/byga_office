@@ -2,7 +2,6 @@ import { z } from "zod";
 import {
   candleSchema,
   CHART_DB_MARKET,
-  MARKET,
   timeframes,
   type MarketContext,
   type Timeframe,
