@@ -168,7 +168,7 @@ function AppLayout() {
             ))}
           </nav>
           <div className="sidebar-bottom">
-            <span className="dot" /> BTCUSDT.P ONLY
+            <span className="dot" /> {MARKET} ONLY
             <small>Asia/Jakarta · WIB</small>
           </div>
         </aside>
