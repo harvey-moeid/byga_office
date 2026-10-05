@@ -290,6 +290,20 @@ export function groupTrigger(
       ? "SELL"
       : null;
 }
+export function fallbackDirection(
+  groups: GroupSnapshot[],
+  context: MarketContext,
+): TradeDirection {
+  const score = (direction: TradeDirection) =>
+    groups
+      .filter((group) => group.direction === direction)
+      .reduce((sum, group) => sum + Math.max(1, group.strength), 0);
+  const buy = score("BUY");
+  const sell = score("SELL");
+  if (buy !== sell) return buy > sell ? "BUY" : "SELL";
+  const last = context.M5.at(-1)!;
+  return last.close >= last.open ? "BUY" : "SELL";
+}
 export function analystGroup(id: CharacterId): AnalysisGroup | null {
   if (id === "structure" || id === "liquidity") return "SMC_ICT";
   if (id === "trend" || id === "momentum") return "INDICATORS";
