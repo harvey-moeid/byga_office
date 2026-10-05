@@ -26,6 +26,8 @@ import {
   type QualityMode,
 } from "./quality";
 import { OfficeEnvironment } from "./office-environment";
+import { HybridOfficeAssets } from "./office-assets";
+import { PremiumOfficeAccents } from "./office-premium";
 import { OfficeCharacter } from "./office-character";
 import {
   ACTIVITY_TRAVEL_BUFFER_MS,
@@ -66,7 +68,7 @@ function InteriorReflections() {
   return null;
 }
 
-type View = "overview" | "floor" | "meeting";
+type View = "overview" | "floor" | "meeting" | "boss";
 const QUALITY_STORAGE_KEY = "byga:3d-quality";
 const views: Record<
   View,
@@ -78,18 +80,23 @@ const views: Record<
 > = {
   overview: {
     label: "Seluruh kantor",
-    camera: [14, 16, 20],
-    target: [0, 0.5, 0],
+    camera: [15.2, 14.6, 19.4],
+    target: [0, 0.55, 0.15],
   },
   floor: {
     label: "Area analis",
-    camera: [-6.3, 4.9, -1],
-    target: [-2.8, 0.8, 0.3],
+    camera: [-6.2, 4.6, 0.2],
+    target: [-2.8, 0.9, 0.5],
   },
   meeting: {
     label: "Ruang meeting",
-    camera: [9.3, 5.2, 8.8],
-    target: [5, 0.8, 1],
+    camera: [9.1, 4.9, 8.2],
+    target: [5, 0.9, 1],
+  },
+  boss: {
+    label: "Ruang bos",
+    camera: [10.7, 4.5, 9.6],
+    target: [6, 0.9, 5.75],
   },
 };
 function CameraView({
@@ -350,14 +357,14 @@ export default function OfficeScene({
         dpr={profile.dpr}
         camera={{
           position: views.overview.camera,
-          fov: 40,
+          fov: 37,
           near: 0.1,
           far: 150,
         }}
         gl={{
           antialias: antialias.current,
           toneMapping: ACESFilmicToneMapping,
-          toneMappingExposure: 1.12,
+          toneMappingExposure: quality === "ultra" ? 1.16 : 1.08,
         }}
         onCreated={({ gl }) => {
           if (qualityMode === "auto" && softwareRendering(gl)) setQuality("low");
@@ -367,14 +374,14 @@ export default function OfficeScene({
           });
         }}
       >
-        <color attach="background" args={["#101e26"]} />
-        <fog attach="fog" args={["#101e26", 120, 240]} />
-        <hemisphereLight args={["#edf4ff", "#85745d", 1.7]} />
-        <ambientLight intensity={0.3} />
+        <color attach="background" args={["#0b1518"]} />
+        <fog attach="fog" args={["#0b1518", 90, 190]} />
+        <hemisphereLight args={["#dfeaf0", "#7d6950", 1.35]} />
+        <ambientLight intensity={0.2} />
         <directionalLight
-          position={[-5, 12, -6]}
-          intensity={3.3}
-          color="#fff1d9"
+          position={[-6, 13, -7]}
+          intensity={2.75}
+          color="#ffe8c7"
           castShadow={profile.shadows}
           shadow-mapSize={[profile.shadowSize, profile.shadowSize]}
           shadow-camera-left={-12}
@@ -388,18 +395,32 @@ export default function OfficeScene({
           shadow-radius={3}
         />
         <directionalLight
-          position={[4, 7, 12]}
-          intensity={1.3}
-          color="#e5edf4"
+          position={[5, 8, 13]}
+          intensity={1.05}
+          color="#dce8ef"
         />
         <pointLight
-          position={[5, 3, 1]}
-          intensity={9}
-          distance={9}
+          position={[5, 3.2, 1]}
+          intensity={6.5}
+          distance={10}
           decay={2}
-          color="#ffe2bb"
+          color="#ffd8a6"
+        />
+        <pointLight
+          position={[-3, 2.8, 2]}
+          intensity={3.4}
+          distance={8}
+          decay={2}
+          color="#ffe2b8"
         />
         <OfficeEnvironment detail={profile.decorative} />
+        {profile.decorative && <HybridOfficeAssets />}
+        {profile.decorative && (
+          <PremiumOfficeAccents
+            labelHost={labelHost}
+            cinematic={quality === "ultra"}
+          />
+        )}
         {quality !== "low" && <InteriorReflections />}
         <MarketWall
           prices={prices}
