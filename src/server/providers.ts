@@ -382,6 +382,8 @@ export const coreRoles = {
   liquidity: "Liquidity Analyst: sweeps, FVG and displacement.",
   volume: "Volume Analyst: breakout, retest and volume confirmation.",
   quant: "Quant Analyst: mean reversion, Bollinger and statistical context.",
+  derivatives: "Derivatives Analyst: open interest, funding and liquidation flow.",
+  positioning: "Market Positioning Analyst: long/short crowding, funding asymmetry and positioning extremes.",
   risk: "Risk Manager: evaluate deterministic proposal; never change entry midpoint or fabricate target. Return vote reflecting evaluation and risk_flags.",
   boss: "Head Trader: review all evidence. Never reverse a non-tied AI majority. Break ties only with evidence.",
 };
