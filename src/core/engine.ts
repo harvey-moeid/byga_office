@@ -10,7 +10,6 @@ import {
   structure,
 } from "./indicators";
 import {
-  analysisGroups,
   defaultConfig,
   MARKET,
   scannerNames,
