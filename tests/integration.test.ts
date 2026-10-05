@@ -118,7 +118,7 @@ beforeAll(async () => {
       outboundService: async (request) => {
         requests++;
         const u = new URL(request.url);
-        if (u.hostname === "discord.com") {
+        if (u.hostname === "discord.invalid") {
           if (discordStatus === "timeout")
             throw new Error("Fixture network interruption");
           discordMessages.push(
