@@ -42,11 +42,34 @@ const CHART_DB = {
     };
   },
 };
-const now = Date.now();
-const market = await readMarket({ CHART_DB, CHART_SCHEMA: config.vars.CHART_SCHEMA }, now);
+const attempts = 4;
+let market;
+let checkedAt = Date.now();
+let lastError;
+for (let attempt = 1; attempt <= attempts; attempt++) {
+  checkedAt = Date.now();
+  try {
+    market = await readMarket(
+      { CHART_DB, CHART_SCHEMA: config.vars.CHART_SCHEMA },
+      checkedAt,
+    );
+    break;
+  } catch (error) {
+    lastError = error;
+    const transientFreshness =
+      error instanceof Error && /Stale (?:H1|M15|M5) data/.test(error.message);
+    if (!transientFreshness || attempt === attempts) throw error;
+    const delayMs = attempt * 15000;
+    console.warn(
+      `Chart freshness attempt ${attempt}/${attempts} failed: ${error.message}; retrying in ${delayMs}ms`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+}
+if (!market) throw lastError ?? new Error("Market verification failed.");
 console.log(JSON.stringify({
-  checked_at: new Date(now).toISOString(),
-  market: "BTCUSDT",
+  checked_at: new Date(checkedAt).toISOString(),
+  market: "BTCUSDT.P",
   schema: "live",
   read_only: true,
   timeframes: Object.fromEntries(Object.entries(market).map(([tf, candles]) => [tf, {
