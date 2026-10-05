@@ -382,29 +382,51 @@ function Batch({
       ) : (
         <sphereGeometry args={[1, detail ? 14 : 8, detail ? 10 : 6]} />
       )}
-      <meshPhysicalMaterial
-        color={finish.color}
-        roughness={finish.roughness}
-        metalness={finish.metalness ?? 0}
-        transparent={!!finish.opacity}
-        opacity={finish.opacity ?? 1}
-        depthWrite={!finish.opacity}
-        emissive={finish.emissive ?? "#000000"}
-        emissiveIntensity={
-          first.finish === "light" ? 2.2 : first.finish === "screen" ? 0.5 : 0.3
-        }
-        map={
-          first.finish === "oak" || first.finish === "walnut" ? texture : null
-        }
-        clearcoat={
-          first.finish === "leather" || first.finish === "ceramic" ? 0.24 : 0.05
-        }
-        clearcoatRoughness={first.finish === "leather" ? 0.55 : 0.35}
-        transmission={first.finish === "glass" && detail ? 0.42 : 0}
-        thickness={first.finish === "glass" ? 0.08 : 0}
-        ior={first.finish === "glass" ? 1.44 : 1.5}
-        envMapIntensity={first.finish === "glass" ? 1.3 : 0.85}
-      />
+      {detail ? (
+        <meshPhysicalMaterial
+          color={finish.color}
+          roughness={finish.roughness}
+          metalness={finish.metalness ?? 0}
+          transparent={!!finish.opacity}
+          opacity={finish.opacity ?? 1}
+          depthWrite={!finish.opacity}
+          emissive={finish.emissive ?? "#000000"}
+          emissiveIntensity={
+            first.finish === "light"
+              ? 2.2
+              : first.finish === "screen"
+                ? 0.5
+                : 0.3
+          }
+          map={
+            first.finish === "oak" || first.finish === "walnut" ? texture : null
+          }
+          clearcoat={
+            first.finish === "leather" || first.finish === "ceramic"
+              ? 0.24
+              : 0.05
+          }
+          clearcoatRoughness={first.finish === "leather" ? 0.55 : 0.35}
+          transmission={first.finish === "glass" ? 0.42 : 0}
+          thickness={first.finish === "glass" ? 0.08 : 0}
+          ior={first.finish === "glass" ? 1.44 : 1.5}
+          envMapIntensity={first.finish === "glass" ? 1.3 : 0.85}
+        />
+      ) : (
+        <meshStandardMaterial
+          color={finish.color}
+          roughness={finish.roughness}
+          metalness={finish.metalness ?? 0}
+          transparent={!!finish.opacity}
+          opacity={finish.opacity ?? 1}
+          depthWrite={!finish.opacity}
+          emissive={finish.emissive ?? "#000000"}
+          emissiveIntensity={first.finish === "light" ? 1.5 : 0.25}
+          map={
+            first.finish === "oak" || first.finish === "walnut" ? texture : null
+          }
+        />
+      )}
     </instancedMesh>
   );
 }
