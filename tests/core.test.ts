@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  analysisGroups,
   analysisSchema,
   candleSchema,
   configSchema,
@@ -10,6 +11,7 @@ import {
   wibDate,
   type AnalystResult,
   type Candle,
+  type GroupSnapshot,
   type MarketContext,
   type ScannerOutput,
 } from "../src/core/contracts";
@@ -23,8 +25,12 @@ import {
   structure,
 } from "../src/core/indicators";
 import {
+  analyzeGroups,
+  analystGroup,
   buildContext,
+  buildGroupContext,
   confidence,
+  groupTrigger,
   risk,
   scan,
   semanticErrors,
@@ -56,6 +62,18 @@ function scanners(directions: string[]): ScannerOutput[] {
     reasons: ["fixture"],
     levels: [],
     indicators: {},
+    timestamp: 1,
+    candle_timestamp: 1,
+    config_version: "v1",
+  }));
+}
+function groups(directions: string[]): GroupSnapshot[] {
+  return analysisGroups.map((group, i) => ({
+    group,
+    direction: directions[i] as GroupSnapshot["direction"],
+    strength: directions[i] === "NONE" ? 0 : 100,
+    reasons: ["fixture"],
+    payload: {},
     timestamp: 1,
     candle_timestamp: 1,
     config_version: "v1",
@@ -163,13 +181,13 @@ describe("Indicators and structure", () => {
     ).toThrow();
   });
 });
-describe("Scanner/trigger contract", () => {
+describe("Scanner telemetry and group trigger contract", () => {
   it("keeps legacy config snapshots compatible with minimum 2", () => {
     const { scannerConsensusMin: _minimum, ...legacy } = defaultConfig;
     expect(configSchema.parse(legacy).scannerConsensusMin).toBe(2);
   });
-  it.each([0, 7, 2.5, "3", null])(
-    "rejects invalid consensus minimum %s",
+  it.each([0, 4, 2.5, "3", null])(
+    "rejects invalid three-group consensus minimum %s",
     (minimum) => {
       expect(
         configSchema.safeParse({
@@ -179,26 +197,7 @@ describe("Scanner/trigger contract", () => {
       ).toBe(false);
     },
   );
-  it.each([1, 2, 3, 4, 5, 6])(
-    "requires configured minimum %s for either direction",
-    (minimum) => {
-      for (const direction of ["BUY", "SELL"] as const) {
-        const enough = Array.from({ length: 6 }, (_, i) =>
-          i < minimum ? direction : "NONE",
-        );
-        expect(trigger(scanners(enough), minimum)).toBe(direction);
-        enough[minimum - 1] = "NONE";
-        expect(trigger(scanners(enough), minimum)).toBeNull();
-      }
-      expect(
-        trigger(
-          scanners(["BUY", "BUY", "SELL", "SELL", "NONE", "NONE"]),
-          minimum,
-        ),
-      ).toBeNull();
-    },
-  );
-  it("runs exactly six always-active scanners, with reasons for NONE and saved context", () => {
+  it("keeps six deterministic scanners as telemetry", () => {
     const output = scan(market, defaultConfig, "TRADING-CONFIG-v1", 42);
     expect(output.map((s) => s.name)).toEqual([...scannerNames]);
     for (const s of output) {
@@ -208,18 +207,47 @@ describe("Scanner/trigger contract", () => {
       expect(s.candle_timestamp).toBe(market.M5.at(-1)!.timestamp);
     }
   });
+  it("builds SMC/ICT, indicator and volume groups and assigns two analysts each", () => {
+    const scannerOutput = scan(market, defaultConfig, "v1", 42);
+    const output = analyzeGroups(market, scannerOutput, defaultConfig, "v1", 42);
+    expect(output.map((group) => group.group)).toEqual([...analysisGroups]);
+    expect(["structure", "liquidity"].map(analystGroup)).toEqual([
+      "SMC_ICT",
+      "SMC_ICT",
+    ]);
+    expect(["trend", "momentum"].map(analystGroup)).toEqual([
+      "INDICATORS",
+      "INDICATORS",
+    ]);
+    expect(["volume", "quant"].map(analystGroup)).toEqual([
+      "VOLUME",
+      "VOLUME",
+    ]);
+    expect(analystGroup("risk")).toBeNull();
+    expect(analystGroup("boss")).toBeNull();
+  });
   it.each([
-    ["BUY BUY BUY SELL SELL NONE", "BUY"],
-    ["BUY BUY SELL SELL NONE NONE", null],
-    ["BUY NONE NONE NONE NONE NONE", null],
-    ["SELL SELL NONE NONE NONE NONE", "SELL"],
-  ])("unique majority %s → %s", (input, expected) =>
-    expect(trigger(scanners(input.split(" ")))).toBe(expected),
-  );
-  it("strength never changes trigger", () => {
-    const s = scanners(["BUY", "BUY", "NONE", "NONE", "NONE", "NONE"]);
-    s.forEach((x) => (x.strength = 0));
-    expect(trigger(s)).toBe("BUY");
+    [["BUY", "BUY", "NONE"], 2, "BUY"],
+    [["SELL", "NONE", "SELL"], 2, "SELL"],
+    [["BUY", "SELL", "NONE"], 2, null],
+    [["BUY", "BUY", "SELL"], 3, null],
+    [["BUY", "BUY", "BUY"], 3, "BUY"],
+  ] as const)("uses true group consensus %j minimum %s → %s", (input, minimum, expected) => {
+    expect(groupTrigger(groups([...input]), minimum)).toBe(expected);
+  });
+  it("keeps legacy six-scanner trigger available only as diagnostic behavior", () => {
+    expect(
+      trigger(scanners(["BUY", "BUY", "SELL", "SELL", "NONE", "NONE"])),
+    ).toBeNull();
+  });
+  it("builds a dedicated analyst context without unrelated scanner payloads", () => {
+    const scannerOutput = scan(market, defaultConfig, "v1");
+    const group = analyzeGroups(market, scannerOutput, defaultConfig, "v1")[0];
+    const context = buildGroupContext(market, group, defaultConfig);
+    expect(context.specialization).toBe("SMC_ICT");
+    expect(context.deterministic_snapshot.group).toBe("SMC_ICT");
+    expect(context).not.toHaveProperty("scanners");
+    expect(context.recent_candles.M5.length).toBeLessThanOrEqual(36);
   });
 });
 describe("Consensus and confidence", () => {
@@ -255,18 +283,18 @@ describe("Consensus and confidence", () => {
     expect(voting(a, null).direction).toBeNull();
   });
   it("fixed denominators and exact weighted formula; model confidence ignored", () => {
-    const s = scanners(["BUY", "BUY", "BUY", "NONE", "SELL", "NONE"]),
+    const g = groups(["BUY", "BUY", "SELL"]),
       a = analysts(["BUY", "BUY", "BUY", "SELL", "UNAVAILABLE", "UNAVAILABLE"]);
-    const c = confidence("BUY", s, a, ["BUY", "NONE", "SELL"], defaultConfig);
-    expect(c.scanner).toBe(50);
+    const c = confidence("BUY", g, a, ["BUY", "NONE", "SELL"], defaultConfig);
+    expect(c.scanner).toBeCloseTo(66.6666666667);
     expect(c.ai).toBe(50);
     expect(c.mtf).toBe(52.5);
-    expect(c.total).toBe(50.75);
+    expect(c.total).toBeCloseTo(55.75);
     a.forEach((x) => {
       if (x.output) x.output.confidence = 0;
     });
     expect(
-      confidence("BUY", s, a, ["BUY", "NONE", "SELL"], defaultConfig),
+      confidence("BUY", g, a, ["BUY", "NONE", "SELL"], defaultConfig),
     ).toEqual(c);
   });
 });
