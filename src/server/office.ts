@@ -344,9 +344,11 @@ export class Office extends DurableObject<Env> {
           models: string[];
         }>(`models:${id}`);
         const models =
-          path === "/models" && cache && Date.now() - cache.at < 3600000
-            ? cache.models
-            : await discoverModels(this.env, id);
+          path === "/test-provider" && id === "workers-ai"
+            ? [workersAIModel]
+            : path === "/models" && cache && Date.now() - cache.at < 3600000
+              ? cache.models
+              : await discoverModels(this.env, id);
         await this.ctx.storage.put(`models:${id}`, { at: Date.now(), models });
         let inference: "PASS" | undefined;
         if (path === "/test-provider" && id === "workers-ai") {
