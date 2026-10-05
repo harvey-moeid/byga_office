@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Html, OrbitControls } from "@react-three/drei";
+import { ContactShadows, Html, OrbitControls } from "@react-three/drei";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   TOUCH,
@@ -68,7 +68,7 @@ function InteriorReflections() {
   return null;
 }
 
-type View = "overview" | "floor" | "meeting" | "boss";
+type View = "overview" | "cinematic" | "floor" | "meeting" | "boss";
 const QUALITY_STORAGE_KEY = "byga:3d-quality";
 const views: Record<
   View,
@@ -82,6 +82,11 @@ const views: Record<
     label: "Seluruh kantor",
     camera: [15.2, 14.6, 19.4],
     target: [0, 0.55, 0.15],
+  },
+  cinematic: {
+    label: "Cinematic",
+    camera: [17.8, 8.9, 15.8],
+    target: [0.9, 0.78, 0.9],
   },
   floor: {
     label: "Area analis",
@@ -414,6 +419,17 @@ export default function OfficeScene({
           color="#ffe2b8"
         />
         <OfficeEnvironment detail={profile.decorative} />
+        {quality !== "low" && (
+          <ContactShadows
+            position={[0, 0.015, 0]}
+            opacity={quality === "ultra" ? 0.34 : 0.24}
+            scale={22}
+            blur={quality === "ultra" ? 2.8 : 2.2}
+            far={8}
+            resolution={quality === "ultra" ? 1024 : 512}
+            frames={quality === "ultra" ? Infinity : 1}
+          />
+        )}
         {profile.decorative && <HybridOfficeAssets />}
         {profile.decorative && (
           <PremiumOfficeAccents
@@ -492,7 +508,7 @@ export default function OfficeScene({
           minDistance={4}
           maxDistance={48}
           minPolarAngle={0.3}
-          maxPolarAngle={1.4}
+          maxPolarAngle={1.34}
           enableDamping
           onChange={() => {
             const c = controls.current;
