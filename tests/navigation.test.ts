@@ -135,6 +135,10 @@ describe("office navigation", () => {
       expect(assignments.length).toBeLessThanOrEqual(6);
       expect(event.durationMs).toBeGreaterThanOrEqual(10_000);
       expect(event.durationMs).toBeLessThanOrEqual(60_000);
+      const destinations = assignments.map((activity) =>
+        activity!.destination.join(","),
+      );
+      expect(new Set(destinations).size).toBe(destinations.length);
       assignments.forEach((activity) => {
         expect(activity!.durationMs).toBeGreaterThanOrEqual(10_000);
         expect(activity!.durationMs).toBeLessThanOrEqual(60_000);

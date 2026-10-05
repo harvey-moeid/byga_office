@@ -1,5 +1,5 @@
-import { formatPrice, formatWib, type Signal } from "../core/contracts";
-import { composition } from "../core/engine";
+import { MARKET, formatPrice, formatWib, type GroupSnapshot, type Signal } from "../core/contracts";
+import { composition, groupComposition } from "../core/engine";
 import type { Env } from "./env";
 import type { CaseRow } from "./office";
 import type { ScannerOutput } from "../core/contracts";
@@ -9,15 +9,16 @@ export function discordPayload(
   origin: string,
   signal?: Signal,
 ) {
-  const snapshot = JSON.parse(row.context) as { scanners: ScannerOutput[] };
+  const snapshot = JSON.parse(row.context) as { scanners: ScannerOutput[]; groups?: GroupSnapshot[] };
   const c = composition(snapshot.scanners);
+  const groups = snapshot.groups?.length === 3 ? groupComposition(snapshot.groups) : null;
   let content =
     kind === "MEETING"
-      ? `AI OFFICE MEETING STARTED\nBTCUSDT · ${row.direction ?? "Neutral"}\nScanners: ${c.BUY} BUY / ${c.SELL} SELL / ${c.NONE} NONE\nPrice: ${(JSON.parse(row.context) as { market: { M5: { close: number }[] } }).market.M5.at(-1)?.close ?? "—"}\n${row.id} · ${formatWib(row.created_at)}\n${origin}/cases/${row.id}`
+      ? `AI OFFICE MEETING STARTED\n${MARKET} · ${row.direction ?? "Neutral"}\n${groups ? `Groups: ${groups.BUY} BUY / ${groups.SELL} SELL / ${groups.NONE} NONE\n` : ""}Scanners: ${c.BUY} BUY / ${c.SELL} SELL / ${c.NONE} NONE\nPrice: ${(JSON.parse(row.context) as { market: { M5: { close: number }[] } }).market.M5.at(-1)?.close ?? "—"}\n${row.id} · ${formatWib(row.created_at)}\n${origin}/cases/${row.id}`
       : kind === "NO_CONSENSUS"
         ? `NO_CONSENSUS · ${row.id}\n${origin}/cases/${row.id}`
         : signal
-          ? `${signal.direction} · BTCUSDT · ${signal.signal_id}\nCase: ${row.id}\nEntry Zone: ${formatPrice(signal.entry_low, signal.tick_size)} – ${formatPrice(signal.entry_high, signal.tick_size)}\nPreferred Entry: ${formatPrice(signal.preferred_entry, signal.tick_size)}\nTP: ${formatPrice(signal.take_profit, signal.tick_size)} · SL: ${formatPrice(signal.stop_loss, signal.tick_size)}\nR:R 1:${signal.risk_reward.toFixed(2)} · Confidence ${Math.round(signal.confidence)}%\nScanners: ${JSON.stringify(signal.scanner_composition)}\nAI votes: ${JSON.stringify(signal.ai_vote_composition)}\nBoss: ${signal.boss_summary.slice(0, 400)}\n${signal.flags.includes("LOW_RR") ? `⚠ LOW R:R — 1:${signal.risk_reward.toFixed(2)} (minimum 1:${signal.minimum_risk_reward.toFixed(2)})\n` : ""}${signal.flags.join(" · ")}\n${formatWib(signal.created_at)}\n${origin}/signals/${signal.signal_id}`
+          ? `${signal.direction} · ${signal.market} · ${signal.signal_id}\nCase: ${row.id}\nEntry Zone: ${formatPrice(signal.entry_low, signal.tick_size)} – ${formatPrice(signal.entry_high, signal.tick_size)}\nPreferred Entry: ${formatPrice(signal.preferred_entry, signal.tick_size)}\nTP: ${formatPrice(signal.take_profit, signal.tick_size)} · SL: ${formatPrice(signal.stop_loss, signal.tick_size)}\nR:R 1:${signal.risk_reward.toFixed(2)} · Confidence ${Math.round(signal.confidence)}%\nGroups: ${JSON.stringify(signal.group_composition)}\nScanners: ${JSON.stringify(signal.scanner_composition)}\nAI votes: ${JSON.stringify(signal.ai_vote_composition)}\nBoss: ${signal.boss_summary.slice(0, 400)}\n${signal.flags.includes("LOW_RR") ? `⚠ LOW R:R — 1:${signal.risk_reward.toFixed(2)} (minimum 1:${signal.minimum_risk_reward.toFixed(2)})\n` : ""}${signal.flags.join(" · ")}\n${formatWib(signal.created_at)}\n${origin}/signals/${signal.signal_id}`
           : "";
   content = content.slice(0, 1950);
   return { content, allowed_mentions: { parse: [] } };
@@ -72,10 +73,16 @@ export async function retryDeliveries(env: Env, fetcher: typeof fetch = fetch) {
         .run();
       continue;
     }
+    const productionWebhook =
+      parsed.hostname === "discord.com" &&
+      parsed.pathname.startsWith("/api/webhooks/");
+    const testWebhook =
+      env.APP_ENV === "test" &&
+      parsed.hostname === "discord.invalid" &&
+      parsed.pathname.startsWith("/webhooks/");
     if (
       parsed.protocol !== "https:" ||
-      parsed.hostname !== "discord.com" ||
-      !parsed.pathname.startsWith("/api/webhooks/")
+      (!productionWebhook && !testWebhook)
     ) {
       await env.DB.prepare(
         "UPDATE discord_deliveries SET status='FAILED',last_error='Invalid webhook destination' WHERE key=?",

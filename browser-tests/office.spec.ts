@@ -144,7 +144,7 @@ test("case and character provider metadata are visible only in Admin views", asy
     }),
   ).toBeVisible();
 });
-test("Admin saves scanner minimum and Operations shows the stored threshold", async ({
+test("Admin saves group minimum and Operations shows the stored threshold", async ({
   page,
 }) => {
   let config = { ...defaultConfig };
@@ -156,7 +156,7 @@ test("Admin saves scanner minimum and Operations shows the stored threshold", as
     if (route.request().method() === "POST") {
       const body = route.request().postDataJSON();
       expect(body.activation).toBe("NEXT CASE");
-      expect(body.config.scannerConsensusMin).toBe(4);
+      expect(body.config.scannerConsensusMin).toBe(3);
       config = body.config;
       version++;
       return route.fulfill({ json: { id: `TRADING-CONFIG-v${version}` } });
@@ -172,6 +172,12 @@ test("Admin saves scanner minimum and Operations shows the stored threshold", as
         active: null,
         scanners: [],
         scanner_consensus_min: config.scannerConsensusMin,
+        group_consensus_min: config.scannerConsensusMin,
+        groups: [
+          { group: "SMC_ICT", direction: "BUY" },
+          { group: "INDICATORS", direction: "BUY" },
+          { group: "VOLUME", direction: "NONE" },
+        ],
       },
     }),
   );
@@ -181,11 +187,11 @@ test("Admin saves scanner minimum and Operations shows the stored threshold", as
   });
   await page.goto("/admin");
   const minimum = page.getByRole("combobox", {
-    name: "Minimal Scanner Consensus",
+    name: "Minimal Group Consensus",
   });
   await expect(minimum).toHaveValue("2");
-  await expect(minimum.locator("option")).toHaveCount(6);
-  await minimum.selectOption("4");
+  await expect(minimum.locator("option")).toHaveCount(3);
+  await minimum.selectOption("3");
   await page
     .getByRole("button", { name: "Save new version", exact: true })
     .click();
@@ -193,10 +199,10 @@ test("Admin saves scanner minimum and Operations shows the stored threshold", as
     "Tersimpan: TRADING-CONFIG-v2",
   );
   await page.reload();
-  await expect(minimum).toHaveValue("4");
+  await expect(minimum).toHaveValue("3");
   await page.goto("/operations");
   await expect(
-    page.getByText("Minimal 4 · majority unik", { exact: true }),
+    page.getByText("Minimal 3 · 3 group", { exact: true }),
   ).toBeVisible();
 });
 test("Admin selects Workers AI for primary and fallback and persists model IDs", async ({

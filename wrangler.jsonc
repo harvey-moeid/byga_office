@@ -8,6 +8,6 @@
   "durable_objects": {"bindings": [{"name": "OFFICE", "class_name": "Office"}]},
   "ai": {"binding": "AI"},
   "migrations": [{"tag": "v1", "new_sqlite_classes": ["Office"]}],
-  "triggers": {"crons": ["* * * * *"]},
+  "triggers": {"crons": ["*/5 * * * *"]},
   "vars": {"APP_ENV": "development", "PUBLIC_ORIGIN": "http://localhost:8787", "CHART_SCHEMA": "{\"table\":\"candles\",\"market\":\"symbol\",\"timeframe\":\"timeframe\",\"timestamp\":\"timestamp\",\"open\":\"open\",\"high\":\"high\",\"low\":\"low\",\"close\":\"close\",\"volume\":\"volume\",\"timestampUnit\":\"seconds\"}"}
 }

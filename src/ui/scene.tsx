@@ -30,7 +30,7 @@ import { HybridOfficeAssets } from "./office-assets";
 import { PremiumOfficeAccents } from "./office-premium";
 import { OfficeCharacter } from "./office-character";
 import {
-  ACTIVITY_TRAVEL_BUFFER_MS,
+  ACTIVITY_TRAVEL_TIMEOUT_MS,
   activityDelayMs,
   createOfficeActivityEvent,
   type OfficeActivity,
@@ -219,7 +219,7 @@ function MarketWall({
       )}
       <Html portal={labelHost} position={[-2.15, 0.67, 0.13]}>
         <span className="screen-label">
-          BTCUSDT <small>· CLOSED CANDLES</small>
+          BTCUSDT.P <small>· CLOSED CANDLES</small>
         </span>
       </Html>
       {!geometry && (
@@ -298,6 +298,9 @@ export default function OfficeScene({
     Partial<Record<CharacterId, OfficeActivity>>
   >({});
   const firstActivity = useRef(true);
+  const activityArrivalHandler = useRef<
+    (id: CharacterId, activity: OfficeActivity) => void
+  >(() => {});
   const meetingActive = !!meetingId || isMeeting(state);
   useEffect(() => {
     let disposed = false;
@@ -310,34 +313,61 @@ export default function OfficeScene({
           return;
         }
         const event = createOfficeActivityEvent();
+        const pending = new Set(
+          Object.keys(event.assignments) as CharacterId[],
+        );
+        const started = new Set<CharacterId>();
+        let cycleFinished = false;
+        const finishIfDone = () => {
+          if (cycleFinished || pending.size) return;
+          cycleFinished = true;
+          activityArrivalHandler.current = () => {};
+          schedule(false);
+        };
         setActivities(event.assignments);
-        (
-          Object.entries(event.assignments) as [CharacterId, OfficeActivity][]
-        ).forEach(([id, activity]) => {
+        activityArrivalHandler.current = (id, activity) => {
+          if (
+            disposed ||
+            started.has(id) ||
+            event.assignments[id] !== activity
+          )
+            return;
+          started.add(id);
           timers.push(
             window.setTimeout(() => {
               if (disposed) return;
               setActivities((current) => {
                 if (current[id] !== activity) return current;
-                const next = { ...current };
-                delete next[id];
-                return next;
+                const updated = { ...current };
+                delete updated[id];
+                return updated;
               });
-            }, activity.durationMs + ACTIVITY_TRAVEL_BUFFER_MS),
+              pending.delete(id);
+              finishIfDone();
+            }, activity.durationMs),
           );
-        });
+        };
         timers.push(
           window.setTimeout(() => {
             if (disposed) return;
-            setActivities({});
-            schedule(false);
-          }, event.durationMs + ACTIVITY_TRAVEL_BUFFER_MS),
+            setActivities((current) => {
+              const updated = { ...current };
+              for (const id of pending) {
+                if (started.has(id)) continue;
+                if (updated[id] === event.assignments[id]) delete updated[id];
+                pending.delete(id);
+              }
+              return updated;
+            });
+            finishIfDone();
+          }, ACTIVITY_TRAVEL_TIMEOUT_MS),
         );
       }, activityDelayMs(first));
       timers.push(timer);
     };
     if (meetingActive) {
       firstActivity.current = false;
+      activityArrivalHandler.current = () => {};
       setActivities({});
     } else {
       const first = firstActivity.current;
@@ -346,6 +376,7 @@ export default function OfficeScene({
     }
     return () => {
       disposed = true;
+      activityArrivalHandler.current = () => {};
       timers.forEach((timer) => window.clearTimeout(timer));
     };
   }, [meetingActive]);
@@ -489,6 +520,9 @@ export default function OfficeScene({
             onSelect={onSelect}
             labelHost={labelHost}
             onSpeechReady={onSpeechReady}
+            onActivityArrive={(id, activity) =>
+              activityArrivalHandler.current(id, activity)
+            }
             speech={
               speech?.character === id && onSpeechDetails ? (
                 <SpeechBubble turn={speech} onDetails={onSpeechDetails} />

@@ -1,4 +1,5 @@
 import { z } from "zod";
+export const MARKET = "BTCUSDT.P" as const;
 export const directionSchema = z.enum(["BUY", "SELL", "NONE"]);
 export type Direction = z.infer<typeof directionSchema>;
 export type TradeDirection = Exclude<Direction, "NONE">;
@@ -33,7 +34,7 @@ const weights = z
     "Weights must total 100",
   );
 export const configSchema = z.object({
-  scannerConsensusMin: z.number().int().min(1).max(6).default(2),
+  scannerConsensusMin: z.number().int().min(1).max(3).default(2),
   scanner: z.object({
     ema: z.tuple([
       z.number().int().min(2).max(500),
@@ -159,6 +160,18 @@ export const scannerOutputSchema = z.object({
   candle_timestamp: z.number().int().nonnegative(),
   config_version: z.string().min(1),
 });
+export const analysisGroups = ["SMC_ICT", "INDICATORS", "VOLUME"] as const;
+export type AnalysisGroup = (typeof analysisGroups)[number];
+export interface GroupSnapshot {
+  group: AnalysisGroup;
+  direction: Direction;
+  strength: number;
+  reasons: string[];
+  payload: Record<string, unknown>;
+  timestamp: number;
+  candle_timestamp: number;
+  config_version: string;
+}
 export const providers = [
   "workers-ai",
   "openai",
@@ -277,13 +290,14 @@ export interface Signal extends Risk {
   signal_id: string;
   case_uuid: string;
   case_id: string;
-  market: "BTCUSDT";
+  market: typeof MARKET;
   direction: TradeDirection;
   confidence: number;
   h1_bias: Direction;
   m15_setup: Direction;
   m5_trigger: Direction;
   scanner_composition: Record<Direction, number>;
+  group_composition: Record<Direction, number>;
   ai_vote_composition: Record<string, number>;
   source: "AUTO" | "EMERGENCY";
   created_at: number;

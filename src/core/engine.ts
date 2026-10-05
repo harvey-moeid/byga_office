@@ -11,10 +11,14 @@ import {
 } from "./indicators";
 import {
   defaultConfig,
+  MARKET,
   scannerNames,
   scannerOutputSchema,
   type AnalystResult,
+  type AnalysisGroup,
+  type CharacterId,
   type Direction,
+  type GroupSnapshot,
   type MarketContext,
   type Risk,
   type ScannerOutput,
@@ -155,6 +159,175 @@ export function scan(
     }))
     .map((s) => scannerOutputSchema.parse(s));
 }
+function directionalWinner(directions: Direction[]): Direction {
+  const buy = directions.filter((d) => d === "BUY").length;
+  const sell = directions.filter((d) => d === "SELL").length;
+  return buy > sell ? "BUY" : sell > buy ? "SELL" : "NONE";
+}
+function groupStrength(scanners: ScannerOutput[], direction: Direction) {
+  if (direction === "NONE") return 0;
+  const matching = scanners.filter((s) => s.direction === direction);
+  return matching.length
+    ? Math.round(matching.reduce((sum, s) => sum + s.strength, 0) / matching.length)
+    : 0;
+}
+export function analyzeGroups(
+  context: MarketContext,
+  scanners: ScannerOutput[],
+  config: TradingConfig,
+  version: string,
+  now = Date.now(),
+): GroupSnapshot[] {
+  const byName = Object.fromEntries(scanners.map((s) => [s.name, s])) as Record<
+    ScannerOutput["name"],
+    ScannerOutput
+  >;
+  const smcScanners = [byName.structure, byName.liquidity];
+  const indicatorScanners = [
+    byName.trend,
+    byName.momentum,
+    byName["mean-reversion"],
+  ];
+  const smcDirection = directionalWinner(smcScanners.map((s) => s.direction));
+  const indicatorDirection = directionalWinner(
+    indicatorScanners.map((s) => s.direction),
+  );
+  const fast = indicators(context.M5, config);
+  const recent = context.M5.slice(-6);
+  const previousVolume =
+    mean(recent.slice(0, -1).map((c) => c.volume)) || 1;
+  const volumeExpansion = context.M5.at(-1)!.volume / previousVolume;
+  const volumeDirection: Direction =
+    volumeExpansion >= config.scanner.volumeRatio &&
+    fast.body > 0 &&
+    fast.roc > 0
+      ? "BUY"
+      : volumeExpansion >= config.scanner.volumeRatio &&
+          fast.body < 0 &&
+          fast.roc < 0
+        ? "SELL"
+        : "NONE";
+  const common = {
+    timestamp: now,
+    candle_timestamp: context.M5.at(-1)!.timestamp,
+    config_version: version,
+  };
+  return [
+    {
+      group: "SMC_ICT",
+      direction: smcDirection,
+      strength: groupStrength(smcScanners, smcDirection),
+      reasons: smcScanners.flatMap((s) => s.reasons),
+      payload: {
+        structure: {
+          direction: byName.structure.direction,
+          levels: byName.structure.levels,
+          detail: byName.structure.indicators.M5,
+        },
+        liquidity: {
+          direction: byName.liquidity.direction,
+          levels: byName.liquidity.levels,
+          detail: byName.liquidity.indicators.M5,
+        },
+      },
+      ...common,
+    },
+    {
+      group: "INDICATORS",
+      direction: indicatorDirection,
+      strength: groupStrength(indicatorScanners, indicatorDirection),
+      reasons: indicatorScanners.flatMap((s) => s.reasons),
+      payload: {
+        trend: byName.trend.direction,
+        momentum: byName.momentum.direction,
+        mean_reversion: byName["mean-reversion"].direction,
+        H1: byName.trend.indicators.H1,
+        M15: byName.trend.indicators.M15,
+        M5: byName.trend.indicators.M5,
+      },
+      ...common,
+    },
+    {
+      group: "VOLUME",
+      direction: volumeDirection,
+      strength:
+        volumeDirection === "NONE"
+          ? 0
+          : Math.min(100, Math.round(50 + Math.min(50, (volumeExpansion - 1) * 50))),
+      reasons: [
+        volumeDirection === "NONE"
+          ? "Volume: expansion and directional price confirmation not aligned"
+          : `Volume: ${volumeDirection} confirmed by M5 volume expansion, body and ROC`,
+      ],
+      payload: {
+        volume_ratio: fast.volumeRatio,
+        recent_volume_ratio: volumeExpansion,
+        body: fast.body,
+        roc: fast.roc,
+        price: fast.price,
+      },
+      ...common,
+    },
+  ];
+}
+export function groupComposition(groups: GroupSnapshot[]) {
+  return groups.reduce(
+    (a, group) => {
+      a[group.direction]++;
+      return a;
+    },
+    { BUY: 0, SELL: 0, NONE: 0 },
+  );
+}
+export function groupTrigger(
+  groups: GroupSnapshot[],
+  minimum = defaultConfig.scannerConsensusMin,
+): TradeDirection | null {
+  const c = groupComposition(groups);
+  return c.BUY >= minimum && c.BUY > c.SELL
+    ? "BUY"
+    : c.SELL >= minimum && c.SELL > c.BUY
+      ? "SELL"
+      : null;
+}
+export function fallbackDirection(
+  groups: GroupSnapshot[],
+  context: MarketContext,
+): TradeDirection {
+  const score = (direction: TradeDirection) =>
+    groups
+      .filter((group) => group.direction === direction)
+      .reduce((sum, group) => sum + Math.max(1, group.strength), 0);
+  const buy = score("BUY");
+  const sell = score("SELL");
+  if (buy !== sell) return buy > sell ? "BUY" : "SELL";
+  const last = context.M5.at(-1)!;
+  return last.close >= last.open ? "BUY" : "SELL";
+}
+export function analystGroup(id: CharacterId): AnalysisGroup | null {
+  if (id === "structure" || id === "liquidity") return "SMC_ICT";
+  if (id === "trend" || id === "momentum") return "INDICATORS";
+  if (id === "volume" || id === "quant") return "VOLUME";
+  return null;
+}
+export function buildGroupContext(
+  context: MarketContext,
+  group: GroupSnapshot,
+  config: TradingConfig,
+) {
+  const candles = {
+    H1: context.H1.slice(-Math.min(config.context.H1, 12)),
+    M15: context.M15.slice(-Math.min(config.context.M15, 24)),
+    M5: context.M5.slice(-Math.min(config.context.M5, 36)),
+  };
+  return {
+    market: MARKET,
+    specialization: group.group,
+    deterministic_snapshot: group,
+    recent_candles: candles,
+  };
+}
+
 export function composition(scanners: ScannerOutput[]) {
   return scanners.reduce(
     (a, s) => {
@@ -210,15 +383,15 @@ export function voting(
 }
 export function confidence(
   direction: TradeDirection,
-  scanners: ScannerOutput[],
+  groups: GroupSnapshot[],
   analysts: AnalystResult[],
   mtf: Direction[],
   config: TradingConfig,
 ) {
-  if (scanners.length !== 6 || analysts.length !== 6 || mtf.length !== 3)
-    throw new Error("Confidence requires 6 scanners, 6 analysts, 3 timeframes");
+  if (groups.length !== 3 || analysts.length !== 6 || mtf.length !== 3)
+    throw new Error("Confidence requires 3 groups, 6 analysts, 3 timeframes");
   const sc =
-      (scanners.filter((s) => s.direction === direction).length / 6) * 100,
+      (groups.filter((s) => s.direction === direction).length / 3) * 100,
     ai =
       (analysts.filter((a) => a.output?.vote === direction).length / 6) * 100;
   const alignment = mtf.reduce(

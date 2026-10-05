@@ -11,10 +11,12 @@ import {
   useLocation,
 } from "react-router-dom";
 import {
+  MARKET,
   characterIds,
   defaultConfig,
   type AvatarPreset,
   type CharacterId,
+  type GroupSnapshot,
   formatPrice,
   formatWib,
   scannerNames,
@@ -49,6 +51,8 @@ const SimulationPlayback = lazy(() =>
 );
 interface OfficeState {
   scanner_consensus_min?: number;
+  group_consensus_min?: number;
+  groups?: GroupSnapshot[];
   office: string;
   active: { id: string; status: string } | null;
   scanners: ScannerOutput[];
@@ -167,7 +171,7 @@ function AppLayout() {
             ))}
           </nav>
           <div className="sidebar-bottom">
-            <span className="dot" /> BTCUSDT ONLY
+            <span className="dot" /> {MARKET} ONLY
             <small>Asia/Jakarta · WIB</small>
           </div>
         </aside>
@@ -299,20 +303,21 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
             </small>
           </div>
           <div>
-            <span>SCANNER CONSENSUS</span>
+            <span>GROUP CONSENSUS</span>
             <strong>
-              {state.data?.scanners.filter((s) => s.direction === "BUY")
+              {state.data?.groups?.filter((group) => group.direction === "BUY")
                 .length ?? 0}
               <em> BUY </em>
-              {state.data?.scanners.filter((s) => s.direction === "SELL")
+              {state.data?.groups?.filter((group) => group.direction === "SELL")
                 .length ?? 0}
               <em> SELL</em>
             </strong>
             <small>
               Minimal{" "}
-              {state.data?.scanner_consensus_min ??
+              {state.data?.group_consensus_min ??
+                state.data?.scanner_consensus_min ??
                 defaultConfig.scannerConsensusMin}{" "}
-              · majority unik
+              · 3 group
             </small>
           </div>
         </div>
@@ -723,7 +728,7 @@ function Signals() {
                 <span>{s.signal_id}</span>
                 <strong>{Math.round(s.confidence)}%</strong>
               </div>
-              <h3>BTCUSDT</h3>
+              <h3>{s.market}</h3>
               <p>
                 Entry {formatPrice(s.entry_low, s.tick_size)} –{" "}
                 {formatPrice(s.entry_high, s.tick_size)}
@@ -765,7 +770,7 @@ function SignalView({ signal: s }: { signal: Signal }) {
         <Badge value={s.direction} />
         <strong className="big-number">{Math.round(s.confidence)}%</strong>
       </div>
-      <h2>BTCUSDT · {s.signal_id}</h2>
+      <h2>{s.market} · {s.signal_id}</h2>
       <div className="risk-grid">
         {[
           ["Entry Low", s.entry_low],

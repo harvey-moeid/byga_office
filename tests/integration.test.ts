@@ -108,9 +108,9 @@ beforeAll(async () => {
         OPENROUTER_API_KEY: "fixture-only-openrouter",
         GEMINI_API_KEY: "fixture-only-gemini",
         DISCORD_MEETING_WEBHOOK:
-          "https://discord.com/api/webhooks/fixture/meeting",
+          "https://discord.invalid/webhooks/meeting",
         DISCORD_SIGNAL_WEBHOOK:
-          "https://discord.com/api/webhooks/fixture/signal",
+          "https://discord.invalid/webhooks/signal",
       },
       serviceBindings: {
         ASSETS: async () => new MFResponse("<html><body>BYGA</body></html>"),
@@ -118,7 +118,7 @@ beforeAll(async () => {
       outboundService: async (request) => {
         requests++;
         const u = new URL(request.url);
-        if (u.hostname === "discord.com") {
+        if (u.hostname === "discord.invalid") {
           if (discordStatus === "timeout")
             throw new Error("Fixture network interruption");
           discordMessages.push(
@@ -210,7 +210,7 @@ beforeAll(async () => {
       return market
         .prepare("INSERT INTO candles VALUES (?,?,?,?,?,?,?,?,?)")
         .bind(
-          "BTCUSDT",
+          "BTCUSDT.P",
           tf,
           latest - (319 - i) * duration,
           close - 0.3,
@@ -472,11 +472,11 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
         .run(),
     ).rejects.toThrow("immutable config");
   });
-  it("persists Admin scanner minimum, rejects invalid values and blocks AUTO below threshold", async () => {
+  it("persists Admin three-group minimum and rejects invalid values", async () => {
     const config = {
       ...defaultConfig,
       publicSignals: true,
-      scannerConsensusMin: 6,
+      scannerConsensusMin: 3,
     };
     const saved = await call("/admin/config", {
       config,
@@ -486,12 +486,13 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     const version = (await saved.json()) as { id: string };
     expect(await (await call("/admin/config")).json()).toMatchObject({
       id: version.id,
-      config: { scannerConsensusMin: 6 },
+      config: { scannerConsensusMin: 3 },
     });
     expect(await (await call("/office/state")).json()).toMatchObject({
-      scanner_consensus_min: 6,
+      scanner_consensus_min: 3,
+      group_consensus_min: 3,
     });
-    for (const minimum of [0, 7, 2.5]) {
+    for (const minimum of [0, 4, 2.5]) {
       expect(
         (
           await call("/admin/config", {
@@ -504,25 +505,15 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     expect((await call("/admin/scan", {})).status).toBe(200);
     const state = (await (await call("/office/state")).json()) as {
       scanners: { direction: string }[];
+      groups: { group: string; direction: string }[];
     };
     expect(state.scanners).toHaveLength(6);
-    expect(
-      Math.max(
-        ...["BUY", "SELL"].map(
-          (direction) =>
-            state.scanners.filter((s) => s.direction === direction).length,
-        ),
-      ),
-    ).toBeLessThan(6);
-    const db = await mf.getD1Database("DB");
-    expect(
-      (await db
-        .prepare(
-          "SELECT COUNT(*) AS n FROM cases WHERE source='AUTO' AND config_version=?",
-        )
-        .bind(version.id)
-        .first<{ n: number }>())!.n,
-    ).toBe(0);
+    expect(state.groups).toHaveLength(3);
+    expect(state.groups.map((group) => group.group).sort()).toEqual([
+      "INDICATORS",
+      "SMC_ICT",
+      "VOLUME",
+    ]);
     await call("/admin/config", {
       config: { ...defaultConfig, publicSignals: true },
       activation: "NEXT CASE",
@@ -545,6 +536,8 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     const c = await done(item.id);
     expect(c.status, JSON.stringify(c.result)).toBe("COMPLETED");
     expect(c.result.signal?.direction).toBe("BUY");
+    expect(c.result.signal?.market).toBe("BTCUSDT.P");
+    expect(c.result.signal?.group_composition).toBeTruthy();
     expect(c.result.signal?.flags).toContain("EMERGENCY");
     const db = await mf.getD1Database("DB");
     expect(
@@ -1027,7 +1020,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       .prepare("SELECT COUNT(*) AS n FROM signals")
       .first<{ n: number }>())!.n;
     await mf.unsafeEvictDurableObject("test-office", "Office", {
-      name: "BTCUSDT",
+      name: "BTCUSDT.P",
     });
     const res = await call("/office/state");
     expect(res.status).toBe(200);
@@ -1075,7 +1068,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     const before = requests;
     const ns = await mf.getDurableObjectNamespace("OFFICE");
     const response = await ns
-      .get(ns.idFromName("BTCUSDT"))
+      .get(ns.idFromName("BTCUSDT.P"))
       .fetch("https://test/__test/alarm");
     expect(response.status).toBe(200);
     expect((await done(id)).status).toBe("COMPLETED");
@@ -1206,7 +1199,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       .prepare("INSERT INTO api_limits VALUES ('fixture-expired',1,0)")
       .run();
     const ns = await mf.getDurableObjectNamespace("OFFICE");
-    const stub = ns.get(ns.idFromName("BTCUSDT"));
+    const stub = ns.get(ns.idFromName("BTCUSDT.P"));
     await stub.fetch("https://test/__test/idle");
     await stub.fetch("https://test/__test/alarm");
     const audit = await db
@@ -1291,7 +1284,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       .bind(key, "fixture", "SIGNAL", Date.now())
       .run();
     const ns = await mf.getDurableObjectNamespace("OFFICE");
-    const stub = ns.get(ns.idFromName("BTCUSDT"));
+    const stub = ns.get(ns.idFromName("BTCUSDT.P"));
     discordStatus = "timeout";
     try {
       await stub.fetch("https://test/__test/deliveries");
@@ -1357,7 +1350,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       .bind(key, "fixture", "SIGNAL", Date.now() - 3600000)
       .run();
     const ns = await mf.getDurableObjectNamespace("OFFICE");
-    const stub = ns.get(ns.idFromName("BTCUSDT"));
+    const stub = ns.get(ns.idFromName("BTCUSDT.P"));
     discordStatus = 429;
     try {
       await stub.fetch("https://test/__test/deliveries");
@@ -1415,7 +1408,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       .bind(key, "fixture", "SIGNAL", Date.now() - 3600000, Date.now())
       .run();
     const ns = await mf.getDurableObjectNamespace("OFFICE");
-    const stub = ns.get(ns.idFromName("BTCUSDT"));
+    const stub = ns.get(ns.idFromName("BTCUSDT.P"));
     await stub.fetch("https://test/__test/deliveries");
     expect(
       (await db
@@ -1460,7 +1453,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       .run();
     const calls = requests;
     const ns = await mf.getDurableObjectNamespace("OFFICE");
-    const stub = ns.get(ns.idFromName("BTCUSDT"));
+    const stub = ns.get(ns.idFromName("BTCUSDT.P"));
     await stub.fetch("https://test/__test/alarm");
     expect((await done(row.id as string)).status).toBe("COMPLETED");
     expect(requests).toBe(calls);

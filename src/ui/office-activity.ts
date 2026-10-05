@@ -30,6 +30,7 @@ export interface OfficeActivityEvent {
 export const FIRST_ACTIVITY_DELAY = { min: 30_000, max: 60_000 } as const;
 export const NEXT_ACTIVITY_DELAY = { min: 240_000, max: 360_000 } as const;
 export const ACTIVITY_TRAVEL_BUFFER_MS = 15_000;
+export const ACTIVITY_TRAVEL_TIMEOUT_MS = 90_000;
 
 type RandomSource = () => number;
 type Range = readonly [number, number];
@@ -240,10 +241,13 @@ export function createOfficeActivityEvent(
   }
 
   let longest = 0;
-  participants.forEach((id, index) => {
+  const occupied = new Set<string>();
+  participants.forEach((id) => {
     const kind = pick(individualKinds, random) as keyof typeof individualSpots;
     const spots = individualSpots[kind];
-    const destination = spots[(index + integer(0, spots.length - 1, random)) % spots.length];
+    const available = spots.filter((spot) => !occupied.has(spot.join(",")));
+    const destination = pick(available.length ? available : spots, random);
+    occupied.add(destination.join(","));
     const durationMs = activityDuration(kind, random);
     longest = Math.max(longest, durationMs);
     assignments[id] = {

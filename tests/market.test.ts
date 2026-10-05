@@ -18,8 +18,9 @@ function env(gap = false) {
     expect(sql).toMatch(/^SELECT /);
     expect(sql).not.toMatch(/\b(INSERT|DELETE|UPDATE|REPLACE)\b/);
     return {
-      bind: (_market: string, tf: string, cutoff: number, count: number) => ({
+      bind: (market: string, tf: string, cutoff: number, count: number) => ({
         all: async () => {
+          expect(market).toBe("BTCUSDT.P");
           const duration = { H1: 3600, M15: 900, M5: 300 }[
             tf as "H1" | "M15" | "M5"
           ];
