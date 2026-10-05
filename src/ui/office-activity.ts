@@ -240,10 +240,13 @@ export function createOfficeActivityEvent(
   }
 
   let longest = 0;
-  participants.forEach((id, index) => {
+  const occupied = new Set<string>();
+  participants.forEach((id) => {
     const kind = pick(individualKinds, random) as keyof typeof individualSpots;
     const spots = individualSpots[kind];
-    const destination = spots[(index + integer(0, spots.length - 1, random)) % spots.length];
+    const available = spots.filter((spot) => !occupied.has(spot.join(",")));
+    const destination = pick(available.length ? available : spots, random);
+    occupied.add(destination.join(","));
     const durationMs = activityDuration(kind, random);
     longest = Math.max(longest, durationMs);
     assignments[id] = {
