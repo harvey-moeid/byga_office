@@ -347,8 +347,21 @@ p {
 .office-scene {
   height: 560px;
   position: relative;
-  background: #101e26;
+  background:
+    radial-gradient(circle at 50% 35%, #24312f 0, #111d1f 48%, #091215 100%);
   overflow: hidden;
+  isolation: isolate;
+}
+.office-scene::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, #09111412 0%, transparent 34%, #090d0f22 100%),
+    radial-gradient(circle at 50% 48%, transparent 48%, #05090b55 100%);
+  box-shadow: inset 0 0 90px #05090b55;
 }
 .scene-controls {
   position: absolute;
@@ -612,15 +625,63 @@ p {
   font-size: 8px;
 }
 .room-label {
-  color: #354b3f;
+  color: #2a3b35;
   font-size: 8px;
-  letter-spacing: 0.7px;
+  font-weight: 700;
+  letter-spacing: 0.9px;
   white-space: nowrap;
   text-transform: uppercase;
-  background: #f7f6eecc;
-  padding: 4px 6px;
-  border-radius: 3px;
+  background: #f3eee2e6;
+  border: 1px solid #d6c7a5aa;
+  box-shadow: 0 4px 14px #0003;
+  padding: 4px 7px;
+  border-radius: 4px;
   pointer-events: none;
+}
+.brand-sign-3d {
+  min-width: 180px;
+  color: #25302d;
+  text-align: center;
+  text-shadow: 0 1px 0 #fff8;
+  pointer-events: none;
+  filter: drop-shadow(0 4px 10px #0003);
+}
+.brand-sign-3d strong {
+  display: block;
+  font-family: Manrope, system-ui, sans-serif;
+  font-size: 18px;
+  line-height: 1;
+  letter-spacing: 3.2px;
+  color: #263531;
+}
+.brand-sign-3d span {
+  display: block;
+  margin-top: 7px;
+  font-size: 6px;
+  font-weight: 700;
+  letter-spacing: 1.4px;
+  color: #7b6747;
+}
+.office-mantra {
+  display: grid;
+  gap: 2px;
+  min-width: 90px;
+  padding: 8px 10px;
+  border: 1px solid #b9a17066;
+  border-radius: 4px;
+  background: #182322dd;
+  box-shadow: 0 8px 20px #0004;
+  color: #ddd4c2;
+  font-size: 6px;
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: 1.2px;
+  text-align: left;
+  pointer-events: none;
+}
+.office-mantra b {
+  color: #d9b66e;
+  font-size: 8px;
 }
 
 @media (max-width: 600px) {
