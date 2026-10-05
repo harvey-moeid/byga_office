@@ -1,5 +1,6 @@
 import {
   analysisSchema,
+  workersAIModel,
   type Analysis,
   type AnalystResult,
   type CharacterConfig,
@@ -306,27 +307,49 @@ export async function discoverModels(
   fetcher: typeof fetch = fetch,
 ) {
   if (provider === "workers-ai") {
-    if (!env.AI) throw new Error("PROVIDER_NOT_CONFIGURED");
-    const models: string[] = [];
-    for (let page = 1; page <= 5; page++) {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const found = await Promise.race([
-        env.AI.models({ page, per_page: 100, hide_experimental: true }),
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () => reject(new Error("MODEL_DISCOVERY_TIMEOUT")),
-            10000,
-          );
-        }),
-      ]).finally(() => clearTimeout(timer));
-      models.push(
-        ...found
-          .filter((m) => m.task.name.toLowerCase() === "text generation")
-          .map((m) => m.name),
-      );
-      if (found.length < 100) break;
+    if (!env.AI || typeof env.AI.run !== "function")
+      throw new Error("PROVIDER_NOT_CONFIGURED");
+    // The production AI binding guarantees run(), but catalog discovery is not
+    // part of the stable binding contract on every runtime/account. Keep a
+    // known-good model available instead of making provider health depend on
+    // the optional catalog method.
+    const catalog = (env.AI as Ai & {
+      models?: (options: {
+        page: number;
+        per_page: number;
+        hide_experimental: boolean;
+      }) => Promise<{ name: string; task: { name: string } }[]>;
+    }).models;
+    if (typeof catalog !== "function") return [workersAIModel];
+    try {
+      const models: string[] = [];
+      for (let page = 1; page <= 5; page++) {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const found = await Promise.race([
+          catalog.call(env.AI, {
+            page,
+            per_page: 100,
+            hide_experimental: true,
+          }),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error("MODEL_DISCOVERY_TIMEOUT")),
+              10000,
+            );
+          }),
+        ]).finally(() => clearTimeout(timer));
+        models.push(
+          ...found
+            .filter((m) => m.task.name.toLowerCase() === "text generation")
+            .map((m) => m.name),
+        );
+        if (found.length < 100) break;
+      }
+      const discovered = [...new Set(models)].slice(0, 500);
+      return discovered.length ? discovered : [workersAIModel];
+    } catch {
+      return [workersAIModel];
     }
-    return [...new Set(models)].slice(0, 500);
   }
   const spec = api[provider];
   const secret = env[spec.key];
