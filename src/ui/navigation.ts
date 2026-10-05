@@ -1,3 +1,4 @@
+import { characterIds } from "../core/contracts";
 export type Point = readonly [number, number];
 export interface Obstacle {
   x: number;
@@ -18,8 +19,8 @@ export const rooms = [
 ];
 // Local model +Z points forward. Both characters and chairs use the same
 // seating plan, with each row looking across the table instead of away.
-export const meetingSeats = Array.from({ length: 8 }, (_, index) => ({
-  position: [4 + (index % 4) * 0.65, Math.floor(index / 4) * 2] as Point,
+export const meetingSeats = Array.from({ length: characterIds.length }, (_, index) => ({
+  position: [3.7 + (index % 5) * 0.65, Math.floor(index / 5) * 2] as Point,
   facing: index < 4 ? 0 : Math.PI,
 }));
 export function isMeeting(state: string) {
@@ -40,7 +41,8 @@ export function seatedFacing(index: number, state: string) {
 export function isAttendingMeeting(index: number, state: string) {
   return (
     isMeeting(state) &&
-    (index !== 7 || ["BOSS_DECISION", "DISCORD"].includes(state))
+    (index !== characterIds.indexOf("boss") ||
+      ["BOSS_DECISION", "DISCORD"].includes(state))
   );
 }
 export const desks: Point[] = [
@@ -50,6 +52,8 @@ export const desks: Point[] = [
   [-1, 1],
   [-4, 3],
   [-1, 3],
+  [1, -2],
+  [1, 1],
   [6, -4],
   [6, 6],
 ];
