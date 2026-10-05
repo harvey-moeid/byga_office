@@ -3,6 +3,8 @@ import {
   candleSchema,
   CHART_DB_MARKET,
   timeframes,
+  type DerivativeMetricPoint,
+  type DerivativesContext,
   type MarketContext,
   type Timeframe,
 } from "../core/contracts";
@@ -75,4 +77,58 @@ export async function readMarket(
     }),
   );
   return Object.fromEntries(entries) as MarketContext;
+}
+
+
+const derivativeMetrics = [
+  ["open_interest", "M5"],
+  ["funding_rate", ""],
+  ["liquidation", "M5"],
+  ["long_short_ratio", "M5"],
+] as const;
+
+/** Derivative metrics are optional enrichment from the same read-only chart DB. */
+export async function readDerivatives(
+  env: Pick<Env, "CHART_DB">,
+  at = Date.now(),
+  limit = 24,
+  delay = 5000,
+): Promise<DerivativesContext> {
+  const m5Cutoff = Math.floor((at - 300000 - delay) / 300000) * 300000;
+  const result = Object.fromEntries(
+    await Promise.all(
+      derivativeMetrics.map(async ([metric, timeframe]) => {
+        try {
+          const cutoff = timeframe === "M5" ? m5Cutoff : at - delay;
+          const rows = await env.CHART_DB.prepare(
+            "SELECT ts,value,value2,value3,source FROM derivative_metrics WHERE symbol=? AND metric=? AND timeframe=? AND ts<=? ORDER BY ts DESC LIMIT ?",
+          )
+            .bind(CHART_DB_MARKET, metric, timeframe, cutoff, limit)
+            .all<Record<string, unknown>>();
+          const points = rows.results
+            .map((row): DerivativeMetricPoint => ({
+              timestamp: Number(row.ts),
+              value: Number(row.value),
+              value2: row.value2 == null ? null : Number(row.value2),
+              value3: row.value3 == null ? null : Number(row.value3),
+              source: String(row.source ?? "unknown"),
+            }))
+            .filter(
+              (row) =>
+                Number.isSafeInteger(row.timestamp) &&
+                Number.isFinite(row.value) &&
+                (row.value2 === null || Number.isFinite(row.value2)) &&
+                (row.value3 === null || Number.isFinite(row.value3)),
+            )
+            .reverse();
+          return [metric, points] as const;
+        } catch {
+          // A missing/temporarily unavailable derivative table must not stop
+          // candle monitoring. Group 4 will resolve to NONE until data returns.
+          return [metric, []] as const;
+        }
+      }),
+    ),
+  );
+  return result as unknown as DerivativesContext;
 }
