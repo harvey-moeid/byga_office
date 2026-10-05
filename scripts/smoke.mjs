@@ -2,16 +2,25 @@ import assert from "node:assert/strict";
 const origin = process.env.BYGA_PUBLIC_ORIGIN;
 if (!origin || new URL(origin).origin !== origin || !origin.startsWith("https://"))
   throw new Error("BYGA_PUBLIC_ORIGIN must be an exact HTTPS origin.");
-async function get(path, status = 200) {
-  for (let attempt = 0; attempt < 5; attempt++) {
+async function get(path, status = 200, options = {}) {
+  const attempts = options.attempts ?? 5;
+  const maxDelayMs = options.maxDelayMs ?? 16000;
+  for (let attempt = 0; attempt < attempts; attempt++) {
     const response = await fetch(origin + path, { signal: AbortSignal.timeout(20000) });
     if (response.status === status) return response;
+    const body = (await response.clone().text()).slice(0, 500);
     // Fresh Worker/DO deployments can briefly return 5xx while propagating.
-    // Retry safe reads only; persistent failures still block cron activation.
-    if (status !== 200 || ![500, 502, 503, 504].includes(response.status) || attempt === 4)
-      assert.equal(response.status, status, `${path}: unexpected HTTP status`);
+    // Around a candle boundary, chart_db can also need extra time to flip
+    // the just-closed candle to is_closed=1. Retry safe reads only; a
+    // persistent failure still blocks cron activation.
+    const retryable = status === 200 && [500, 502, 503, 504].includes(response.status);
+    if (!retryable || attempt === attempts - 1)
+      throw new Error(
+        `${path}: unexpected HTTP status ${response.status}; expected ${status}; body: ${body || "<empty>"}`,
+      );
     await response.body?.cancel();
-    await new Promise(resolve => setTimeout(resolve, 2000 * 2 ** attempt));
+    const delayMs = Math.min(maxDelayMs, 2000 * 2 ** attempt);
+    await new Promise(resolve => setTimeout(resolve, delayMs));
   }
 }
 const html = await (await get("/office")).text();
@@ -58,7 +67,9 @@ const health = await (await get("/api/v1/health")).json();
 assert.equal(health.api, "OK");
 assert.equal(health.chart_db, "OK", "Deployed chart binding or freshness failed");
 assert.notEqual(health.ai_providers, "DOWN", "Runtime provider secret missing");
-const market = await (await get("/api/v1/market/status")).json();
+const market = await (
+  await get("/api/v1/market/status", 200, { attempts: 9, maxDelayMs: 15000 })
+).json();
 assert.equal(market.status, "OK");
 assert.equal(market.market, "BTCUSDT.P");
 assert.equal(market.development, false, "Production must use real candles");
