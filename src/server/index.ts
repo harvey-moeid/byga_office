@@ -1,4 +1,5 @@
 import {
+  analysisGroups,
   MARKET,
   providers,
   scannerNames,
@@ -294,7 +295,12 @@ async function route(request: Request, env: Env): Promise<Response> {
     });
   }
   if (path === "/api/v1/office/events") return officeEvents(request, env);
-  if (path === "/api/v1/office/state") return office(env, "/state");
+  if (path === "/api/v1/office/state") {
+    const response = await office(env, "/state");
+    if (!response.ok) return response;
+    const state = (await response.json()) as Record<string, unknown>;
+    return json({ ...state, group_names: analysisGroups });
+  }
   if (path === "/api/v1/office/meeting") {
     const activeStatuses =
       "'REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED'";
