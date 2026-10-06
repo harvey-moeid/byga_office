@@ -4,45 +4,18 @@ import {
   AnimationClip,
   Euler,
   LoopRepeat,
-  Mesh,
-  MeshStandardMaterial,
   Quaternion,
   QuaternionKeyframeTrack,
   VectorKeyframeTrack,
-  type Material,
-  type Object3D,
 } from "three";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
+import type { CharacterMotion } from "./character-motion";
+import {
+  buildCharacterVisual,
+  type RiggedCharacterStyle,
+} from "./rigged-character-visual";
 
 const HUMANOID_MODEL = "/models/byga/rigged-office-humanoid.gltf";
-
-export type CharacterMotion =
-  | "idle"
-  | "walk"
-  | "sit"
-  | "type"
-  | "talk"
-  | "coffee"
-  | "stretch"
-  | "review";
-
-type OutfitStyle = "formal" | "smart" | "cool" | "casual" | "relaxed";
-
-export type RiggedCharacterStyle = {
-  skin: string;
-  hair: string;
-  jacket: string;
-  accent: string;
-  shirt: string;
-  trousers: string;
-  shoes: string;
-  lapels: boolean;
-  tie: boolean;
-  shortSleeve: boolean;
-  style: OutfitStyle;
-  longHair: boolean;
-  boss: boolean;
-};
 
 type RotationKey = [number, number, number];
 
@@ -422,80 +395,6 @@ function humanoidAnimations() {
 
 const CLIPS = humanoidAnimations();
 
-function materialsOf(material: Material | Material[]) {
-  return Array.isArray(material) ? material : [material];
-}
-
-function recolorMaterial(material: Material, value: string) {
-  if (material instanceof MeshStandardMaterial) {
-    material.color.set(value);
-    material.needsUpdate = true;
-  }
-}
-
-function configureCharacter(root: Object3D, style: RiggedCharacterStyle) {
-  root.traverse((object) => {
-    if (!(object instanceof Mesh)) return;
-    object.castShadow = true;
-    object.receiveShadow = true;
-    const original = materialsOf(object.material);
-    const cloned = original.map((material) => material.clone());
-    object.material = Array.isArray(object.material) ? cloned : cloned[0];
-
-    for (const material of cloned) {
-      switch (material.name) {
-        case "Skin":
-          recolorMaterial(material, style.skin);
-          break;
-        case "Hair":
-          recolorMaterial(material, style.hair);
-          break;
-        case "Jacket":
-          recolorMaterial(material, style.jacket);
-          break;
-        case "Shirt":
-          recolorMaterial(material, style.shirt);
-          break;
-        case "Trousers":
-          recolorMaterial(material, style.trousers);
-          break;
-        case "Shoes":
-          recolorMaterial(material, style.shoes);
-          break;
-        case "Accent":
-          recolorMaterial(material, style.accent);
-          break;
-      }
-    }
-
-    if (object.name.startsWith("UpperArm") && style.shortSleeve)
-      materialsOf(object.material).forEach((material) =>
-        recolorMaterial(material, style.shirt),
-      );
-    if (object.name.startsWith("LowerArm") && style.shortSleeve)
-      materialsOf(object.material).forEach((material) =>
-        recolorMaterial(material, style.skin),
-      );
-  });
-
-  const visible = (name: string, value: boolean) => {
-    const object = root.getObjectByName(name);
-    if (object) object.visible = value;
-  };
-  visible("OptionalTie", style.tie);
-  visible("OptionalLapelLeft", style.lapels);
-  visible("OptionalLapelRight", style.lapels);
-  visible(
-    "OptionalZipper",
-    style.style === "cool" || style.style === "casual",
-  );
-  visible("OptionalRelaxedCollar", style.style === "relaxed");
-  visible("OptionalBossBadge", style.boss);
-  visible("HairLong", style.longHair);
-  visible("AccessoryCoffeeCup", false);
-  visible("AccessoryPhone", false);
-}
-
 export function RiggedOfficeCharacter({
   motion,
   style,
@@ -526,11 +425,12 @@ export function RiggedOfficeCharacter({
       style.boss,
     ],
   );
-  const root = useMemo(() => {
-    const value = cloneSkeleton(model.scene);
-    configureCharacter(value, stableStyle);
-    return value;
+  const character = useMemo(() => {
+    const root = cloneSkeleton(model.scene);
+    const build = buildCharacterVisual(root, stableStyle);
+    return { root, ...build };
   }, [model.scene, stableStyle]);
+  const root = character.root;
   const { actions, mixer } = useAnimations(CLIPS, root);
   const active = useRef<CharacterMotion>();
 
@@ -566,16 +466,13 @@ export function RiggedOfficeCharacter({
   useEffect(
     () => () => {
       mixer.stopAllAction();
-      root.traverse((object) => {
-        if (!(object instanceof Mesh)) return;
-        materialsOf(object.material).forEach((material) => material.dispose());
-      });
+      character.materials.forEach((value) => value.dispose());
     },
-    [mixer, root],
+    [character.materials, mixer],
   );
 
   return (
-    <group scale={0.9}>
+    <group name="rigged-office-character" scale={0.93}>
       <primitive object={root} />
     </group>
   );
