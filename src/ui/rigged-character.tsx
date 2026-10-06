@@ -257,11 +257,59 @@ function humanoidAnimations() {
   ]);
 
   const talkTimes = [0, 0.55, 1.1, 1.65, 2.2];
-  const talk = new AnimationClip("talk", 2.2, [
+  const standingTalk = new AnimationClip("talk", 2.2, [
+    positionTrack("Hips", talkTimes, talkTimes.map(() => [0, 0.97, 0])),
+    rotationTrack("Spine", talkTimes, [
+      [0.005, -0.02, 0],
+      [0.015, 0.015, 0],
+      [-0.005, 0.03, 0],
+      [0.012, -0.01, 0],
+      [0.005, -0.02, 0],
+    ]),
+    rotationTrack("Chest", talkTimes, [
+      [-0.01, -0.04, 0],
+      [0.015, 0.025, 0],
+      [-0.005, 0.05, 0],
+      [0.02, -0.02, 0],
+      [-0.01, -0.04, 0],
+    ]),
+    rotationTrack("Head", talkTimes, [
+      [0, -0.08, 0],
+      [0.035, 0.02, 0],
+      [-0.025, 0.09, 0],
+      [0.03, -0.015, 0],
+      [0, -0.08, 0],
+    ]),
+    rotationTrack("RightUpperArm", talkTimes, [
+      [-0.32, 0, 0.12],
+      [-0.68, -0.12, 0.18],
+      [-0.42, 0.1, 0.08],
+      [-0.58, -0.05, 0.2],
+      [-0.32, 0, 0.12],
+    ]),
+    rotationTrack("RightLowerArm", talkTimes, [
+      [-0.45, 0, 0],
+      [-1.05, 0.12, 0.08],
+      [-0.62, -0.08, -0.06],
+      [-0.9, 0.08, 0.04],
+      [-0.45, 0, 0],
+    ]),
+    rotationTrack("LeftUpperArm", talkTimes, [
+      [-0.25, 0, -0.09],
+      [-0.38, 0.06, -0.12],
+      [-0.5, -0.04, -0.16],
+      [-0.34, 0.04, -0.1],
+      [-0.25, 0, -0.09],
+    ]),
+  ]);
+
+  const meetingTalk = new AnimationClip("meeting-talk", 2.2, [
     positionTrack("Hips", talkTimes, talkTimes.map(() => [0, 0.62, 0])),
-    ...Object.entries(sitPose).map(([bone, rotation]) =>
-      rotationTrack(bone, talkTimes, talkTimes.map(() => rotation)),
-    ),
+    ...Object.entries(sitPose)
+      .filter(([bone]) => bone !== "Chest")
+      .map(([bone, rotation]) =>
+        rotationTrack(bone, talkTimes, talkTimes.map(() => rotation)),
+      ),
     rotationTrack("Chest", talkTimes, [
       [-0.01, -0.04, 0],
       [0.015, 0.025, 0],
@@ -292,7 +340,7 @@ function humanoidAnimations() {
     ]),
     rotationTrack("LeftUpperArm", talkTimes, [
       [-0.44, 0, -0.09],
-      [-0.50, 0.06, -0.12],
+      [-0.5, 0.06, -0.12],
       [-0.65, -0.04, -0.16],
       [-0.48, 0.04, -0.1],
       [-0.44, 0, -0.09],
@@ -390,7 +438,7 @@ function humanoidAnimations() {
     rotationTrack("RightLowerArm", reviewTimes, reviewTimes.map(() => [-0.88, 0, 0])),
   ]);
 
-  return [idle, walk, sit, typing, talk, coffee, stretch, review];
+  return [idle, walk, sit, typing, standingTalk, meetingTalk, coffee, stretch, review];
 }
 
 const CLIPS = humanoidAnimations();
