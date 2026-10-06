@@ -6,6 +6,7 @@ export type CharacterMotion =
   | "sit"
   | "type"
   | "talk"
+  | "meeting-talk"
   | "coffee"
   | "stretch"
   | "review";
@@ -43,6 +44,6 @@ export function characterMotion({
       return "talk";
     return "idle";
   }
-  if (sitting) return meeting ? (speaking ? "talk" : "sit") : "type";
+  if (sitting) return meeting ? (speaking ? "meeting-talk" : "sit") : "type";
   return "idle";
 }
