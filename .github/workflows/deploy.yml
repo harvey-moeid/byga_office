@@ -13,6 +13,11 @@ on:
       - "vite.config.ts"
       - "tsconfig.json"
       - "scripts/**"
+      - "tests/**"
+      - "browser-tests/**"
+      - "vitest.config.ts"
+      - "playwright.config.ts"
+      - "eslint.config.js"
       - ".github/workflows/deploy.yml"
       - ".github/workflows/frontend.yml"
   workflow_dispatch:
