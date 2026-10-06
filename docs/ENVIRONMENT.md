@@ -161,9 +161,9 @@ Cloudflare Workers AI tersedia sebagai provider `workers-ai` melalui binding `AI
 
 Binding AI menggunakan akun Cloudflare tujuan dan kuota Workers AI akun tersebut. Untuk pengembangan lokal, Workers AI memerlukan akses Cloudflare untuk inference; unit/integration tests menggunakan fixture dan tidak melakukan inference nyata. Deployment mempertahankan binding AI dari konfigurasi dasar dan smoke test memverifikasi binding dengan probe nyata melalui sesi Admin sementara. Pilihan karakter yang sudah tersimpan tidak diubah otomatis.
 
-Pada 4 Oktober 2026, inference nyata OpenRouter dan Gemini serta smoke test Worker produksi sudah lulus. Cron `* * * * *` untuk `byga-office` berhasil dipasang pada 14:31:02 WIB (07:31:02 UTC) dan dikonfirmasi lewat pembacaan ulang API Cloudflare. Batas cron yang sebelumnya menghambat sudah tidak menolak konfigurasi ini; tidak ada cron Worker lain yang dihapus atau paket akun yang diubah oleh tindakan ini. Cron tidak memerlukan env tambahan.
+Status operasional terbaru (6 Oktober 2026): Cloudflare mengembalikan satu schedule aktif untuk `byga-office`, yaitu **`*/5 * * * *`**. Workflow deploy melakukan publish sementara tanpa cron, lalu selalu memulihkan schedule produksi setelah publish sementara berhasil, sehingga kegagalan smoke berikutnya tidak meninggalkan Worker tanpa trigger.
 
-Konfigurasi jadwal sudah terkonfirmasi. Pada pemeriksaan 14:34 WIB, tick telah mencapai pemeriksaan data dan office melaporkan `Stale M5 data`; candle M5 tertutup terakhir pada snapshot chart baru sampai penutupan 14:25 WIB. Scan sukses berulang masih membutuhkan data upstream yang segar. Perubahan cron dapat membutuhkan waktu propagasi [hingga 15 menit menurut Cloudflare](https://developers.cloudflare.com/workers/configuration/cron-triggers/).
+Health market dan endpoint status memakai `processingDelaySeconds` dari Trading Config aktif, sama dengan pipeline scanner. Final deployment smoke juga melakukan bounded retry atas status freshness yang sementara DOWN di sekitar pergantian candle; kegagalan yang persisten tetap memblokir acceptance. Cron tidak memerlukan env tambahan.
 
 Deployment penuh dan acceptance keseluruhan belum selesai. Rincian hasil dan pekerjaan tersisa ada di [laporan acceptance produksi](PRODUCTION_ACCEPTANCE.md).
 
