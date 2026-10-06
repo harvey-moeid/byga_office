@@ -35,33 +35,87 @@ for (const [role, provider, model] of [
   ["fallback", defaults.fallback_provider, defaults.fallback_model],
 ]) {
   assert.ok(["openrouter", "gemini"].includes(provider), "Unexpected production provider selection.");
-  const models = await discoverModels(env, provider);
-  assert.ok(models.some(id => id.replace(/^models\//, "") === model),
-    "Configured " + provider + " model is not available to this account.");
   let calls = 0;
-  async function verifiedFetch(url, options) {
+  async function verifiedFetch(url, options = {}) {
     for (let attempt = 0; attempt < 3; attempt++) {
       calls++;
-      const response = await fetch(url, { ...options, signal: AbortSignal.timeout(30000) });
-      if (response.ok) return response;
-      const payload = await response.clone().json().catch(() => ({}));
-      const rawCode = payload?.error?.code;
-      const rawType = payload?.error?.type ?? payload?.error?.status;
-      // Never print response messages, headers or credentials.
-      const code = safeErrorCodes.has(rawCode) ? rawCode : "unclassified";
-      const type = safeErrorCodes.has(rawType) ? rawType : "unclassified";
-      console.error(JSON.stringify({ provider, http_status: response.status, code, type, attempt: attempt + 1 }));
-      const transient = response.status === 429 && type !== "insufficient_quota" &&
-        ["rate_limit_exceeded", "slow_down", "rate_limit_error"].some(value => value === code || value === type);
-      if (!transient || attempt === 2)
-        throw new Error(provider.toUpperCase() + "_HTTP_" + response.status + ":" + code + ":" + type);
-      const retryAfter = Number(response.headers.get("retry-after"));
-      if (Number.isFinite(retryAfter) && retryAfter > 30)
-        throw new Error("PROVIDER_RATE_LIMIT_RETRY_AFTER_EXCEEDS_PROBE_BUDGET");
-      await new Promise(resolve => setTimeout(resolve,
-        Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 5000 * (attempt + 1)));
+      const timeoutMs = options.method === "POST" ? 30000 : 15000;
+      try {
+        const response = await fetch(url, {
+          ...options,
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+        if (response.ok) return response;
+        const payload = await response.clone().json().catch(() => ({}));
+        const rawCode = payload?.error?.code;
+        const rawType = payload?.error?.type ?? payload?.error?.status;
+        // Never print response messages, headers or credentials.
+        const code = safeErrorCodes.has(rawCode) ? rawCode : "unclassified";
+        const type = safeErrorCodes.has(rawType) ? rawType : "unclassified";
+        console.error(JSON.stringify({
+          provider,
+          http_status: response.status,
+          code,
+          type,
+          attempt: attempt + 1,
+        }));
+        const transientRateLimit =
+          response.status === 429 &&
+          type !== "insufficient_quota" &&
+          ["rate_limit_exceeded", "slow_down", "rate_limit_error", "RESOURCE_EXHAUSTED"]
+            .some(value => value === code || value === type);
+        const transientHttp =
+          [408, 500, 502, 503, 504].includes(response.status);
+        if ((!transientRateLimit && !transientHttp) || attempt === 2)
+          throw new Error(
+            provider.toUpperCase() +
+              "_HTTP_" +
+              response.status +
+              ":" +
+              code +
+              ":" +
+              type,
+          );
+        const retryAfter = Number(response.headers.get("retry-after"));
+        if (Number.isFinite(retryAfter) && retryAfter > 30)
+          throw new Error("PROVIDER_RATE_LIMIT_RETRY_AFTER_EXCEEDS_PROBE_BUDGET");
+        await new Promise(resolve =>
+          setTimeout(
+            resolve,
+            Number.isFinite(retryAfter) && retryAfter > 0
+              ? retryAfter * 1000
+              : 3000 * (attempt + 1),
+          ),
+        );
+      } catch (error) {
+        const name =
+          error && typeof error === "object" && "name" in error
+            ? String(error.name)
+            : "";
+        const transientNetwork =
+          name === "TimeoutError" ||
+          name === "AbortError" ||
+          error instanceof TypeError;
+        if (!transientNetwork || attempt === 2) {
+          if (transientNetwork)
+            throw new Error(provider.toUpperCase() + "_NETWORK_TIMEOUT");
+          throw error;
+        }
+        console.error(JSON.stringify({
+          provider,
+          network: name === "TimeoutError" || name === "AbortError"
+            ? "timeout"
+            : "transport",
+          attempt: attempt + 1,
+        }));
+        await new Promise(resolve => setTimeout(resolve, 3000 * (attempt + 1)));
+      }
     }
+    throw new Error(provider.toUpperCase() + "_PROBE_EXHAUSTED");
   }
+  const models = await discoverModels(env, provider, verifiedFetch);
+  assert.ok(models.some(id => id.replace(/^models\//, "") === model),
+    "Configured " + provider + " model is not available to this account.");
   const character = { ...defaults, temperature: 0, max_output_tokens: provider === "gemini" ? 1500 : 250 };
   const response = await requestAI(env, provider, model,
     "This is a synthetic connectivity and JSON schema test, not market analysis. Return vote BUY, confidence 0, summary Connectivity verified, reasoning Synthetic probe only, evidence [], risk_flags [CONNECTIVITY_TEST], price_levels null. Never claim real market evidence.",
