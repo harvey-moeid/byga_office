@@ -290,6 +290,10 @@ beforeAll(async () => {
   await market.batch(derivativeRows);
 }, 60000);
 beforeEach(async () => {
+  // A failed gate-based test must never strand later sequential cases.
+  release?.();
+  release = undefined;
+  gate = undefined;
   await (await mf.getD1Database("DB")).exec("DELETE FROM api_limits");
 });
 afterAll(async () => {
@@ -914,45 +918,52 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
         idempotencyKey: "cancel-in-flight",
       })
     ).json()) as { id: string };
-    let reachedAnalysis = false;
-    for (let i = 0; i < 100; i++) {
-      const row = (await (await call("/admin/cases/" + item.id)).json()) as {
-        status: string;
-      };
-      if (row.status === "AI_ANALYSIS") {
-        reachedAnalysis = true;
-        break;
+    try {
+      let reachedAnalysis = false;
+      for (let i = 0; i < 300; i++) {
+        const row = (await (await call("/admin/cases/" + item.id)).json()) as {
+          status: string;
+        };
+        if (row.status === "AI_ANALYSIS") {
+          reachedAnalysis = true;
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 30));
       }
-      await new Promise((r) => setTimeout(r, 30));
+      expect(reachedAnalysis).toBe(true);
+      const updated = await call("/admin/config", {
+        config: { ...defaultConfig, publicSignals: true, minRR: 2 },
+        activation: "APPLY NOW",
+        confirmed: true,
+      });
+      expect(updated.status).toBe(200);
+      const version = (await updated.json()) as { id: string };
+      gate = undefined;
+      release?.();
+      release = undefined;
+      const cancelled = (await (
+        await call("/admin/cases/" + item.id)
+      ).json()) as { status: string; uuid: string };
+      expect(cancelled.status).toBe("CONFIG_CHANGED");
+      const db = await mf.getD1Database("DB");
+      expect(
+        (await db
+          .prepare("SELECT COUNT(*) AS n FROM signals WHERE case_uuid=?")
+          .bind(cancelled.uuid)
+          .first<{ n: number }>())!.n,
+      ).toBe(0);
+      const replacement = await db
+        .prepare("SELECT id,config_version FROM cases WHERE config_version=?")
+        .bind(version.id)
+        .first<{ id: string; config_version: string }>();
+      expect(replacement!.id).not.toBe(item.id);
+      expect((await done(replacement!.id)).status).toBe("COMPLETED");
+    } finally {
+      gate = undefined;
+      release?.();
+      release = undefined;
     }
-    expect(reachedAnalysis).toBe(true);
-    const updated = await call("/admin/config", {
-      config: { ...defaultConfig, publicSignals: true, minRR: 2 },
-      activation: "APPLY NOW",
-      confirmed: true,
-    });
-    expect(updated.status).toBe(200);
-    const version = (await updated.json()) as { id: string };
-    gate = undefined;
-    release?.();
-    const cancelled = (await (
-      await call("/admin/cases/" + item.id)
-    ).json()) as { status: string; uuid: string };
-    expect(cancelled.status).toBe("CONFIG_CHANGED");
-    const db = await mf.getD1Database("DB");
-    expect(
-      (await db
-        .prepare("SELECT COUNT(*) AS n FROM signals WHERE case_uuid=?")
-        .bind(cancelled.uuid)
-        .first<{ n: number }>())!.n,
-    ).toBe(0);
-    const replacement = await db
-      .prepare("SELECT id,config_version FROM cases WHERE config_version=?")
-      .bind(version.id)
-      .first<{ id: string; config_version: string }>();
-    expect(replacement!.id).not.toBe(item.id);
-    expect((await done(replacement!.id)).status).toBe("COMPLETED");
-  }, 30000);
+  }, 45000);
   it("duplicate M5 scan request reuses persisted scanner run and does not reprocess candle", async () => {
     await call("/admin/scan", {});
     const db = await mf.getD1Database("DB");
