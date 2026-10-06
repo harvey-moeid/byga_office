@@ -771,9 +771,10 @@ test("3D speech follows the seated character and opens the actual result detail"
       bubbleBounds!.y + bubbleBounds!.height > overlayBounds.y;
     expect(overlaps).toBe(false);
   }
-  // Open the finite-lived speech immediately. The modal intentionally pauses
-  // presentation, making the remaining assertions deterministic on slow CI.
-  await bubble.click();
+  // Drei Html follows the animated 3D anchor every frame. Dispatch directly
+  // after the visibility/bounds assertions so Playwright does not wait for a
+  // continuously moving CSS transform to become "stable".
+  await bubble.dispatchEvent("click");
   await expect(page.getByRole("dialog")).toContainText(
     "Fixture trend: penjelasan lengkap",
   );
