@@ -263,7 +263,7 @@ export class Office extends DurableObject<Env> {
       ]);
       if (body.activation === "APPLY NOW") {
         const old = await this.env.DB.prepare(
-          "SELECT * FROM cases WHERE mode='LIVE' AND status IN ('REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW') LIMIT 1",
+          "SELECT * FROM cases WHERE mode='LIVE' AND status IN ('QUEUED','REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW') ORDER BY created_at LIMIT 1",
         ).first<CaseRow>();
         if (old) {
           await this.status(old, "CONFIG_CHANGED");
