@@ -446,11 +446,16 @@ p {
   font-size: 10px;
   color: #486459;
 }
+.meeting-bubble:hover {
+  color: #17352d;
+  border-color: #75b6a3;
+}
 .meeting-bubble:focus-visible {
   outline: 3px solid #d5a94f;
   outline-offset: 4px;
 }
-.boss-bubble {
+.boss-bubble,
+.boss-bubble:hover {
   border-color: #d5a94f;
   box-shadow: 0 12px 35px #d5a94f30;
 }
