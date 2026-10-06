@@ -744,37 +744,53 @@ test("3D speech follows the seated character and opens the actual result detail"
   meetingEnabled = true;
   const bubble = page.locator(".meeting-bubble").filter({ hasText: "Trend Analyst" });
   await expect(bubble).toBeVisible({ timeout: 60000 });
-  const bubbleBounds = await bubble.boundingBox();
+  // Capture geometry and open the finite-lived bubble in the same browser
+  // task. Software WebGL can make separate Playwright round-trips slow enough
+  // for the seven-second speech turn to advance before the click is sent.
+  const geometry = await bubble.evaluate((element) => {
+    const rect = (node: Element) => {
+      const value = node.getBoundingClientRect();
+      return {
+        x: value.x,
+        y: value.y,
+        width: value.width,
+        height: value.height,
+      };
+    };
+    const overlays = [
+      ".meeting-status",
+      ".home-hud > div",
+      ".home-hud .segmented",
+      ".scene-controls",
+      ".scene-quality",
+    ]
+      .map((selector) => document.querySelector(selector))
+      .filter((node): node is Element => !!node)
+      .map(rect);
+    const bubbleBounds = rect(element);
+    element.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+    return { bubbleBounds, overlays };
+  });
   const viewport = page.viewportSize()!;
-  expect(bubbleBounds).not.toBeNull();
-  expect(bubbleBounds!.x).toBeGreaterThanOrEqual(8);
-  expect(bubbleBounds!.y).toBeGreaterThanOrEqual(8);
-  expect(bubbleBounds!.x + bubbleBounds!.width).toBeLessThanOrEqual(
+  const { bubbleBounds } = geometry;
+  expect(bubbleBounds.x).toBeGreaterThanOrEqual(8);
+  expect(bubbleBounds.y).toBeGreaterThanOrEqual(8);
+  expect(bubbleBounds.x + bubbleBounds.width).toBeLessThanOrEqual(
     viewport.width - 8,
   );
-  expect(bubbleBounds!.y + bubbleBounds!.height).toBeLessThanOrEqual(
+  expect(bubbleBounds.y + bubbleBounds.height).toBeLessThanOrEqual(
     viewport.height - 8,
   );
-  for (const overlay of [
-    page.locator(".meeting-status").first(),
-    page.locator(".home-hud > div").first(),
-    page.locator(".home-hud .segmented").first(),
-    page.locator(".scene-controls").first(),
-    page.locator(".scene-quality").first(),
-  ]) {
-    const overlayBounds = await overlay.boundingBox();
-    if (!overlayBounds) continue;
+  for (const overlayBounds of geometry.overlays) {
     const overlaps =
-      bubbleBounds!.x < overlayBounds.x + overlayBounds.width &&
-      bubbleBounds!.x + bubbleBounds!.width > overlayBounds.x &&
-      bubbleBounds!.y < overlayBounds.y + overlayBounds.height &&
-      bubbleBounds!.y + bubbleBounds!.height > overlayBounds.y;
+      bubbleBounds.x < overlayBounds.x + overlayBounds.width &&
+      bubbleBounds.x + bubbleBounds.width > overlayBounds.x &&
+      bubbleBounds.y < overlayBounds.y + overlayBounds.height &&
+      bubbleBounds.y + bubbleBounds.height > overlayBounds.y;
     expect(overlaps).toBe(false);
   }
-  // Drei Html follows the animated 3D anchor every frame. Dispatch directly
-  // after the visibility/bounds assertions so Playwright does not wait for a
-  // continuously moving CSS transform to become "stable".
-  await bubble.dispatchEvent("click");
   await expect(page.getByRole("dialog")).toContainText(
     "Fixture trend: penjelasan lengkap",
   );
