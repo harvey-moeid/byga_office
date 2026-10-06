@@ -918,19 +918,33 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
         idempotencyKey: "cancel-in-flight",
       })
     ).json()) as { id: string };
+    const ns = await mf.getDurableObjectNamespace("OFFICE");
+    // Drive the exact in-flight race under test instead of depending on when
+    // Miniflare chooses to deliver the scheduled alarm on a busy CI runner.
+    const alarm = ns
+      .get(ns.idFromName("BTCUSDT.P"))
+      .fetch("https://test/__test/alarm");
     try {
       let reachedAnalysis = false;
+      let lastStatus = "QUEUED";
       for (let i = 0; i < 300; i++) {
-        const row = (await (await call("/admin/cases/" + item.id)).json()) as {
-          status: string;
-        };
-        if (row.status === "AI_ANALYSIS") {
+        const current = (await (
+          await call("/admin/cases/" + item.id)
+        ).json()) as { status: string };
+        lastStatus = current.status;
+        if (current.status === "AI_ANALYSIS") {
           reachedAnalysis = true;
           break;
         }
+        if (
+          ["COMPLETED", "NO_CONSENSUS", "FAILED", "CONFIG_CHANGED"].includes(
+            current.status,
+          )
+        )
+          break;
         await new Promise((r) => setTimeout(r, 30));
       }
-      expect(reachedAnalysis).toBe(true);
+      expect(reachedAnalysis, `last status: ${lastStatus}`).toBe(true);
       const updated = await call("/admin/config", {
         config: { ...defaultConfig, publicSignals: true, minRR: 2 },
         activation: "APPLY NOW",
@@ -941,6 +955,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       gate = undefined;
       release?.();
       release = undefined;
+      expect((await alarm).status).toBe(200);
       const cancelled = (await (
         await call("/admin/cases/" + item.id)
       ).json()) as { status: string; uuid: string };
@@ -962,6 +977,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       gate = undefined;
       release?.();
       release = undefined;
+      await alarm.catch(() => undefined);
     }
   }, 45000);
   it("duplicate M5 scan request reuses persisted scanner run and does not reprocess candle", async () => {
