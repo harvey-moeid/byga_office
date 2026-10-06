@@ -432,7 +432,7 @@ export function RiggedOfficeCharacter({
   }, [model.scene, stableStyle]);
   const root = character.root;
   const { actions, mixer } = useAnimations(CLIPS, root);
-  const active = useRef<CharacterMotion>();
+  const active = useRef<CharacterMotion | undefined>(undefined);
 
   useEffect(() => {
     active.current = undefined;
