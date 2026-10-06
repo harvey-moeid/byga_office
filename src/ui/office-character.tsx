@@ -66,6 +66,133 @@ const appearances: Record<
     hair: "#30262b",
   },
 };
+
+type OutfitStyle = "formal" | "smart" | "cool" | "casual" | "relaxed";
+type CharacterOutfit = {
+  style: OutfitStyle;
+  jacket: string;
+  accent: string;
+  shirt: string;
+  trousers: string;
+  shoes: string;
+  lapels: boolean;
+  tie: boolean;
+  shortSleeve: boolean;
+};
+
+const outfits: Record<CharacterId, CharacterOutfit> = {
+  trend: {
+    style: "formal",
+    jacket: "#27343a",
+    accent: "#9b554f",
+    shirt: "#eef1ec",
+    trousers: "#252d31",
+    shoes: "#1b1e20",
+    lapels: true,
+    tie: true,
+    shortSleeve: false,
+  },
+  structure: {
+    style: "smart",
+    jacket: "#52604a",
+    accent: "#c2a86d",
+    shirt: "#ece7dc",
+    trousers: "#3d423b",
+    shoes: "#2a2723",
+    lapels: true,
+    tie: false,
+    shortSleeve: false,
+  },
+  momentum: {
+    style: "cool",
+    jacket: "#334b5c",
+    accent: "#d27b49",
+    shirt: "#e5e9e8",
+    trousers: "#252a30",
+    shoes: "#202226",
+    lapels: false,
+    tie: false,
+    shortSleeve: false,
+  },
+  liquidity: {
+    style: "casual",
+    jacket: "#75624f",
+    accent: "#d0a05f",
+    shirt: "#2f3437",
+    trousers: "#4c463f",
+    shoes: "#2b2926",
+    lapels: false,
+    tie: false,
+    shortSleeve: true,
+  },
+  volume: {
+    style: "relaxed",
+    jacket: "#4f6558",
+    accent: "#9fb094",
+    shirt: "#ded9cd",
+    trousers: "#3a403c",
+    shoes: "#342f2a",
+    lapels: false,
+    tie: false,
+    shortSleeve: false,
+  },
+  quant: {
+    style: "smart",
+    jacket: "#273d59",
+    accent: "#7ba6c7",
+    shirt: "#dfe8ee",
+    trousers: "#313942",
+    shoes: "#1f252a",
+    lapels: true,
+    tie: false,
+    shortSleeve: false,
+  },
+  derivatives: {
+    style: "formal",
+    jacket: "#564153",
+    accent: "#c7a46c",
+    shirt: "#f1e4e8",
+    trousers: "#372f38",
+    shoes: "#241f22",
+    lapels: true,
+    tie: true,
+    shortSleeve: false,
+  },
+  positioning: {
+    style: "cool",
+    jacket: "#36556c",
+    accent: "#a8b7bf",
+    shirt: "#20272b",
+    trousers: "#303840",
+    shoes: "#27292c",
+    lapels: false,
+    tie: false,
+    shortSleeve: false,
+  },
+  risk: {
+    style: "formal",
+    jacket: "#4b5058",
+    accent: "#b65b55",
+    shirt: "#edf1f3",
+    trousers: "#2c3035",
+    shoes: "#1e2023",
+    lapels: true,
+    tie: true,
+    shortSleeve: false,
+  },
+  boss: {
+    style: "formal",
+    jacket: "#222a2d",
+    accent: "#c9a96b",
+    shirt: "#f7f4ea",
+    trousers: "#1d2225",
+    shoes: "#16191b",
+    lapels: true,
+    tie: true,
+    shortSleeve: false,
+  },
+};
+
 type Triple = [number, number, number];
 
 const speechProjection = new Vector3();
@@ -220,6 +347,7 @@ export function OfficeCharacter({
   onActivityArrive?: (id: CharacterId, activity: OfficeActivity) => void;
 }) {
   const appearance = appearances[avatar];
+  const outfit = outfits[characterIds[index]];
   const root = useRef<Group>(null);
   const body = useRef<Group>(null);
   const head = useRef<Group>(null);
@@ -472,26 +600,30 @@ export function OfficeCharacter({
       >
         <mesh position={[0, 0.96, 0]} scale={[1, 1, 0.66]} castShadow>
           <latheGeometry args={[coatProfile, decorative ? 24 : 12]} />
-          <meshStandardMaterial color={appearance.suit} roughness={0.9} />
+          <meshStandardMaterial color={outfit.jacket} roughness={0.9} />
         </mesh>
         <Oval
           at={[0, 0.925, -0.015]}
           size={[0.145, 0.105, 0.102]}
-          color="#2b3037"
+          color={outfit.trousers}
           detail={decorative}
         />
-        <Panel at={[0, 1.31, 0.115]} points={shirt} color="#e8e6df" />
-        <Panel
-          at={[0, 1.31, 0.123]}
-          points={leftLapel}
-          color={appearance.accent}
-        />
-        <Panel
-          at={[0, 1.31, 0.124]}
-          points={rightLapel}
-          color={appearance.accent}
-        />
-        {!longHair && (
+        <Panel at={[0, 1.31, 0.115]} points={shirt} color={outfit.shirt} />
+        {outfit.lapels && (
+          <>
+            <Panel
+              at={[0, 1.31, 0.123]}
+              points={leftLapel}
+              color={outfit.accent}
+            />
+            <Panel
+              at={[0, 1.31, 0.124]}
+              points={rightLapel}
+              color={outfit.accent}
+            />
+          </>
+        )}
+        {outfit.tie && !longHair && (
           <Panel
             at={[0, 1.28, 0.131]}
             points={[
@@ -501,8 +633,28 @@ export function OfficeCharacter({
               [0, -0.16],
               [-0.022, -0.14],
             ]}
-            color={appearance.suit}
+            color={outfit.accent}
           />
+        )}
+        {(outfit.style === "cool" || outfit.style === "casual") && (
+          <mesh position={[0, 1.17, 0.13]} castShadow>
+            <boxGeometry args={[0.012, 0.3, 0.01]} />
+            <meshStandardMaterial color={outfit.accent} roughness={0.5} />
+          </mesh>
+        )}
+        {outfit.style === "relaxed" && (
+          <Oval
+            at={[0, 1.345, 0.119]}
+            size={[0.078, 0.017, 0.015]}
+            color={outfit.accent}
+            detail={false}
+          />
+        )}
+        {characterIds[index] === "boss" && (
+          <mesh position={[0.115, 1.31, 0.132]} rotation={[0, 0, -0.08]}>
+            <boxGeometry args={[0.048, 0.018, 0.008]} />
+            <meshStandardMaterial color={outfit.accent} roughness={0.45} />
+          </mesh>
         )}
         <Oval
           at={[0.023, 1.115, 0.109]}
@@ -595,27 +747,27 @@ export function OfficeCharacter({
                 length={0.42}
                 top={0.075}
                 bottom={0.055}
-                color="#30353d"
+                color={outfit.trousers}
                 detail={decorative}
               />
               <group ref={knees[limb]} position={[0, -0.42, 0]}>
                 <Oval
                   at={[0, 0, 0]}
                   size={[0.056, 0.06, 0.054]}
-                  color="#30353d"
+                  color={outfit.trousers}
                   detail={decorative}
                 />
                 <Limb
                   length={0.41}
                   top={0.055}
                   bottom={0.038}
-                  color="#30353d"
+                  color={outfit.trousers}
                   detail={decorative}
                 />
                 <Oval
                   at={[0, -0.43, 0.048]}
                   size={[0.053, 0.045, 0.11]}
-                  color="#24262a"
+                  color={outfit.shoes}
                   detail={decorative}
                   roughness={0.38}
                 />
@@ -629,34 +781,36 @@ export function OfficeCharacter({
               <Oval
                 at={[0, -0.025, 0]}
                 size={[0.063, 0.08, 0.065]}
-                color={appearance.suit}
+                color={outfit.shortSleeve ? outfit.shirt : outfit.jacket}
                 detail={decorative}
               />
               <Limb
                 length={0.265}
                 top={0.06}
                 bottom={0.045}
-                color={appearance.suit}
+                color={outfit.shortSleeve ? outfit.shirt : outfit.jacket}
                 detail={decorative}
               />
               <group ref={elbows[limb]} position={[0, -0.265, 0]}>
                 <Oval
                   at={[0, 0, 0]}
                   size={[0.045, 0.047, 0.045]}
-                  color={appearance.suit}
+                  color={outfit.shortSleeve ? appearance.skin : outfit.jacket}
                   detail={decorative}
                 />
                 <Limb
                   length={0.235}
                   top={0.045}
                   bottom={0.032}
-                  color={appearance.suit}
+                  color={outfit.shortSleeve ? appearance.skin : outfit.jacket}
                   detail={decorative}
                 />
-                <mesh position={[0, -0.23, 0]}>
-                  <cylinderGeometry args={[0.034, 0.034, 0.024, 10]} />
-                  <meshStandardMaterial color="#e8e6df" />
-                </mesh>
+                {!outfit.shortSleeve && (
+                  <mesh position={[0, -0.23, 0]}>
+                    <cylinderGeometry args={[0.034, 0.034, 0.024, 10]} />
+                    <meshStandardMaterial color={outfit.shirt} />
+                  </mesh>
+                )}
                 <Oval
                   at={[0, -0.282, 0.006]}
                   size={[0.033, 0.055, 0.019]}
