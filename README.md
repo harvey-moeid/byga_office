@@ -57,6 +57,8 @@ Browser tests cover desktop/mobile layout, the 3D renderer, WebGL fallback, offl
 
 Admin → Trading Config → **Minimal Group Consensus** controls four deterministic groups: **SMC/ICT**, **Indicators**, **Volume**, and **Derivatives / Market Positioning**. Automatic analysis starts only when the configured minimum aligns in one direction (default **2 of 4**). Group 4 reads Open Interest, Funding Rate, Liquidation, and Long/Short Ratio from the read-only `chart_db.derivative_metrics` dataset and resolves to `NONE` when fresh positioning data is insufficient. The six deterministic scanners remain telemetry/audit inputs and do not vote directly on the AUTO trigger. Revalidation and simulations use the same group rule.
 
+AI voting keeps `NO_TRADE` as an abstention, but requires at least two directional BUY/SELL votes before an AI direction can win. A lone directional vote among otherwise abstaining analysts falls back to the deterministic direction instead of deciding the trade. BUY/SELL ties still go to the Boss under the existing authority rules.
+
 - `src/core`: OHLC validation, EMA/RSI/ADX/MACD/ATR/Bollinger/structure, six telemetry scanners, four deterministic analysis groups, configurable group trigger, risk, voting, confidence, context compression.
 - `src/server/market.ts`: SELECT-only candle and derivative repository, validated candle SQL identifiers, configurable timestamp units/timeframe names, gap/freshness checks, plus read-only `derivative_metrics` enrichment. Indicators read sufficient warm-up history; raw AI context defaults to 50/100/100.
 - `src/server/office.ts`: durable live and independent simulation queues; immutable snapshots; two specialist Analysts per group (SMC/ICT, Indicators, Volume, Derivatives/Positioning); Risk Manager then Boss; persistent per-character outputs; revalidation/cooldown; atomic BUY/SELL signal publication with cancellation protection.
@@ -77,7 +79,7 @@ The office is a furnished architectural cutaway with oak/walnut materials, glass
 
 ## Deployment
 
-See [required environment variables](docs/ENVIRONMENT.md) and [deployment and permission requirements](docs/DEPLOYMENT.md). `npm run deploy` requires a generated real staging/production configuration and rejects the local placeholder config. No production resource is created automatically during local setup.
+See [required environment variables](docs/ENVIRONMENT.md) and [deployment and permission requirements](docs/DEPLOYMENT.md). `npm run deploy` requires a generated real staging/production configuration and rejects the local placeholder config. No production resource is created automatically during local setup. Production deploys are not triggered by test-only changes. Both CI and production deployment run dependency security gates; production dependencies must have no high/critical audit findings and the development toolchain must have no critical findings.
 
 
 ## 3D Realism Upgrade (2026-10-05)

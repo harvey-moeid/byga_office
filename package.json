@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint .",
+    "security:audit": "npm audit --omit=dev --audit-level=high && npm audit --audit-level=critical",
     "format": "prettier --write src tests scripts",
     "db:migrate": "node scripts/wrangler.mjs d1 migrations apply trading_office_db --local",
     "db:fixture": "node scripts/fixture.mjs",
@@ -45,10 +46,13 @@
     "typescript": "^5.9.0",
     "typescript-eslint": "^8.0.0",
     "vite": "^6.0.0",
-    "vitest": "^3.0.0",
+    "vitest": "^4.1.11",
     "wrangler": "^4.0.0"
   },
   "engines": {
     "node": ">=24 <25"
+  },
+  "overrides": {
+    "sharp": "0.35.5"
   }
 }

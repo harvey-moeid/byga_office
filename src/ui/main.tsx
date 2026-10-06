@@ -279,7 +279,7 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
     market = useData<Market>("/market/status", true),
     characters =
       useData<{ id: CharacterId; avatar: AvatarPreset }[]>("/characters");
-  const [view, setView] = useState("3D");
+  const [view, setView] = useState(immersive ? "3D" : "Operations");
   const [selected, setSelected] = useState<string>();
   const [tf, setTf] = useState("M5");
   useEffect(() => {

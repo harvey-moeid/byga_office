@@ -35,11 +35,11 @@ Tambahkan pada GitHub Environment yang sama jika ingin mengaktifkan pengiriman D
 | `DISCORD_MEETING_WEBHOOK` | URL webhook Discord untuk meeting | Pengiriman hasil meeting |
 | `DISCORD_SIGNAL_WEBHOOK` | URL webhook Discord untuk sinyal | Pengiriman sinyal final |
 
-Deployment dapat berjalan tanpa kedua webhook. Jika kosong, delivery Discord belum dikonfigurasi. URL webhook merupakan secret dan tidak boleh dimasukkan ke Markdown atau Git.
+Deployment dapat berjalan tanpa kedua webhook di GitHub. Namun nilai GitHub yang kosong **tidak menghapus** secret runtime yang sudah ada di Cloudflare; workflow sengaja mempertahankan optional secret yang tidak dikirim. Karena itu status runtime Cloudflare adalah sumber kebenaran untuk binding yang masih terpasang. Hapus secret dari Cloudflare hanya setelah memastikan tidak dipakai oleh konfigurasi karakter/delivery aktif. URL webhook merupakan secret dan tidak boleh dimasukkan ke Markdown atau Git.
 
 ## 3. Secrets yang dipasang otomatis pada Worker
 
-Workflow menyalin key provider dan webhook ke Worker, serta mengubah password Admin menjadi hash.
+Workflow selalu memasang hash password Admin, OpenRouter, dan Gemini. Optional provider/webhook hanya di-update bila GitHub Environment menyediakan nilainya; jika kosong, binding Cloudflare yang sudah ada dipertahankan. Setelah pemasangan, workflow menjalankan `wrangler secret list` untuk menginventarisasi **nama/tipe** binding tanpa mencetak nilainya.
 
 | Secret GitHub | Secret runtime Cloudflare |
 | --- | --- |
@@ -151,7 +151,7 @@ Key berikut didukung oleh runtime, tetapi tidak wajib untuk kombinasi OpenRouter
 | `COHERE_API_KEY` | Cohere |
 | `NVIDIA_API_KEY` | NVIDIA |
 
-Workflow deployment saat ini **tidak menyalin key provider tambahan tersebut** dari GitHub. Jika memilih salah satunya di Admin, pasang key pada Worker melalui Cloudflare Worker Settings → Variables and Secrets, atau Wrangler `secret put` dengan konfigurasi target yang benar. Untuk lokal, tambahkan key di `.dev.vars`.
+Workflow deployment menerima key provider tambahan tersebut dari GitHub Environment dan meng-update secret Worker bila nilainya tersedia. Jika nilainya tidak tersedia di GitHub, secret runtime Cloudflare yang sudah ada **tidak dihapus**, karena saved character config dapat masih menggunakannya. Untuk menonaktifkan provider, pindahkan karakter dari provider tersebut terlebih dahulu, verifikasi tidak ada penggunaan aktif, lalu hapus secret secara eksplisit di Cloudflare. Untuk lokal, tambahkan key di `.dev.vars`.
 
 `OPENAI_API_KEY` tidak diperlukan untuk model `openai/gpt-4.1-mini` yang diakses melalui OpenRouter; model tersebut menggunakan `OPENROUTER_API_KEY`.
 
@@ -161,9 +161,9 @@ Cloudflare Workers AI tersedia sebagai provider `workers-ai` melalui binding `AI
 
 Binding AI menggunakan akun Cloudflare tujuan dan kuota Workers AI akun tersebut. Untuk pengembangan lokal, Workers AI memerlukan akses Cloudflare untuk inference; unit/integration tests menggunakan fixture dan tidak melakukan inference nyata. Deployment mempertahankan binding AI dari konfigurasi dasar dan smoke test memverifikasi binding dengan probe nyata melalui sesi Admin sementara. Pilihan karakter yang sudah tersimpan tidak diubah otomatis.
 
-Pada 4 Oktober 2026, inference nyata OpenRouter dan Gemini serta smoke test Worker produksi sudah lulus. Cron `* * * * *` untuk `byga-office` berhasil dipasang pada 14:31:02 WIB (07:31:02 UTC) dan dikonfirmasi lewat pembacaan ulang API Cloudflare. Batas cron yang sebelumnya menghambat sudah tidak menolak konfigurasi ini; tidak ada cron Worker lain yang dihapus atau paket akun yang diubah oleh tindakan ini. Cron tidak memerlukan env tambahan.
+Status operasional terbaru (6 Oktober 2026): Cloudflare mengembalikan satu schedule aktif untuk `byga-office`, yaitu **`*/5 * * * *`**. Workflow deploy melakukan publish sementara tanpa cron, lalu selalu memulihkan schedule produksi setelah publish sementara berhasil, sehingga kegagalan smoke berikutnya tidak meninggalkan Worker tanpa trigger.
 
-Konfigurasi jadwal sudah terkonfirmasi. Pada pemeriksaan 14:34 WIB, tick telah mencapai pemeriksaan data dan office melaporkan `Stale M5 data`; candle M5 tertutup terakhir pada snapshot chart baru sampai penutupan 14:25 WIB. Scan sukses berulang masih membutuhkan data upstream yang segar. Perubahan cron dapat membutuhkan waktu propagasi [hingga 15 menit menurut Cloudflare](https://developers.cloudflare.com/workers/configuration/cron-triggers/).
+Health market dan endpoint status memakai `processingDelaySeconds` dari Trading Config aktif, sama dengan pipeline scanner. Final deployment smoke juga melakukan bounded retry atas status freshness yang sementara DOWN di sekitar pergantian candle; kegagalan yang persisten tetap memblokir acceptance. Cron tidak memerlukan env tambahan.
 
 Deployment penuh dan acceptance keseluruhan belum selesai. Rincian hasil dan pekerjaan tersisa ada di [laporan acceptance produksi](PRODUCTION_ACCEPTANCE.md).
 
