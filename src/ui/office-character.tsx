@@ -30,10 +30,11 @@ import {
   isAttendingMeeting,
   seatedFacing,
 } from "./navigation";
+import { RiggedOfficeCharacter } from "./rigged-character";
 import {
-  RiggedOfficeCharacter,
+  characterMotion,
   type CharacterMotion,
-} from "./rigged-character";
+} from "./character-motion";
 
 const appearances: Record<
   AvatarPreset,
@@ -486,23 +487,14 @@ export function OfficeCharacter({
       atActivity &&
       (activityKind === "market-review" ||
         activityKind === "group-market-review");
-    const nextMotion: CharacterMotion = walking
-      ? "walk"
-      : stretching
-        ? "stretch"
-        : coffee && atActivity
-          ? "coffee"
-          : reviewing
-            ? "review"
-            : gesturing
-              ? "talk"
-              : sitting
-                ? meeting
-                  ? speech
-                    ? "talk"
-                    : "sit"
-                  : "type"
-                : "idle";
+    const nextMotion = characterMotion({
+      walking,
+      sitting,
+      meeting,
+      speaking: !!speech,
+      atActivity,
+      activityKind,
+    });
     if (motionRef.current !== nextMotion) {
       motionRef.current = nextMotion;
       setMotion(nextMotion);
