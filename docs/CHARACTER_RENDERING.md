@@ -28,7 +28,8 @@ The local glTF is authored for this repository and contains a skin definition wi
 - `walk`: alternating legs, knees, feet, arm counter-swing, hip bob and torso counter-rotation.
 - `sit`: neutral meeting seat pose.
 - `type`: seated typing pose for normal workstation monitoring.
-- `talk`: seated meeting speech and standing conversation gesture.
+- `talk`: standing conversation gesture for ambient office activity.
+- `meeting-talk`: seated meeting speech gesture that preserves the meeting pose.
 - `coffee`: right-hand drink motion with the cup prop visible.
 - `stretch`: overhead stretch.
 - `review`: standing market-review pose.
