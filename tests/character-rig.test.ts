@@ -10,7 +10,8 @@ const rig = JSON.parse(
   asset: { version: string; generator: string };
   nodes: { name: string; children?: number[] }[];
   extras: { bygaRig: string; bones: string[]; license: string };
-  buffers?: unknown[];
+  skins: { skeleton: number; joints: number[] }[];
+  buffers: { byteLength: number; uri: string }[];
 };
 
 const requiredBones = [
@@ -39,7 +40,12 @@ describe("BYGA humanoid rig asset", () => {
     expect(rig.asset.generator).toContain("BYGA");
     expect(rig.extras.bygaRig).toBe("v1");
     expect(rig.extras.license).toContain("BYGA");
-    expect(rig.buffers).toBeUndefined();
+    expect(rig.skins).toHaveLength(1);
+    expect(rig.skins[0].joints).toHaveLength(19);
+    expect(rig.buffers).toHaveLength(1);
+    expect(rig.buffers[0].uri).toMatch(
+      /^data:application\/octet-stream;base64,/,
+    );
   });
 
   it("contains every transform animated by the office clip library", () => {
