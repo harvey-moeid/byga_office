@@ -30,6 +30,10 @@ import {
   isAttendingMeeting,
   seatedFacing,
 } from "./navigation";
+import {
+  RiggedOfficeCharacter,
+  type CharacterMotion,
+} from "./rigged-character";
 
 const appearances: Record<
   AvatarPreset,
@@ -359,6 +363,8 @@ export function OfficeCharacter({
     new Vector3(desks[index][0], 0, desks[index][1] + 0.72),
   );
   const [arrived, setArrived] = useState(false);
+  const [motion, setMotion] = useState<CharacterMotion>("type");
+  const motionRef = useRef<CharacterMotion>("type");
   const arrivedRef = useRef(false);
   const activityArrivedRef = useRef<OfficeActivity | undefined>(undefined);
   const meeting = isAttendingMeeting(index, state);
@@ -461,8 +467,12 @@ export function OfficeCharacter({
         ? Math.sin(clock.elapsedTime * 1.6 + index) * 0.003
         : 0;
     body.current.position.y =
-      MathUtils.damp(body.current.position.y, sitting ? -0.445 : 0, 9, delta) +
-      breathe;
+      MathUtils.damp(
+        body.current.position.y,
+        decorative ? 0 : sitting ? -0.445 : 0,
+        9,
+        delta,
+      ) + (decorative ? 0 : breathe);
     const gait =
       walking && !reduced ? Math.sin(clock.elapsedTime * 8 + index) * 0.42 : 0;
     const activityKind = activeActivity?.kind;
@@ -476,6 +486,27 @@ export function OfficeCharacter({
       atActivity &&
       (activityKind === "market-review" ||
         activityKind === "group-market-review");
+    const nextMotion: CharacterMotion = walking
+      ? "walk"
+      : stretching
+        ? "stretch"
+        : coffee && atActivity
+          ? "coffee"
+          : reviewing
+            ? "review"
+            : gesturing
+              ? "talk"
+              : sitting
+                ? meeting
+                  ? speech
+                    ? "talk"
+                    : "sit"
+                  : "type"
+                : "idle";
+    if (motionRef.current !== nextMotion) {
+      motionRef.current = nextMotion;
+      setMotion(nextMotion);
+    }
     for (let side = 0; side < 2; side++) {
       const swing = side ? -gait : gait;
       const hip = hips[side].current,
@@ -598,6 +629,29 @@ export function OfficeCharacter({
         ref={body}
         scale={[index === 6 ? 1.05 : 1, index === 1 ? 0.98 : 1, 1]}
       >
+        {decorative ? (
+          <RiggedOfficeCharacter
+            motion={motion}
+            motionReduced={reduced}
+            showPhone={characterIds[index] === "boss" && state === "DISCORD"}
+            style={{
+              skin: appearance.skin,
+              hair: appearance.hair,
+              jacket: outfit.jacket,
+              accent: outfit.accent,
+              shirt: outfit.shirt,
+              trousers: outfit.trousers,
+              shoes: outfit.shoes,
+              lapels: outfit.lapels,
+              tie: outfit.tie,
+              shortSleeve: outfit.shortSleeve,
+              style: outfit.style,
+              longHair,
+              boss: characterIds[index] === "boss",
+            }}
+          />
+        ) : (
+          <>
         <mesh position={[0, 0.96, 0]} scale={[1, 1, 0.66]} castShadow>
           <latheGeometry args={[coatProfile, decorative ? 24 : 12]} />
           <meshStandardMaterial color={outfit.jacket} roughness={0.9} />
@@ -839,6 +893,8 @@ export function OfficeCharacter({
             </group>
           </group>
         ))}
+          </>
+        )}
       </group>
     </group>
   );
