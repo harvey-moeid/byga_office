@@ -87,6 +87,8 @@ jobs:
           node-version: "24"
           cache: npm
       - run: npm ci
+      - name: Dependency security audit
+        run: npm run security:audit
       - run: npm run check
       - name: Browser acceptance
         run: |
