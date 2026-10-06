@@ -399,6 +399,16 @@ test("operations, scanner navigation, admin login and mobile layout remain usabl
     ),
   ).toBe(true);
 });
+test("operations defaults to lightweight view without mounting 3D", async ({
+  page,
+}) => {
+  await page.goto("/operations");
+  await expect(
+    page.getByRole("button", { name: "Operations", exact: true }),
+  ).toHaveClass(/selected/);
+  await expect(page.locator(".office-scene")).toHaveCount(0);
+});
+
 test("3D scene loads separately and WebGL failure preserves operations", async ({
   page,
 }) => {
