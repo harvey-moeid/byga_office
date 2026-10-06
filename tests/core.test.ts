@@ -320,7 +320,7 @@ describe("Scanner telemetry and group trigger contract", () => {
   });
 });
 describe("Consensus and confidence", () => {
-  it("NO_TRADE abstains and one analyst has one vote", () =>
+  it("NO_TRADE abstains once directional quorum is met", () =>
     expect(
       voting(
         analysts(["BUY", "BUY", "SELL", "NO_TRADE", "NO_TRADE", "NO_TRADE", "NO_TRADE", "NO_TRADE"]),
@@ -328,6 +328,17 @@ describe("Consensus and confidence", () => {
         "SELL",
       ).direction,
     ).toBe("BUY"));
+  it("does not let one directional vote overrule seven abstentions", () => {
+    const result = voting(
+      analysts(["BUY", "NO_TRADE", "NO_TRADE", "NO_TRADE", "NO_TRADE", "NO_TRADE", "NO_TRADE", "NO_TRADE"]),
+      "SELL",
+      "BUY",
+    );
+    expect(result.direction).toBe("SELL");
+    expect(result.tie).toBe(false);
+    expect(result.flags).toContain("AI_ABSTENTION_FALLBACK");
+    expect(result.flags).toContain("SCANNER_FALLBACK");
+  });
   it("uses scanner for all NO_TRADE and <4 successful analysts", () => {
     expect(voting(analysts(Array(8).fill("NO_TRADE")), "SELL").direction).toBe(
       "SELL",
