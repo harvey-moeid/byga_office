@@ -1737,3 +1737,17 @@ footer {
     padding: 16px;
   }
 }
+
+/* Preserve short-screen meeting compaction when width and height breakpoints overlap. */
+@media (max-width: 600px) and (max-height: 480px) {
+  .home-stage.home-fallback {
+    padding-top: 92px;
+  }
+  .home-fallback .home-notices {
+    margin: 0 12px;
+  }
+  .home-fallback:has(.fallback-meeting) > .operations-grid {
+    flex-basis: 62px;
+    padding: 4px 12px;
+  }
+}
