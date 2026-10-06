@@ -1,6 +1,7 @@
 import {
   analysisGroups,
   characterIds,
+  configSchema,
   MARKET,
   providers,
   scannerNames,
@@ -34,6 +35,13 @@ async function office(
     }),
   );
 }
+async function marketProcessingDelay(env: Env) {
+  const response = await office(env, "/config");
+  if (!response.ok) throw new Error("Active trading config unavailable");
+  const body = (await response.json()) as { config: unknown };
+  return configSchema.parse(body.config).processingDelaySeconds * 1000;
+}
+
 function officeEvents(request: Request, env: Env) {
   const encoder = new TextEncoder();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -269,10 +277,11 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (path === "/api/v1/health") {
     let chart = "DOWN";
     try {
-      await readMarket(env);
+      const delay = await marketProcessingDelay(env);
+      await readMarket(env, Date.now(), 260, delay);
       chart = "OK";
     } catch {
-      /* Public health deliberately excludes schema/SQL errors. */
+      /* Public health deliberately excludes schema/SQL/config errors. */
     }
     const states = (await (await office(env, "/providers")).json()) as {
       state: string;
@@ -400,7 +409,8 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (path === "/api/v1/market/status") {
     try {
-      const m = await readMarket(env);
+      const delay = await marketProcessingDelay(env);
+      const m = await readMarket(env, Date.now(), 260, delay);
       return json({
         market: MARKET,
         development: env.APP_ENV !== "production" && env.APP_ENV !== "staging",
