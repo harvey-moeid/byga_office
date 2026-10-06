@@ -352,6 +352,23 @@ p {
   overflow: hidden;
   isolation: isolate;
 }
+.office-scene.is-fullscreen,
+.office-scene:fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  z-index: 1000;
+  background: #0b1518;
+}
+.office-scene:fullscreen {
+  position: relative;
+}
 .office-scene::after {
   content: "";
   position: absolute;
@@ -601,6 +618,35 @@ p {
   font-weight: 400;
   color: #9db4ad;
 }
+.scene-fullscreen {
+  position: absolute;
+  top: 14px;
+  right: 16px;
+  z-index: 9;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid #5b817980;
+  border-radius: 8px;
+  background: #132b2fed;
+  color: #d4e9e1;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  backdrop-filter: blur(10px);
+}
+.scene-fullscreen span {
+  font-size: 15px;
+  line-height: 1;
+}
+.scene-fullscreen b {
+  font-size: 10px;
+  font-weight: 600;
+}
+.scene-fullscreen[aria-pressed="true"] {
+  background: #245849;
+  border-color: #c6ac78;
+  color: #f1f4ed;
+}
 .scene-live-dot {
   width: 6px;
   height: 6px;
@@ -728,6 +774,16 @@ p {
     font-size: 9px;
   }
   .scene-title small {
+    display: none;
+  }
+  .scene-fullscreen {
+    top: 10px;
+    right: 10px;
+    min-width: 42px;
+    min-height: 42px;
+    padding: 8px 10px;
+  }
+  .scene-fullscreen b {
     display: none;
   }
   .scene-controls {
