@@ -94,13 +94,16 @@ describe("Provider adapters", () => {
       workersAIModel,
     ]);
   });
-  const binding = (
+  const binding = ({
     run = vi.fn(async () => ({
       response: output,
       usage: { prompt_tokens: 20, completion_tokens: 12 },
     })),
     models = vi.fn(async () => []),
-  ) => ({ ...env, AI: { run, models } as unknown as Ai });
+  }: { run?: unknown; models?: unknown } = {}) => ({
+    ...env,
+    AI: { run, models } as unknown as Ai,
+  });
   it.each([true, false])(
     "Workers AI handles JSON response objects and strings (%s)",
     async (object) => {
@@ -108,7 +111,7 @@ describe("Provider adapters", () => {
         response: object ? output : JSON.stringify(output),
         usage: { prompt_tokens: 20, completion_tokens: 12 },
       }));
-      const cloudflare = binding(run);
+      const cloudflare = binding({ run });
       const f = vi.fn() as unknown as typeof fetch;
       const result = await requestAI(
         cloudflare,
@@ -136,11 +139,11 @@ describe("Provider adapters", () => {
     },
   );
   it("Workers AI failure uses audited retries and configured external fallback", async () => {
-    const cloudflare = binding(
-      vi.fn(async () => {
+    const cloudflare = binding({
+      run: vi.fn(async () => {
         throw new Error("WORKERS_AI_UNAVAILABLE");
       }),
-    );
+    });
     const { r, audit } = runtime();
     const f = vi.fn(
       async () => new Response(JSON.stringify(response("gemini"))),
@@ -170,7 +173,7 @@ describe("Provider adapters", () => {
       { name: "@cf/image/model", task: { name: "Text-to-Image" } },
     ]);
     expect(
-      await discoverModels(binding(undefined, models), "workers-ai"),
+      await discoverModels(binding({ models }), "workers-ai"),
     ).toEqual([workersAIModel]);
     expect(models).toHaveBeenCalledWith({
       page: 1,
