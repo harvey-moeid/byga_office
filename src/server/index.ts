@@ -1,5 +1,6 @@
 import {
   analysisGroups,
+  characterIds,
   MARKET,
   providers,
   scannerNames,
@@ -346,11 +347,13 @@ async function route(request: Request, env: Env): Promise<Response> {
       id: string;
       avatar: string;
     }[];
+    const byId = new Map(characters.map((character) => [character.id, character]));
     return json(
-      characters.map((character) => ({
-        id: character.id,
-        avatar: character.avatar,
-      })),
+      characterIds.map((id) => {
+        const character = byId.get(id);
+        if (!character) throw new Error(`Character config missing: ${id}`);
+        return { id: character.id, avatar: character.avatar };
+      }),
     );
   }
   if (path.startsWith("/api/v1/scanners/")) {

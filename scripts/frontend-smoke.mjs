@@ -63,10 +63,7 @@ await get("/api/v1/admin/config", 401);
 await get("/api/v1/__test/alarm", 404);
 const state = await (await get("/api/v1/office/state")).json();
 assert.equal(typeof state.office, "string");
-const characters = await (await get("/api/v1/characters")).json();
-assert.deepEqual(
-  characters.map((character) => character.id),
-  [
+const canonicalCharacters = [
     "trend",
     "structure",
     "momentum",
@@ -77,8 +74,21 @@ assert.deepEqual(
     "positioning",
     "risk",
     "boss",
-  ],
-  "Production must expose the complete 10-character office roster in canonical order",
+  ];
+let characters;
+for (let attempt = 0; attempt < 10; attempt++) {
+  characters = await (await get("/api/v1/characters")).json();
+  if (
+    JSON.stringify(characters.map((character) => character.id)) ===
+    JSON.stringify(canonicalCharacters)
+  )
+    break;
+  if (attempt < 9) await wait(3000);
+}
+assert.deepEqual(
+  characters.map((character) => character.id),
+  canonicalCharacters,
+  "Production must expose the complete 10-character office roster in canonical order after rollout",
 );
 const health = await (await get("/api/v1/health")).json();
 assert.equal(health.api, "OK");

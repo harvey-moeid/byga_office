@@ -60,10 +60,7 @@ assert.deepEqual(
   "Deployed backend must expose all four deterministic analysis groups",
 );
 assert.ok(Array.isArray(state.groups), "Latest deterministic group snapshots must be an array");
-const characters = await (await get("/api/v1/characters")).json();
-assert.deepEqual(
-  characters.map((character) => character.id),
-  [
+const canonicalCharacters = [
     "trend",
     "structure",
     "momentum",
@@ -74,8 +71,21 @@ assert.deepEqual(
     "positioning",
     "risk",
     "boss",
-  ],
-  "Deployed backend must expose the complete 10-character office roster in canonical order",
+  ];
+let characters;
+for (let attempt = 0; attempt < 10; attempt++) {
+  characters = await (await get("/api/v1/characters")).json();
+  if (
+    JSON.stringify(characters.map((character) => character.id)) ===
+    JSON.stringify(canonicalCharacters)
+  )
+    break;
+  if (attempt < 9) await new Promise((resolve) => setTimeout(resolve, 3000));
+}
+assert.deepEqual(
+  characters.map((character) => character.id),
+  canonicalCharacters,
+  "Deployed backend must expose the complete 10-character office roster in canonical order after rollout",
 );
 assert.ok(characters.every(c => !("primary_provider" in c) && !("primary_model" in c)));
 const health = await (await get("/api/v1/health")).json();
