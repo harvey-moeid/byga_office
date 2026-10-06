@@ -1,0 +1,61 @@
+{
+  "asset": {
+    "version": "2.0",
+    "generator": "BYGA Office Humanoid Rig v1"
+  },
+  "scene": 0,
+  "scenes": [
+    {
+      "name": "BYGA Humanoid Rig",
+      "nodes": [0]
+    }
+  ],
+  "nodes": [
+    { "name": "Armature", "children": [1] },
+    { "name": "Hips", "translation": [0, 0.97, 0], "children": [2, 14, 17] },
+    { "name": "Spine", "translation": [0, 0.18, 0], "children": [3] },
+    { "name": "Chest", "translation": [0, 0.22, 0], "children": [4, 6, 10] },
+    { "name": "Neck", "translation": [0, 0.22, 0], "children": [5] },
+    { "name": "Head", "translation": [0, 0.135, 0] },
+    { "name": "LeftShoulder", "translation": [-0.245, 0.055, 0], "children": [7] },
+    { "name": "LeftUpperArm", "children": [8] },
+    { "name": "LeftLowerArm", "translation": [0, -0.33, 0], "children": [9] },
+    { "name": "LeftHand", "translation": [0, -0.30, 0] },
+    { "name": "RightShoulder", "translation": [0.245, 0.055, 0], "children": [11] },
+    { "name": "RightUpperArm", "children": [12] },
+    { "name": "RightLowerArm", "translation": [0, -0.33, 0], "children": [13] },
+    { "name": "RightHand", "translation": [0, -0.30, 0] },
+    { "name": "LeftUpperLeg", "translation": [-0.105, -0.02, 0], "children": [15] },
+    { "name": "LeftLowerLeg", "translation": [0, -0.44, 0], "children": [16] },
+    { "name": "LeftFoot", "translation": [0, -0.40, 0] },
+    { "name": "RightUpperLeg", "translation": [0.105, -0.02, 0], "children": [18] },
+    { "name": "RightLowerLeg", "translation": [0, -0.44, 0], "children": [19] },
+    { "name": "RightFoot", "translation": [0, -0.40, 0] }
+  ],
+  "extras": {
+    "bygaRig": "v1",
+    "license": "Original BYGA project asset",
+    "coordinateSystem": "Y-up, front +Z",
+    "bones": [
+      "Hips",
+      "Spine",
+      "Chest",
+      "Neck",
+      "Head",
+      "LeftShoulder",
+      "LeftUpperArm",
+      "LeftLowerArm",
+      "LeftHand",
+      "RightShoulder",
+      "RightUpperArm",
+      "RightLowerArm",
+      "RightHand",
+      "LeftUpperLeg",
+      "LeftLowerLeg",
+      "LeftFoot",
+      "RightUpperLeg",
+      "RightLowerLeg",
+      "RightFoot"
+    ]
+  }
+}
