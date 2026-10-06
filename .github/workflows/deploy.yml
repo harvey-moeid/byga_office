@@ -111,6 +111,7 @@ jobs:
           writeFileSync(".wrangler/deploy-initial.json", JSON.stringify(config));
           JS
       - name: Deploy without starting automated meetings
+        id: deploy_initial
         run: npm run deploy
         env:
           BYGA_DEPLOY_CONFIG: .wrangler/deploy-initial.json
@@ -133,7 +134,11 @@ jobs:
           node scripts/wrangler.mjs secret bulk .wrangler/runtime-secrets.json --config "$BYGA_DEPLOY_CONFIG"
       - name: Verify deployed frontend, D1, Durable Object and Admin session
         run: node scripts/smoke.mjs
-      - name: Enable scheduled production pipeline
+      - name: Restore scheduled production pipeline
+        # Once the temporary cron-disabled Worker has been deployed, always
+        # restore the real schedule even when secrets/smoke verification fails.
+        # This prevents production from being stranded with no Cron Trigger.
+        if: ${{ always() && steps.deploy_initial.outcome == 'success' }}
         run: npm run deploy
       - name: Verify final deployment
         run: node scripts/smoke.mjs
