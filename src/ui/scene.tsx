@@ -256,8 +256,45 @@ export default function OfficeScene({
 }) {
   const [view, setView] = useState<View>("overview");
   const [reset, setReset] = useState(0);
+  const sceneRoot = useRef<HTMLDivElement>(null);
+  const [fullscreen, setFullscreen] = useState(false);
   const beforeMeetingView = useRef<View>("overview");
   const meetingWasActive = useRef(false);
+  useEffect(() => {
+    const syncFullscreen = () => {
+      if (document.fullscreenElement) {
+        setFullscreen(document.fullscreenElement === sceneRoot.current);
+        return;
+      }
+      if ("fullscreenEnabled" in document && document.fullscreenEnabled)
+        setFullscreen(false);
+    };
+    document.addEventListener("fullscreenchange", syncFullscreen);
+    return () => document.removeEventListener("fullscreenchange", syncFullscreen);
+  }, []);
+  useEffect(() => {
+    if (!fullscreen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [fullscreen]);
+  const toggleFullscreen = async () => {
+    const element = sceneRoot.current;
+    if (!element) return;
+    if (fullscreen) {
+      if (document.fullscreenElement) {
+        await document.exitFullscreen().catch(() => undefined);
+      }
+      setFullscreen(false);
+      return;
+    }
+    setFullscreen(true);
+    if (element.requestFullscreen) {
+      await element.requestFullscreen().catch(() => undefined);
+    }
+  };
   useEffect(() => {
     if (meetingId) {
       if (!meetingWasActive.current) {
@@ -387,12 +424,27 @@ export default function OfficeScene({
   }, [meetingActive]);
   const antialias = useRef(quality !== "low");
   return (
-    <div className="office-scene" aria-label="Kantor trading 3D interaktif">
+    <div
+      ref={sceneRoot}
+      className={`office-scene${fullscreen ? " is-fullscreen" : ""}`}
+      aria-label="Kantor trading 3D interaktif"
+    >
       <div ref={labelHost} className="scene-label-layer" />
       <div className="scene-title">
         <span className="scene-live-dot" /> BYGA OFFICE{" "}
         <small>TRADING FLOOR</small>
       </div>
+      <button
+        type="button"
+        className="scene-fullscreen"
+        onClick={toggleFullscreen}
+        aria-pressed={fullscreen}
+        aria-label={fullscreen ? "Keluar dari fullscreen 3D" : "Buka fullscreen 3D"}
+        title={fullscreen ? "Keluar fullscreen" : "Fullscreen 3D"}
+      >
+        <span aria-hidden="true">{fullscreen ? "✕" : "⛶"}</span>
+        <b>{fullscreen ? "Keluar" : "Fullscreen"}</b>
+      </button>
       <Canvas
         shadows={profile.shadows}
         dpr={profile.dpr}
