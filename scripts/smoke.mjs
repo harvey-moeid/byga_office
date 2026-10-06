@@ -88,9 +88,21 @@ assert.deepEqual(
   "Deployed backend must expose the complete 10-character office roster in canonical order after rollout",
 );
 assert.ok(characters.every(c => !("primary_provider" in c) && !("primary_model" in c)));
-const health = await (await get("/api/v1/health")).json();
+let health;
+for (let attempt = 0; attempt < 9; attempt++) {
+  health = await (await get("/api/v1/health")).json();
+  if (health.api === "OK" && health.chart_db === "OK") break;
+  if (attempt < 8) {
+    const delayMs = Math.min(15000, 2000 * 2 ** attempt);
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
+  }
+}
 assert.equal(health.api, "OK");
-assert.equal(health.chart_db, "OK", "Deployed chart binding or freshness failed");
+assert.equal(
+  health.chart_db,
+  "OK",
+  "Deployed chart binding or freshness remained unavailable after bounded retries",
+);
 assert.notEqual(health.ai_providers, "DOWN", "Runtime provider secret missing");
 const market = await (
   await get("/api/v1/market/status", 200, { attempts: 9, maxDelayMs: 15000 })
