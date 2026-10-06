@@ -39,6 +39,14 @@ describe("production configuration guards", () => {
     });
     expect(config.vars).not.toHaveProperty("OPENAI_API_KEY");
   });
+  it("keeps test-only changes out of the production deploy trigger", () => {
+    const workflow = readFileSync(".github/workflows/deploy.yml", "utf8");
+    expect(workflow).toContain('- "src/**"');
+    expect(workflow).not.toContain('- "tests/**"');
+    expect(workflow).not.toContain('- "browser-tests/**"');
+    expect(workflow).not.toContain('- "vitest.config.ts"');
+    expect(workflow).not.toContain('- "playwright.config.ts"');
+  });
   it("rejects migrations directed at the chart database", () => {
     const { result } = configure({ office_db_id: defaults.chart_db_id });
     expect(result.status).not.toBe(0);
