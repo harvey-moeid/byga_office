@@ -473,18 +473,29 @@ export function voting(
   const expected = Math.max(1, results.length);
   const success = counts.BUY + counts.SELL + counts.NO_TRADE;
   const minimumSuccess = Math.ceil(expected / 2);
+  const directional = counts.BUY + counts.SELL;
+  // NO_TRADE is an abstention, but a lone directional vote must not decide an
+  // eight-analyst case. Two directional votes is the minimum quorum; this
+  // preserves the documented plurality rule once real directional participation exists.
+  const directionalQuorum = Math.min(2, expected);
   const degraded = success < minimumSuccess;
+  const tie =
+    !degraded &&
+    directional >= directionalQuorum &&
+    counts.BUY === counts.SELL &&
+    counts.BUY > 0;
   let direction: TradeDirection | null = null;
   const flags: string[] = [];
   if (degraded) {
     direction = scanner;
     flags.push("AI_DEGRADED", "SCANNER_FALLBACK");
+  } else if (directional < directionalQuorum) {
+    direction = scanner;
+    flags.push("AI_ABSTENTION_FALLBACK");
+    if (scanner) flags.push("SCANNER_FALLBACK");
   } else if (counts.BUY > counts.SELL) direction = "BUY";
   else if (counts.SELL > counts.BUY) direction = "SELL";
-  else if (counts.NO_TRADE === expected) {
-    direction = scanner;
-    flags.push("SCANNER_FALLBACK");
-  } else if (boss !== "NO_TRADE") direction = boss;
+  else if (boss !== "NO_TRADE") direction = boss;
   else {
     direction = scanner;
     if (scanner) flags.push("SCANNER_FALLBACK");
@@ -494,10 +505,7 @@ export function voting(
     counts,
     flags,
     degraded,
-    tie:
-      success >= minimumSuccess &&
-      counts.BUY === counts.SELL &&
-      counts.NO_TRADE !== expected,
+    tie,
   };
 }
 export function confidence(
