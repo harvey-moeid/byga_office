@@ -8,7 +8,15 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { Group, Vector2, Vector3, MathUtils, Shape } from "three";
+import {
+  Group,
+  Vector2,
+  Vector3,
+  MathUtils,
+  Shape,
+  type Camera,
+  type Object3D,
+} from "three";
 import type { OfficeActivity } from "./office-activity";
 import {
   characterIds,
@@ -59,6 +67,35 @@ const appearances: Record<
   },
 };
 type Triple = [number, number, number];
+
+const speechProjection = new Vector3();
+
+function speechScreenPosition(
+  element: Object3D,
+  camera: Camera,
+  size: { width: number; height: number },
+): [number, number] {
+  const projected = element
+    .getWorldPosition(speechProjection)
+    .project(camera);
+  const rawX = (projected.x * 0.5 + 0.5) * size.width;
+  const rawY = (-projected.y * 0.5 + 0.5) * size.height;
+  const compact = size.width <= 600;
+  const landscape = size.height <= 480;
+  const halfWidth = Math.min(
+    compact ? 108 : landscape ? 124 : 136,
+    Math.max(0, size.width / 2 - 14),
+  );
+  const bubbleHeight = landscape ? 88 : compact ? 108 : 120;
+  const bottomClearance = landscape ? 72 : compact ? 104 : 86;
+  const minAnchorY = bubbleHeight + 14;
+  const maxAnchorY = Math.max(minAnchorY, size.height - bottomClearance);
+
+  return [
+    MathUtils.clamp(rawX, halfWidth + 12, size.width - halfWidth - 12),
+    MathUtils.clamp(rawY, minAnchorY, maxAnchorY),
+  ];
+}
 function Oval({
   at,
   size,
@@ -417,11 +454,16 @@ export function OfficeCharacter({
       {labelHost && (
         <Html
           portal={labelHost}
-          position={[0, 1.82, 0]}
-          center
+          position={[0, 2.05, 0]}
+          calculatePosition={speechScreenPosition}
           zIndexRange={[4, 3]}
         >
-          {speechVisible ? speech : null}
+          <div
+            className="meeting-speech-anchor"
+            data-character={characterIds[index]}
+          >
+            {speechVisible ? speech : null}
+          </div>
         </Html>
       )}
       <group
