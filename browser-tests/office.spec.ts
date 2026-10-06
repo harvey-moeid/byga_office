@@ -695,6 +695,19 @@ test("meeting dialogue rotates actual case results, opens details, admits Boss l
   });
   await expect(boss).toContainText("Keputusan akhir");
   await expect(page.locator(".meeting-bubble")).toHaveCount(1);
+  await boss.hover();
+  await expect(boss).toHaveCSS("color", "rgb(23, 53, 45)");
+  const bossBounds = await boss.boundingBox();
+  const fallbackViewport = page.viewportSize()!;
+  expect(bossBounds).not.toBeNull();
+  expect(bossBounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bossBounds!.y).toBeGreaterThanOrEqual(0);
+  expect(bossBounds!.x + bossBounds!.width).toBeLessThanOrEqual(
+    fallbackViewport.width,
+  );
+  expect(bossBounds!.y + bossBounds!.height).toBeLessThanOrEqual(
+    fallbackViewport.height,
+  );
   await page.screenshot({
     path: testInfo.outputPath("meeting-boss-fallback.png"),
   });
@@ -709,10 +722,6 @@ test("meeting dialogue rotates actual case results, opens details, admits Boss l
 test("3D speech follows the seated character and opens the actual result detail", async ({
   page,
 }, testInfo) => {
-  test.skip(
-    testInfo.project.name !== "desktop",
-    "Detailed 3D speech acceptance runs once; mobile meeting/layout coverage is separate.",
-  );
   test.setTimeout(120000);
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -735,9 +744,53 @@ test("3D speech follows the seated character and opens the actual result detail"
   meetingEnabled = true;
   const bubble = page.locator(".meeting-bubble").filter({ hasText: "Trend Analyst" });
   await expect(bubble).toBeVisible({ timeout: 60000 });
-  // Open the finite-lived speech immediately. The modal intentionally pauses
-  // presentation, making the remaining assertions deterministic on slow CI.
-  await bubble.click();
+  // Capture geometry and open the finite-lived bubble in the same browser
+  // task. Software WebGL can make separate Playwright round-trips slow enough
+  // for the seven-second speech turn to advance before the click is sent.
+  const geometry = await bubble.evaluate((element) => {
+    const rect = (node: Element) => {
+      const value = node.getBoundingClientRect();
+      return {
+        x: value.x,
+        y: value.y,
+        width: value.width,
+        height: value.height,
+      };
+    };
+    const overlays = [
+      ".meeting-status",
+      ".home-hud > div",
+      ".home-hud .segmented",
+      ".scene-controls",
+      ".scene-quality",
+    ]
+      .map((selector) => document.querySelector(selector))
+      .filter((node): node is Element => !!node)
+      .map(rect);
+    const bubbleBounds = rect(element);
+    element.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, cancelable: true }),
+    );
+    return { bubbleBounds, overlays };
+  });
+  const viewport = page.viewportSize()!;
+  const { bubbleBounds } = geometry;
+  expect(bubbleBounds.x).toBeGreaterThanOrEqual(8);
+  expect(bubbleBounds.y).toBeGreaterThanOrEqual(8);
+  expect(bubbleBounds.x + bubbleBounds.width).toBeLessThanOrEqual(
+    viewport.width - 8,
+  );
+  expect(bubbleBounds.y + bubbleBounds.height).toBeLessThanOrEqual(
+    viewport.height - 8,
+  );
+  for (const overlayBounds of geometry.overlays) {
+    const overlaps =
+      bubbleBounds.x < overlayBounds.x + overlayBounds.width &&
+      bubbleBounds.x + bubbleBounds.width > overlayBounds.x &&
+      bubbleBounds.y < overlayBounds.y + overlayBounds.height &&
+      bubbleBounds.y + bubbleBounds.height > overlayBounds.y;
+    expect(overlaps).toBe(false);
+  }
   await expect(page.getByRole("dialog")).toContainText(
     "Fixture trend: penjelasan lengkap",
   );
@@ -752,8 +805,8 @@ test("3D speech follows the seated character and opens the actual result detail"
     .click();
   const boss = page.locator(".meeting-bubble").filter({ hasText: "Head Trader" });
   await expect(boss).toBeVisible({ timeout: 60000 });
-  // Speech bubbles move with animated characters. dispatchEvent avoids
-  // Playwright waiting for a perfectly stable transform on software WebGL.
+  // Speech bubbles remain screen-clamped while following animated characters.
+  // dispatchEvent avoids waiting for a perfectly stable transform on software WebGL.
   await boss.dispatchEvent("click");
   await expect(page.getByRole("dialog")).toContainText(
     "Fixture boss: penjelasan lengkap",

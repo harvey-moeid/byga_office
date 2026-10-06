@@ -365,7 +365,7 @@ p {
 }
 .scene-controls {
   position: absolute;
-  z-index: 2;
+  z-index: 8;
   right: 18px;
   bottom: 18px;
   display: flex;
@@ -377,17 +377,30 @@ p {
   inset: 0;
   pointer-events: none;
   overflow: hidden;
-  z-index: 1;
+  z-index: 4;
 }
 .office-panel {
   position: relative;
+}
+.meeting-speech-anchor {
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  transform: translate(-50%, calc(-100% - 14px));
+  transform-origin: 50% 100%;
+  pointer-events: none;
+}
+.meeting-speech-anchor:empty {
+  display: none;
+}
+.meeting-speech-anchor .meeting-bubble {
+  pointer-events: auto;
 }
 .meeting-bubble {
   position: relative;
   display: grid;
   gap: 8px;
-  width: min(280px, 70vw);
-  padding: 14px 16px;
+  width: min(250px, calc(100vw - 32px));
+  padding: 12px 14px;
   border: 1px solid #75b6a3;
   border-radius: 16px;
   background: #f0f7f2;
@@ -421,25 +434,34 @@ p {
   font-size: 10px;
 }
 .meeting-bubble .speech-text {
-  font-size: 13px;
-  line-height: 1.5;
+  display: -webkit-box;
+  font-size: 12px;
+  line-height: 1.45;
+  overflow: hidden;
   overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 .meeting-bubble small {
   font-size: 10px;
   color: #486459;
 }
+.meeting-bubble:hover {
+  color: #17352d;
+  border-color: #75b6a3;
+}
 .meeting-bubble:focus-visible {
   outline: 3px solid #d5a94f;
   outline-offset: 4px;
 }
-.boss-bubble {
+.boss-bubble,
+.boss-bubble:hover {
   border-color: #d5a94f;
   box-shadow: 0 12px 35px #d5a94f30;
 }
 .meeting-status {
   position: absolute;
-  z-index: 5;
+  z-index: 9;
   left: 20px;
   top: 125px;
   max-width: min(330px, calc(100% - 40px));
@@ -513,6 +535,21 @@ p {
   color: #e5f1e9;
 }
 @media (max-width: 600px) {
+  .meeting-bubble {
+    width: min(220px, calc(100vw - 28px));
+    padding: 11px 12px;
+    gap: 6px;
+  }
+  .meeting-bubble strong {
+    font-size: 11px;
+  }
+  .meeting-bubble .speech-text {
+    font-size: 11px;
+    -webkit-line-clamp: 2;
+  }
+  .meeting-bubble small {
+    font-size: 9px;
+  }
   .meeting-status {
     top: 140px;
     left: 12px;
@@ -574,7 +611,7 @@ p {
   position: absolute;
   bottom: 20px;
   left: 20px;
-  z-index: 4;
+  z-index: 8;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1406,10 +1443,10 @@ footer {
   height: 100%;
 }
 .home-stage .scene-label-layer {
-  z-index: 7;
+  z-index: 4;
 }
 .home-stage > .meeting-status {
-  z-index: 8;
+  z-index: 9;
 }
 .home-stage .scene-title {
   display: none;
@@ -1421,7 +1458,7 @@ footer {
   right: max(126px, calc(env(safe-area-inset-right) + 126px));
   padding: 0;
   border: 0;
-  z-index: 5;
+  z-index: 6;
   align-items: flex-start;
   pointer-events: none;
 }
@@ -1528,7 +1565,7 @@ footer {
 }
 .home-notices {
   position: absolute;
-  z-index: 6;
+  z-index: 7;
   top: max(122px, calc(env(safe-area-inset-top) + 122px));
   left: max(24px, env(safe-area-inset-left));
   max-width: min(560px, calc(100vw - 48px));
@@ -1556,10 +1593,12 @@ footer {
   padding-top: 45dvh;
 }
 .home-stage .scene-controls {
+  z-index: 10;
   bottom: max(24px, env(safe-area-inset-bottom));
   right: max(24px, env(safe-area-inset-right));
 }
 .home-stage .scene-quality {
+  z-index: 10;
   bottom: max(36px, env(safe-area-inset-bottom));
   left: max(24px, env(safe-area-inset-left));
 }
@@ -1602,6 +1641,9 @@ footer {
   display: flex;
   flex-direction: column;
   padding-top: 122px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 .home-fallback .home-notices {
   position: relative;
@@ -1618,6 +1660,72 @@ footer {
   padding: 24px;
   align-content: start;
 }
+.home-fallback:has(.fallback-meeting) > .operations-grid {
+  flex: 0 0 96px;
+  grid-template-columns: repeat(10, minmax(66px, 1fr));
+  align-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.home-fallback:has(.fallback-meeting) > .operations-grid button {
+  min-width: 66px;
+  padding: 7px;
+}
+.home-fallback:has(.fallback-meeting) > .operations-grid .avatar {
+  width: 36px;
+  height: 36px;
+  margin: 0;
+  font-size: 12px;
+}
+.home-fallback:has(.fallback-meeting) > .operations-grid strong,
+.home-fallback:has(.fallback-meeting) > .operations-grid .badge {
+  display: none;
+}
+.home-fallback > .fallback-meeting {
+  flex-shrink: 0;
+}
+@media (max-height: 480px) {
+  .meeting-bubble {
+    width: min(232px, calc(100vw - 28px));
+    padding: 9px 11px;
+    gap: 5px;
+  }
+  .meeting-bubble strong {
+    font-size: 10px;
+  }
+  .meeting-bubble .speech-text {
+    font-size: 10px;
+    line-height: 1.35;
+    -webkit-line-clamp: 2;
+  }
+  .meeting-bubble small {
+    display: none;
+  }
+  .home-stage.home-fallback {
+    padding-top: 92px;
+  }
+  .home-fallback .home-notices {
+    margin: 0 12px;
+  }
+  .home-fallback:has(.fallback-meeting) > .operations-grid {
+    flex-basis: 62px;
+    padding: 4px 12px;
+  }
+  .home-fallback:has(.fallback-meeting) > .operations-grid .avatar {
+    width: 30px;
+    height: 30px;
+    font-size: 10px;
+  }
+  .home-fallback .meeting-status {
+    margin: 8px 12px;
+    padding: 8px 11px;
+  }
+  .home-fallback > .fallback-meeting {
+    padding: 7px 12px 12px;
+  }
+}
 @media (max-width: 600px) {
   .home-stage.home-fallback {
     padding-top: 168px;
@@ -1627,5 +1735,19 @@ footer {
   }
   .home-fallback > .operations-grid {
     padding: 16px;
+  }
+}
+
+/* Preserve short-screen meeting compaction when width and height breakpoints overlap. */
+@media (max-width: 600px) and (max-height: 480px) {
+  .home-stage.home-fallback {
+    padding-top: 92px;
+  }
+  .home-fallback .home-notices {
+    margin: 0 12px;
+  }
+  .home-fallback:has(.fallback-meeting) > .operations-grid {
+    flex-basis: 62px;
+    padding: 4px 12px;
   }
 }

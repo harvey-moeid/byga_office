@@ -95,8 +95,8 @@ const views: Record<
   },
   meeting: {
     label: "Ruang meeting",
-    camera: [9.1, 4.9, 8.2],
-    target: [5, 0.9, 1],
+    camera: [10.4, 6.4, 10.5],
+    target: [5, 1.05, 1],
   },
   boss: {
     label: "Ruang bos",
@@ -116,8 +116,13 @@ function CameraView({
   const { camera, size } = useThree();
   useEffect(() => {
     const setting = views[view];
+    const aspect = size.width / size.height;
     const factor =
-      view === "overview" ? Math.max(1, 1.3 / (size.width / size.height)) : 1;
+      view === "overview"
+        ? Math.max(1, 1.3 / aspect)
+        : view === "meeting"
+          ? Math.min(2.1, Math.max(1, 1.05 / aspect))
+          : 1;
     camera.position.set(
       ...(setting.camera.map(
         (n, i) => setting.target[i] + (n - setting.target[i]) * factor,
