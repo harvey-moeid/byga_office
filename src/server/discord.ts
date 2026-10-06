@@ -11,7 +11,7 @@ export function discordPayload(
 ) {
   const snapshot = JSON.parse(row.context) as { scanners: ScannerOutput[]; groups?: GroupSnapshot[] };
   const c = composition(snapshot.scanners);
-  const groups = snapshot.groups?.length === 3 ? groupComposition(snapshot.groups) : null;
+  const groups = snapshot.groups?.length ? groupComposition(snapshot.groups) : null;
   let content =
     kind === "MEETING"
       ? `AI OFFICE MEETING STARTED\n${MARKET} · ${row.direction ?? "Neutral"}\n${groups ? `Groups: ${groups.BUY} BUY / ${groups.SELL} SELL / ${groups.NONE} NONE\n` : ""}Scanners: ${c.BUY} BUY / ${c.SELL} SELL / ${c.NONE} NONE\nPrice: ${(JSON.parse(row.context) as { market: { M5: { close: number }[] } }).market.M5.at(-1)?.close ?? "—"}\n${row.id} · ${formatWib(row.created_at)}\n${origin}/cases/${row.id}`

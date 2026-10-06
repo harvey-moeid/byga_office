@@ -24,6 +24,7 @@ let failure: "none" | "primary" | "all" = "none";
 let release: (() => void) | undefined;
 let gate: Promise<void> | undefined;
 let requests = 0;
+let aiRequests = 0;
 let discordStatus: number | "timeout" = 204;
 const discordMessages: {
   content: string;
@@ -135,6 +136,7 @@ beforeAll(async () => {
         }
         if (u.pathname.endsWith("/models"))
           return MFResponse.json({ data: [{ id: "fixture" }] });
+        aiRequests++;
         if (gate) await gate;
         if (
           failure === "all" ||
@@ -1207,14 +1209,14 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
         .bind(uuid)
         .first<{ n: number }>())!.n,
     ).toBe(8);
-    const before = requests;
+    const before = aiRequests;
     const ns = await mf.getDurableObjectNamespace("OFFICE");
     const response = await ns
       .get(ns.idFromName("BTCUSDT.P"))
       .fetch("https://test/__test/alarm");
     expect(response.status).toBe(200);
     expect((await done(id)).status).toBe("COMPLETED");
-    expect(requests - before).toBe(2); // Only Risk Manager and Boss remain.
+    expect(aiRequests - before).toBe(2); // Only Risk Manager and Boss AI inference remain; Discord traffic is excluded.
     expect(
       (await db
         .prepare("SELECT COUNT(*) n FROM signals WHERE case_uuid=?")

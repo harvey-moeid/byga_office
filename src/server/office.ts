@@ -215,7 +215,7 @@ export class Office extends DurableObject<Env> {
     if (path === "/state") {
       const { config } = await this.config();
       const active = await this.env.DB.prepare(
-        "SELECT id,status FROM cases WHERE mode='LIVE' AND status IN ('REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW') ORDER BY created_at LIMIT 1",
+        "SELECT id,status FROM cases WHERE mode='LIVE' AND status IN ('REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED') ORDER BY created_at LIMIT 1",
       ).first();
       return json({
         scanner_consensus_min: config.scannerConsensusMin,

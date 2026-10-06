@@ -159,7 +159,13 @@ function AppLayout() {
               ["/characters", "◎", "AI Team"],
               ["/simulation", "▷", "Simulation"],
               ["/admin", "⚙", "Admin"],
-            ].map(([path, icon, title]) => (
+            ]
+              .filter(
+                ([path]) =>
+                  session.data?.admin ||
+                  (path !== "/cases" && path !== "/simulation"),
+              )
+              .map(([path, icon, title]) => (
               <NavLink
                 key={path}
                 to={path}
@@ -200,13 +206,57 @@ function AppLayout() {
             <Route path="/scanners/:id" element={<ScannerDetail />} />
             <Route path="/signals" element={<Signals />} />
             <Route path="/signals/:id" element={<SignalDetail />} />
-            <Route path="/cases" element={<Cases />} />
+            <Route
+              path="/cases"
+              element={
+                session.loading ? (
+                  <Empty>Memeriksa akses Admin…</Empty>
+                ) : session.data?.admin ? (
+                  <Cases />
+                ) : (
+                  <Navigate to="/admin" replace />
+                )
+              }
+            />
             <Route path="/cases/:id" element={<CaseDetail />} />
             <Route path="/characters" element={<Characters />} />
             <Route path="/characters/:id" element={<CharacterDetail />} />
-            <Route path="/simulation" element={<Simulation />} />
-            <Route path="/simulation/history" element={<SimulationHistory />} />
-            <Route path="/simulation/:id" element={<CaseDetail simulation />} />
+            <Route
+              path="/simulation"
+              element={
+                session.loading ? (
+                  <Empty>Memeriksa akses Admin…</Empty>
+                ) : session.data?.admin ? (
+                  <Simulation />
+                ) : (
+                  <Navigate to="/admin" replace />
+                )
+              }
+            />
+            <Route
+              path="/simulation/history"
+              element={
+                session.loading ? (
+                  <Empty>Memeriksa akses Admin…</Empty>
+                ) : session.data?.admin ? (
+                  <SimulationHistory />
+                ) : (
+                  <Navigate to="/admin" replace />
+                )
+              }
+            />
+            <Route
+              path="/simulation/:id"
+              element={
+                session.loading ? (
+                  <Empty>Memeriksa akses Admin…</Empty>
+                ) : session.data?.admin ? (
+                  <CaseDetail simulation />
+                ) : (
+                  <Navigate to="/admin" replace />
+                )
+              }
+            />
             <Route
               path="/admin/*"
               element={<Admin onSessionChange={session.retry} />}
@@ -232,7 +282,6 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
   const [view, setView] = useState("3D");
   const [selected, setSelected] = useState<string>();
   const [tf, setTf] = useState("M5");
-  const busy = !!state.data?.active;
   useEffect(() => {
     const fallback = () => setView("Operations");
     window.addEventListener("byga:webgl-lost", fallback);
@@ -242,6 +291,7 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
   const health = useData<Record<string, string>>("/health", true);
   const render3D = view === "3D" && supportsWebGL();
   const meeting = useMeetingPresentation(render3D);
+  const busy = !!state.data?.active || meeting.active;
   const notices = (
     <div className={immersive ? "home-notices" : undefined}>
       <Notice error={state.error} retry={state.retry} />

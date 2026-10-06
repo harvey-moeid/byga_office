@@ -12,6 +12,9 @@ test("Admin and Simulation modules load only when their routes are opened", asyn
   page.on("request", (request) =>
     modules.push(new URL(request.url()).pathname),
   );
+  await page.route("**/api/v1/auth/session", (route) =>
+    route.fulfill({ json: { admin: true } }),
+  );
   await page.goto("/signals");
   await expect(
     page.getByRole("heading", { name: "Signals", exact: true }),
@@ -26,7 +29,9 @@ test("Admin and Simulation modules load only when their routes are opened", asyn
     .getByRole("navigation")
     .getByRole("link", { name: /Admin$/ })
     .click();
-  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Admin", exact: true }),
+  ).toBeVisible();
   expect(modules.some((path) => path.endsWith("/src/ui/admin.tsx"))).toBe(true);
   expect(modules.some((path) => path.endsWith("/src/ui/simulation.tsx"))).toBe(
     false,
@@ -41,6 +46,48 @@ test("Admin and Simulation modules load only when their routes are opened", asyn
   expect(modules.some((path) => path.endsWith("/src/ui/simulation.tsx"))).toBe(
     true,
   );
+});
+test("admin-only routes mirror API authorization while public case detail remains reachable", async ({
+  page,
+}) => {
+  await page.route("**/api/v1/auth/session", (route) =>
+    route.fulfill({ json: { admin: false } }),
+  );
+  let publicCaseHits = 0;
+  await page.route("**/api/v1/cases/CASE-public/public", (route) => {
+    publicCaseHits++;
+    return route.fulfill({
+      json: {
+        id: "CASE-public",
+        status: "COMPLETED",
+        direction: "BUY",
+        created_at: Date.now(),
+        updated_at: Date.now(),
+        source: "AUTO",
+        signal: null,
+        analysts: [],
+      },
+    });
+  });
+  await page.goto("/operations");
+  const nav = page.getByRole("navigation");
+  await expect(nav.getByRole("link", { name: "Cases", exact: true })).toHaveCount(0);
+  await expect(
+    nav.getByRole("link", { name: "Simulation", exact: true }),
+  ).toHaveCount(0);
+
+  await page.goto("/simulation");
+  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
+
+  await page.goto("/cases");
+  await expect(page).toHaveURL(/\/admin$/);
+
+  await page.goto("/cases/CASE-public");
+  await expect(
+    page.getByRole("heading", { name: "CASE-public", exact: true }),
+  ).toBeVisible();
+  await expect.poll(() => publicCaseHits).toBeGreaterThan(0);
 });
 test("APPLY NOW cancels on dismissal and sends confirmed changes only on acceptance", async ({
   page,
