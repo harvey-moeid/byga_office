@@ -695,6 +695,8 @@ test("meeting dialogue rotates actual case results, opens details, admits Boss l
   });
   await expect(boss).toContainText("Keputusan akhir");
   await expect(page.locator(".meeting-bubble")).toHaveCount(1);
+  await boss.hover();
+  await expect(boss).toHaveCSS("color", "rgb(23, 53, 45)");
   const bossBounds = await boss.boundingBox();
   const fallbackViewport = page.viewportSize()!;
   expect(bossBounds).not.toBeNull();
