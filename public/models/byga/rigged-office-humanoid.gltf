@@ -7,30 +7,346 @@
   "scenes": [
     {
       "name": "BYGA Humanoid Rig",
-      "nodes": [0]
+      "nodes": [
+        0,
+        20
+      ]
     }
   ],
   "nodes": [
-    { "name": "Armature", "children": [1] },
-    { "name": "Hips", "translation": [0, 0.97, 0], "children": [2, 14, 17] },
-    { "name": "Spine", "translation": [0, 0.18, 0], "children": [3] },
-    { "name": "Chest", "translation": [0, 0.22, 0], "children": [4, 6, 10] },
-    { "name": "Neck", "translation": [0, 0.22, 0], "children": [5] },
-    { "name": "Head", "translation": [0, 0.135, 0] },
-    { "name": "LeftShoulder", "translation": [-0.245, 0.055, 0], "children": [7] },
-    { "name": "LeftUpperArm", "children": [8] },
-    { "name": "LeftLowerArm", "translation": [0, -0.33, 0], "children": [9] },
-    { "name": "LeftHand", "translation": [0, -0.30, 0] },
-    { "name": "RightShoulder", "translation": [0.245, 0.055, 0], "children": [11] },
-    { "name": "RightUpperArm", "children": [12] },
-    { "name": "RightLowerArm", "translation": [0, -0.33, 0], "children": [13] },
-    { "name": "RightHand", "translation": [0, -0.30, 0] },
-    { "name": "LeftUpperLeg", "translation": [-0.105, -0.02, 0], "children": [15] },
-    { "name": "LeftLowerLeg", "translation": [0, -0.44, 0], "children": [16] },
-    { "name": "LeftFoot", "translation": [0, -0.40, 0] },
-    { "name": "RightUpperLeg", "translation": [0.105, -0.02, 0], "children": [18] },
-    { "name": "RightLowerLeg", "translation": [0, -0.44, 0], "children": [19] },
-    { "name": "RightFoot", "translation": [0, -0.40, 0] }
+    {
+      "name": "Armature",
+      "children": [
+        1
+      ]
+    },
+    {
+      "name": "Hips",
+      "translation": [
+        0,
+        0.97,
+        0
+      ],
+      "children": [
+        2,
+        14,
+        17
+      ]
+    },
+    {
+      "name": "Spine",
+      "translation": [
+        0,
+        0.18,
+        0
+      ],
+      "children": [
+        3
+      ]
+    },
+    {
+      "name": "Chest",
+      "translation": [
+        0,
+        0.22,
+        0
+      ],
+      "children": [
+        4,
+        6,
+        10
+      ]
+    },
+    {
+      "name": "Neck",
+      "translation": [
+        0,
+        0.22,
+        0
+      ],
+      "children": [
+        5
+      ]
+    },
+    {
+      "name": "Head",
+      "translation": [
+        0,
+        0.135,
+        0
+      ]
+    },
+    {
+      "name": "LeftShoulder",
+      "translation": [
+        -0.245,
+        0.055,
+        0
+      ],
+      "children": [
+        7
+      ]
+    },
+    {
+      "name": "LeftUpperArm",
+      "children": [
+        8
+      ]
+    },
+    {
+      "name": "LeftLowerArm",
+      "translation": [
+        0,
+        -0.33,
+        0
+      ],
+      "children": [
+        9
+      ]
+    },
+    {
+      "name": "LeftHand",
+      "translation": [
+        0,
+        -0.3,
+        0
+      ]
+    },
+    {
+      "name": "RightShoulder",
+      "translation": [
+        0.245,
+        0.055,
+        0
+      ],
+      "children": [
+        11
+      ]
+    },
+    {
+      "name": "RightUpperArm",
+      "children": [
+        12
+      ]
+    },
+    {
+      "name": "RightLowerArm",
+      "translation": [
+        0,
+        -0.33,
+        0
+      ],
+      "children": [
+        13
+      ]
+    },
+    {
+      "name": "RightHand",
+      "translation": [
+        0,
+        -0.3,
+        0
+      ]
+    },
+    {
+      "name": "LeftUpperLeg",
+      "translation": [
+        -0.105,
+        -0.02,
+        0
+      ],
+      "children": [
+        15
+      ]
+    },
+    {
+      "name": "LeftLowerLeg",
+      "translation": [
+        0,
+        -0.44,
+        0
+      ],
+      "children": [
+        16
+      ]
+    },
+    {
+      "name": "LeftFoot",
+      "translation": [
+        0,
+        -0.4,
+        0
+      ]
+    },
+    {
+      "name": "RightUpperLeg",
+      "translation": [
+        0.105,
+        -0.02,
+        0
+      ],
+      "children": [
+        18
+      ]
+    },
+    {
+      "name": "RightLowerLeg",
+      "translation": [
+        0,
+        -0.44,
+        0
+      ],
+      "children": [
+        19
+      ]
+    },
+    {
+      "name": "RightFoot",
+      "translation": [
+        0,
+        -0.4,
+        0
+      ]
+    },
+    {
+      "name": "RigDriver",
+      "mesh": 0,
+      "skin": 0
+    }
+  ],
+  "skins": [
+    {
+      "name": "BYGA Humanoid Skeleton",
+      "skeleton": 1,
+      "joints": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19
+      ]
+    }
+  ],
+  "meshes": [
+    {
+      "name": "RigDriverMesh",
+      "primitives": [
+        {
+          "attributes": {
+            "POSITION": 0,
+            "JOINTS_0": 1,
+            "WEIGHTS_0": 2
+          },
+          "indices": 3,
+          "material": 0
+        }
+      ]
+    }
+  ],
+  "materials": [
+    {
+      "name": "RigDriverInvisible",
+      "pbrMetallicRoughness": {
+        "baseColorFactor": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "metallicFactor": 0,
+        "roughnessFactor": 1
+      },
+      "alphaMode": "BLEND",
+      "doubleSided": true
+    }
+  ],
+  "accessors": [
+    {
+      "bufferView": 0,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC3",
+      "min": [
+        0,
+        0,
+        0
+      ],
+      "max": [
+        0.001,
+        0.001,
+        0
+      ]
+    },
+    {
+      "bufferView": 1,
+      "componentType": 5121,
+      "count": 3,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 2,
+      "componentType": 5126,
+      "count": 3,
+      "type": "VEC4"
+    },
+    {
+      "bufferView": 3,
+      "componentType": 5123,
+      "count": 3,
+      "type": "SCALAR",
+      "min": [
+        0
+      ],
+      "max": [
+        2
+      ]
+    }
+  ],
+  "bufferViews": [
+    {
+      "buffer": 0,
+      "byteOffset": 0,
+      "byteLength": 36,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 36,
+      "byteLength": 12,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 48,
+      "byteLength": 48,
+      "target": 34962
+    },
+    {
+      "buffer": 0,
+      "byteOffset": 96,
+      "byteLength": 6,
+      "target": 34963
+    }
+  ],
+  "buffers": [
+    {
+      "byteLength": 104,
+      "uri": "data:application/octet-stream;base64,AAAAAAAAAAAAAAAAAAAAAG8SgzoAAAAAbxKDOgAAAAAAAAAAAAAAAAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAgD8AAAAAAAAAAAAAAAAAAIA/AAAAAAAAAAAAAAAAAAABAAIAAAA="
+    }
   ],
   "extras": {
     "bygaRig": "v1",
