@@ -104,6 +104,9 @@ export function buildCharacterVisual(
   root: Object3D,
   style: RiggedCharacterStyle,
 ): CharacterBuild {
+  const rigDriver = root.getObjectByName("RigDriver");
+  if (rigDriver) rigDriver.visible = false;
+
   const skin = material("Skin", style.skin, 0.72, { clearcoat: 0.03 });
   const hair = material("Hair", style.hair, 0.9);
   const jacket = material("Jacket", style.jacket, 0.78, { clearcoat: 0.04 });
