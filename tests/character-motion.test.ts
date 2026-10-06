@@ -67,7 +67,7 @@ describe("characterMotion", () => {
         meeting: true,
         speaking: true,
       }),
-    ).toBe("talk");
+    ).toBe("meeting-talk");
   });
 
   it("keeps unmatched standing activity neutral", () => {
