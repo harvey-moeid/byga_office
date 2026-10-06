@@ -1,5 +1,6 @@
 import {
   BoxGeometry,
+  CapsuleGeometry,
   CylinderGeometry,
   Mesh,
   MeshPhysicalMaterial,
@@ -9,7 +10,6 @@ import {
   type Material,
   type Object3D,
 } from "three";
-import { CapsuleGeometry } from "three/addons/geometries/CapsuleGeometry.js";
 
 type OutfitStyle = "formal" | "smart" | "cool" | "casual" | "relaxed";
 
