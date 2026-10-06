@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { readMarket } from "../src/server/market";
+import { readDerivatives, readMarket } from "../src/server/market";
 const now = Date.parse("2026-10-03T12:00:10Z");
 const schema = {
   table: "candles",
@@ -52,6 +52,48 @@ describe("Read-only chart repository", () => {
     expect(e.CHART_DB.prepare).toHaveBeenCalledTimes(3);
     expect(r.M5.at(-1)!.timestamp).toBe(Date.parse("2026-10-03T11:55:00Z"));
     expect(r.H1).toHaveLength(260);
+  });
+  it("reads derivative enrichment with SELECT-only statements", async () => {
+    const prepare = vi.fn((sql: string) => {
+      expect(sql).toMatch(/^SELECT /);
+      expect(sql).not.toMatch(/\b(INSERT|DELETE|UPDATE|REPLACE|CREATE|ALTER|DROP)\b/);
+      return {
+        bind: (
+          market: string,
+          metric: string,
+          timeframe: string,
+          cutoff: number,
+          limit: number,
+        ) => ({
+          all: async () => {
+            expect(market).toBe("BTCUSDT");
+            expect(limit).toBe(2);
+            return {
+              results: [
+                {
+                  ts: cutoff - 1,
+                  value: metric === "funding_rate" ? 0.0001 : 1,
+                  value2: metric === "liquidation" ? 2 : null,
+                  value3: metric === "liquidation" ? 3 : null,
+                  source: timeframe || "exchange",
+                },
+              ],
+            };
+          },
+        }),
+      };
+    });
+    const derivatives = await readDerivatives(
+      { CHART_DB: { prepare } as unknown as D1Database },
+      now,
+      2,
+      5000,
+    );
+    expect(prepare).toHaveBeenCalledTimes(4);
+    expect(derivatives.open_interest).toHaveLength(1);
+    expect(derivatives.funding_rate[0].value).toBe(0.0001);
+    expect(derivatives.liquidation[0]).toMatchObject({ value2: 2, value3: 3 });
+    expect(derivatives.long_short_ratio).toHaveLength(1);
   });
   it("rejects missing and duplicate candles", async () => {
     await expect(readMarket(env(true), now)).rejects.toThrow(

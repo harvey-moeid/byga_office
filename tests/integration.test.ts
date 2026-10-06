@@ -11,6 +11,7 @@ import {
 import { digest } from "../src/server/auth";
 import { apiLimits } from "../src/server/rate-limit";
 import {
+  characterIds,
   defaultConfig,
   workersAIModel,
   type CharacterConfig,
@@ -426,6 +427,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       primary_provider?: string;
     }[];
     expect(appearances).toHaveLength(10);
+    expect(appearances.map((entry) => entry.id)).toEqual([...characterIds]);
     expect(appearances[0]).toEqual({
       id: expect.any(String),
       avatar: "professional",
@@ -693,6 +695,59 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       c.result.signal!.entry_high,
     );
   }, 30000);
+  it("does not let stale simulation mode strand live recovery work", async () => {
+    const db = await mf.getD1Database("DB");
+    const template = await db
+      .prepare(
+        "SELECT * FROM cases WHERE mode='LIVE' AND source='EMERGENCY' AND status='COMPLETED' AND result IS NOT NULL ORDER BY created_at DESC LIMIT 1",
+      )
+      .first<{
+        candle_timestamp: number;
+        config_version: string;
+        context: string;
+        result: string;
+      }>();
+    expect(template).toBeTruthy();
+    const uuid = crypto.randomUUID();
+    const id = "CASE-LIVE-PRIORITY-RECOVERY";
+    const now = Date.now();
+    await db
+      .prepare("INSERT INTO cases VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+      .bind(
+        uuid,
+        id,
+        "LIVE",
+        "EMERGENCY",
+        "BUY",
+        "SIGNAL_CREATED",
+        template!.candle_timestamp,
+        template!.config_version,
+        template!.context,
+        template!.result,
+        now,
+        now,
+        "live-priority-recovery-fixture",
+      )
+      .run();
+    const ns = await mf.getDurableObjectNamespace("OFFICE");
+    const stub = ns.get(ns.idFromName("BTCUSDT.P"));
+    const legacy = await stub.fetch("https://test/__test/mode", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "SIMULATION" }),
+    });
+    expect(legacy.status).toBe(200);
+    await stub.fetch("https://test/__test/alarm");
+    expect(
+      (
+        await db
+          .prepare("SELECT status FROM cases WHERE uuid=?")
+          .bind(uuid)
+          .first<{ status: string }>()
+      )!.status,
+    ).toBe("COMPLETED");
+  });
+
   it("simulation writes result only to simulation history, never live signals", async () => {
     scenario = "BUY";
     const db = await mf.getD1Database("DB");

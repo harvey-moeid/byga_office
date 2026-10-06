@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { z } from "zod";
 import {
   analysisGroups,
+  characterIds,
   characterSchema,
   configSchema,
   defaultCharacters,
@@ -142,11 +143,19 @@ export class Office extends DurableObject<Env> {
   }
   private async characters() {
     const rows = await this.env.DB.prepare(
-      "SELECT snapshot FROM character_configs ORDER BY id",
+      "SELECT snapshot FROM character_configs",
     ).all<{ snapshot: string }>();
-    return rows.results.map((r) =>
-      characterSchema.parse(JSON.parse(r.snapshot)),
+    const byId = new Map(
+      rows.results.map((row) => {
+        const character = characterSchema.parse(JSON.parse(row.snapshot));
+        return [character.id, character] as const;
+      }),
     );
+    return characterIds.map((id) => {
+      const character = byId.get(id);
+      if (!character) throw new Error(`Character config missing: ${id}`);
+      return character;
+    });
   }
   private async marketData(config: TradingConfig, at = Date.now()) {
     const delay = config.processingDelaySeconds * 1000;
@@ -624,7 +633,6 @@ export class Office extends DurableObject<Env> {
     characters?: CharacterConfig[],
     strictReplay = false,
   ) {
-    await this.ctx.storage.put("mode", mode);
     const existing = await this.env.DB.prepare(
       "SELECT * FROM cases WHERE idempotency_key=?",
     )
@@ -733,38 +741,30 @@ export class Office extends DurableObject<Env> {
     // Persist a watchdog before any external work: abrupt termination must leave
     // a wake-up behind even when the normal finally block never executes.
     await this.ctx.storage.setAlarm(Date.now() + 30000);
-    const mode = (await this.ctx.storage.get<string>("mode")) ?? "LIVE";
-    if (mode === "LIVE") await retryDeliveries(this.env);
-    let row = await this.env.DB.prepare(
-      "SELECT * FROM cases WHERE mode=? AND status IN ('REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED') ORDER BY created_at LIMIT 1",
-    )
-      .bind(mode)
-      .first<CaseRow>();
-    if (!row)
-      row = await this.env.DB.prepare(
-        "SELECT * FROM cases WHERE mode=? AND status='QUEUED' ORDER BY created_at LIMIT 1",
-      )
-        .bind(mode)
-        .first<CaseRow>();
+    await retryDeliveries(this.env);
+    // Never select work from a single persisted "mode" flag: a simulation
+    // must not strand live trading work. Resume LIVE first, then SIMULATION;
+    // within the same mode, resume in-flight work before queued work.
+    const row = await this.env.DB.prepare(
+      "SELECT * FROM cases WHERE status IN ('QUEUED','REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED') ORDER BY CASE WHEN mode='LIVE' THEN 0 ELSE 1 END, CASE WHEN status='QUEUED' THEN 1 ELSE 0 END, created_at LIMIT 1",
+    ).first<CaseRow>();
     if (!row) {
       await this.ctx.storage.delete("active");
-      if (mode === "LIVE") {
-        const returning =
-          (await this.ctx.storage.get<number>("return_until")) ?? 0;
-        if (Date.now() < returning) {
-          await this.ctx.storage.put("office", "RETURN_TO_DESK");
-          await this.ctx.storage.setAlarm(returning);
-          return;
-        }
-        const latest =
-          (await this.ctx.storage.get<ScannerOutput[]>("scanners")) ?? [];
-        await this.ctx.storage.put(
-          "office",
-          latest.some((s) => s.direction !== "NONE")
-            ? "WATCHING"
-            : "MONITORING",
-        );
+      const returning =
+        (await this.ctx.storage.get<number>("return_until")) ?? 0;
+      if (Date.now() < returning) {
+        await this.ctx.storage.put("office", "RETURN_TO_DESK");
+        await this.ctx.storage.setAlarm(returning);
+        return;
       }
+      const latest =
+        (await this.ctx.storage.get<ScannerOutput[]>("scanners")) ?? [];
+      await this.ctx.storage.put(
+        "office",
+        latest.some((s) => s.direction !== "NONE")
+          ? "WATCHING"
+          : "MONITORING",
+      );
       await this.cleanup();
       const due = await this.env.DB.prepare(
         "SELECT MIN(CASE WHEN status='SENDING' THEN COALESCE(last_attempt_at,created_at)+30000 ELSE next_attempt_at END) AS time FROM discord_deliveries WHERE (status='SENDING' OR (status='PENDING' AND attempts<4)) AND ((kind='SIGNAL' AND ?=1) OR (kind!='SIGNAL' AND ?=1))",

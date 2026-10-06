@@ -16,6 +16,13 @@ export class Office extends ProductionOffice {
     if (path === "/__test/storage") {
       return Response.json({ alarm: await this.ctx.storage.getAlarm() });
     }
+    if (path === "/__test/mode" && request.method === "POST") {
+      const body = (await request.json()) as { mode?: string };
+      if (body.mode !== "LIVE" && body.mode !== "SIMULATION")
+        return Response.json({ error: "invalid mode" }, { status: 400 });
+      await this.ctx.storage.put("mode", body.mode);
+      return Response.json({ ok: true });
+    }
     if (path === "/__test/idle") {
       await this.ctx.storage.delete("return_until");
       return Response.json({ ok: true });

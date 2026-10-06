@@ -61,7 +61,22 @@ assert.deepEqual(
 );
 assert.ok(Array.isArray(state.groups), "Latest deterministic group snapshots must be an array");
 const characters = await (await get("/api/v1/characters")).json();
-assert.equal(characters.length, 10);
+assert.deepEqual(
+  characters.map((character) => character.id),
+  [
+    "trend",
+    "structure",
+    "momentum",
+    "liquidity",
+    "volume",
+    "quant",
+    "derivatives",
+    "positioning",
+    "risk",
+    "boss",
+  ],
+  "Deployed backend must expose the complete 10-character office roster in canonical order",
+);
 assert.ok(characters.every(c => !("primary_provider" in c) && !("primary_model" in c)));
 const health = await (await get("/api/v1/health")).json();
 assert.equal(health.api, "OK");
