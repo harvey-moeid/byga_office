@@ -128,6 +128,36 @@ if (process.env.ADMIN_PASSWORD) {
     });
     assert.equal(config.status, 200);
     const activeConfig = await config.json();
+    const [activeCharactersResponse, adminHealthResponse] = await Promise.all([
+      fetch(origin + "/api/v1/admin/characters", {
+        headers: { Cookie: cookie },
+        signal: AbortSignal.timeout(20000),
+      }),
+      fetch(origin + "/api/v1/admin/health", {
+        headers: { Cookie: cookie },
+        signal: AbortSignal.timeout(20000),
+      }),
+    ]);
+    assert.equal(activeCharactersResponse.status, 200, "Active character config read failed");
+    assert.equal(adminHealthResponse.status, 200, "Admin provider health read failed");
+    const activeCharacters = await activeCharactersResponse.json();
+    const adminHealth = await adminHealthResponse.json();
+    const configuredProviders = new Map(
+      adminHealth.configured.map((entry) => [entry.id, entry.configured]),
+    );
+    const selectedProviders = new Set(
+      activeCharacters.flatMap((character) => [
+        character.primary_provider,
+        character.fallback_provider,
+      ]),
+    );
+    for (const provider of selectedProviders) {
+      assert.equal(
+        configuredProviders.get(provider),
+        true,
+        `Active character provider is missing its runtime binding: ${provider}`,
+      );
+    }
     const aiProbe = await fetch(origin + "/api/v1/admin/test-provider", {
       method: "POST",
       headers: { Cookie: cookie, Origin: origin, "Content-Type": "application/json" },
