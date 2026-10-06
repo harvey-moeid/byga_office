@@ -895,10 +895,13 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       true,
     );
     failure = "none";
-    await call("/admin/test-provider", { id: "openai" });
+    await call("/admin/test-provider", { id: "openrouter" });
     await call("/admin/test-provider", { id: "gemini" });
   }, 30000);
   it("APPLY NOW cancels in-flight case and replacement owns the new config", async () => {
+    failure = "none";
+    await call("/admin/test-provider", { id: "openrouter" });
+    await call("/admin/test-provider", { id: "gemini" });
     gate = new Promise<void>((r) => {
       release = r;
     });
@@ -909,13 +912,18 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
         idempotencyKey: "cancel-in-flight",
       })
     ).json()) as { id: string };
+    let reachedAnalysis = false;
     for (let i = 0; i < 100; i++) {
       const row = (await (await call("/admin/cases/" + item.id)).json()) as {
         status: string;
       };
-      if (row.status === "AI_ANALYSIS") break;
+      if (row.status === "AI_ANALYSIS") {
+        reachedAnalysis = true;
+        break;
+      }
       await new Promise((r) => setTimeout(r, 30));
     }
+    expect(reachedAnalysis).toBe(true);
     const updated = await call("/admin/config", {
       config: { ...defaultConfig, publicSignals: true, minRR: 2 },
       activation: "APPLY NOW",
