@@ -35,6 +35,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Dependency security audit
+        run: npm run security:audit
       - name: TypeScript
         run: npm run typecheck
       - name: ESLint
