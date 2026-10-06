@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "eslint .",
+    "security:audit": "npm audit --omit=dev --audit-level=high && npm audit --audit-level=critical",
     "format": "prettier --write src tests scripts",
     "db:migrate": "node scripts/wrangler.mjs d1 migrations apply trading_office_db --local",
     "db:fixture": "node scripts/fixture.mjs",
