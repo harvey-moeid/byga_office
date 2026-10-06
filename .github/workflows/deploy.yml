@@ -13,11 +13,6 @@ on:
       - "vite.config.ts"
       - "tsconfig.json"
       - "scripts/**"
-      - "tests/**"
-      - "browser-tests/**"
-      - "vitest.config.ts"
-      - "playwright.config.ts"
-      - "eslint.config.js"
       - ".github/workflows/deploy.yml"
       - ".github/workflows/frontend.yml"
   workflow_dispatch:
@@ -58,6 +53,12 @@ jobs:
       ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
       GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+      MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      COHERE_API_KEY: ${{ secrets.COHERE_API_KEY }}
+      NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
       DISCORD_MEETING_WEBHOOK: ${{ secrets.DISCORD_MEETING_WEBHOOK }}
       DISCORD_SIGNAL_WEBHOOK: ${{ secrets.DISCORD_SIGNAL_WEBHOOK }}
     steps:
@@ -132,11 +133,27 @@ jobs:
             OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY,
             GEMINI_API_KEY: process.env.GEMINI_API_KEY,
           };
-          for (const name of ["DISCORD_MEETING_WEBHOOK", "DISCORD_SIGNAL_WEBHOOK"])
+          // Optional secrets are updated when GitHub provides them. Missing
+          // values are deliberately omitted so existing Cloudflare-managed
+          // bindings used by saved character configs are preserved.
+          for (const name of [
+            "OPENAI_API_KEY",
+            "GROQ_API_KEY",
+            "MISTRAL_API_KEY",
+            "HF_TOKEN",
+            "COHERE_API_KEY",
+            "NVIDIA_API_KEY",
+            "DISCORD_MEETING_WEBHOOK",
+            "DISCORD_SIGNAL_WEBHOOK",
+          ])
             if (process.env[name]) secrets[name] = process.env[name];
           writeFileSync(".wrangler/runtime-secrets.json", JSON.stringify(secrets), { mode: 0o600 });
           JS
           node scripts/wrangler.mjs secret bulk .wrangler/runtime-secrets.json --config "$BYGA_DEPLOY_CONFIG"
+      - name: Inventory runtime secret bindings
+        # Names/types only; secret values are never printed. Omitted optional
+        # secrets remain Cloudflare-managed instead of being silently deleted.
+        run: node scripts/wrangler.mjs secret list --config "$BYGA_DEPLOY_CONFIG"
       - name: Verify deployed frontend, D1, Durable Object and Admin session
         run: node scripts/smoke.mjs
       - name: Restore scheduled production pipeline
