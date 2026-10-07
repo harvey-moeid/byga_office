@@ -639,6 +639,8 @@ export default function OfficeScene({
       ref={sceneRoot}
       className={`office-scene${fullscreen ? " is-fullscreen" : ""}${meetingActive ? " meeting-active" : ""}`}
       aria-label="Kantor trading 3D interaktif"
+      data-meeting-floor={meetingActive ? meetingFloor : undefined}
+      data-boss-floor={profile.upperFloor ? 2 : 1}
     >
       <div ref={labelHost} className="scene-label-layer" />
       <div className="scene-title">
