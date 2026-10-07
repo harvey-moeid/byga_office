@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, Html, OrbitControls } from "@react-three/drei";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   TOUCH,
   ACESFilmicToneMapping,
@@ -384,6 +384,16 @@ export default function OfficeScene({
   const [motions, setMotions] = useState<
     Partial<Record<CharacterId, CharacterMotion>>
   >({});
+  const handleMotionChange = useCallback(
+    (character: CharacterId, motion: CharacterMotion) => {
+      setMotions((current) =>
+        current[character] === motion
+          ? current
+          : { ...current, [character]: motion },
+      );
+    },
+    [],
+  );
   const firstActivity = useRef(true);
   const activityArrivalHandler = useRef<
     (id: CharacterId, activity: OfficeActivity) => void
@@ -673,23 +683,20 @@ export default function OfficeScene({
               activity={activities[id]}
               decorative={profile.decorative}
               onSelect={onSelect}
-              onPeek={(character) =>
-                setPeekCharacter((current) =>
-                  current === character ? undefined : character,
-                )
+              onPeek={
+                context
+                  ? (character) =>
+                      setPeekCharacter((current) =>
+                        current === character ? undefined : character,
+                      )
+                  : undefined
               }
               labelHost={labelHost}
               onSpeechReady={onSpeechReady}
               onActivityArrive={(id, activity) =>
                 activityArrivalHandler.current(id, activity)
               }
-              onMotionChange={(character, motion) =>
-                setMotions((current) =>
-                  current[character] === motion
-                    ? current
-                    : { ...current, [character]: motion },
-                )
-              }
+              onMotionChange={handleMotionChange}
               speech={
                 speech?.character === id && onSpeechDetails ? (
                   <SpeechBubble turn={speech} onDetails={onSpeechDetails} />
