@@ -28,7 +28,9 @@ export function characterMotion({
 }): CharacterMotion {
   if (walking) return "walk";
   if (atActivity) {
-    if (activityKind === "stretch") return "stretch";
+    if (activityKind === "roam") return "walk";
+    if (activityKind === "stretch" || activityKind === "desk-break")
+      return "stretch";
     if (activityKind === "coffee" || activityKind === "coffee-break")
       return "coffee";
     if (

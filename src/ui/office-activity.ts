@@ -35,10 +35,11 @@ export const ACTIVITY_TRAVEL_TIMEOUT_MS = 90_000;
 type RandomSource = () => number;
 type Range = readonly [number, number];
 
+// Conversation is intentionally group-only. An individual "chat" looked like
+// a character talking to empty space in the overview camera.
 const individualKinds: OfficeActivityKind[] = [
   "coffee",
   "stretch",
-  "chat",
   "market-review",
   "roam",
   "desk-break",
@@ -206,10 +207,37 @@ function activityDuration(kind: OfficeActivityKind, random: RandomSource) {
 }
 
 function individualFacing(kind: OfficeActivityKind, spot: Point) {
-  if (kind === "coffee") return 0;
+  if (kind === "coffee") return facingToward(spot, [-2, 5.5]);
   if (kind === "market-review") return Math.PI;
   if (kind === "chat") return facingToward(spot, [-3, 1]);
   return Math.PI;
+}
+
+export function advanceRoamActivity(
+  activity: OfficeActivity,
+  occupied: readonly Point[] = [],
+  random: RandomSource = Math.random,
+): OfficeActivity {
+  if (activity.kind !== "roam") return activity;
+  const blocked = new Set([
+    activity.destination.join(","),
+    ...occupied.map((point) => point.join(",")),
+  ]);
+  const unoccupied = individualSpots.roam.filter(
+    (point) => !blocked.has(point.join(",")),
+  );
+  const different = individualSpots.roam.filter(
+    (point) => point.join(",") !== activity.destination.join(","),
+  );
+  const destination = pick(
+    unoccupied.length ? unoccupied : different,
+    random,
+  );
+  return {
+    ...activity,
+    destination,
+    facing: facingToward(activity.destination, destination),
+  };
 }
 
 export function activityDelayMs(first: boolean, random: RandomSource = Math.random) {
