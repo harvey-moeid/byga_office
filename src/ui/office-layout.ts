@@ -37,6 +37,6 @@ export const BOSS_OFFICE_LAYOUT = {
 export const MEETING_VIEW = {
   // Keep the camera below the mezzanine slab so the upper floor can never
   // occlude the meeting table or seated characters.
-  camera: [7.7, 2.85, 3.35] as [number, number, number],
+  camera: [5, 3.25, 11] as [number, number, number],
   target: [5, 0.95, 1] as [number, number, number],
 } as const;
