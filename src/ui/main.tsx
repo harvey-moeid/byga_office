@@ -306,9 +306,12 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
   const selectedCharacter = characterIds.includes(selected as CharacterId)
     ? (selected as CharacterId)
     : undefined;
-  const selectedTurn = selectedCharacter
-    ? meeting.snapshot?.turns.find((turn) => turn.character === selectedCharacter)
-    : undefined;
+  const selectedTurn =
+    selectedCharacter && meeting.active
+      ? meeting.snapshot?.turns.find(
+          (turn) => turn.character === selectedCharacter,
+        )
+      : undefined;
   const notices = (
     <div className={immersive ? "home-notices" : undefined}>
       <Notice error={state.error} retry={state.retry} />
