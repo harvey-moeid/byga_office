@@ -359,7 +359,7 @@ export default function OfficeScene({
   const sceneRoot = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [meetingFloor, setMeetingFloor] = useState<MeetingFloor>(1);
-  const meetingVenueCase = useRef<string>();
+  const meetingVenueCase = useRef<string | undefined>(undefined);
   const beforeMeetingView = useRef<View>("overview");
   const meetingWasActive = useRef(false);
   useEffect(() => {
