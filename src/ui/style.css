@@ -493,7 +493,7 @@ p {
   background: #edf4f0;
   box-shadow: 0 10px 26px #0004;
 }
-.character-peek-bubble:hover {
+.meeting-bubble.character-peek-bubble:hover {
   border-color: #7aa394;
   background: #f3f8f5;
 }
@@ -515,6 +515,21 @@ p {
   width: fit-content;
   font-size: 10px;
   font-weight: 900;
+}
+.character-peek-bubble[data-vote="BUY"] {
+  box-shadow:
+    inset 4px 0 0 #4f9b75,
+    0 10px 26px #0004;
+}
+.character-peek-bubble[data-vote="SELL"] {
+  box-shadow:
+    inset 4px 0 0 #c66a62,
+    0 10px 26px #0004;
+}
+.character-peek-bubble[data-vote="NO_TRADE"] {
+  box-shadow:
+    inset 4px 0 0 #9b9077,
+    0 10px 26px #0004;
 }
 .meeting-bubble:hover {
   color: #17352d;
