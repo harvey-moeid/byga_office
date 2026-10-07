@@ -6,7 +6,13 @@ import {
   RepeatWrapping,
   SRGBColorSpace,
 } from "three";
-import { desks, partitions, meetingSeats } from "./navigation";
+import {
+  analystDesks,
+  analystFloor,
+  desks,
+  partitions,
+  meetingSeats,
+} from "./navigation";
 
 type Triple = [number, number, number];
 type Finish =
@@ -207,10 +213,14 @@ function buildOffice(detail: boolean): Part[] {
         "metal",
       );
   });
-  box([-2.65, 0.035, 0.65], [7.4, 0.012, 6.6], "rug");
+  box(
+    [analystFloor.x, 0.035, analystFloor.z],
+    [analystFloor.w - 0.6, 0.012, analystFloor.d - 0.4],
+    "rug",
+  );
   box([5, 0.035, 1], [4.8, 0.015, 4.5], "rug");
   desks.forEach(([x, z], index) => {
-    const executive = index > 5;
+    const executive = index >= analystDesks.length;
     box([x, 0.76, z], [1.6, 0.065, 0.85], executive ? "walnut" : "oak");
     for (const side of [-1, 1]) {
       box([x + side * 0.67, 0.38, z], [0.035, 0.72, 0.72], "metal");

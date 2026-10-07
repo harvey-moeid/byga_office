@@ -1,5 +1,5 @@
 import { Clone, useGLTF } from "@react-three/drei";
-import { desks, meetingSeats } from "./navigation";
+import { analystDesks, desks, meetingSeats } from "./navigation";
 
 const CHAIR_MODEL = "/models/byga/executive-chair.gltf";
 const SOFA_MODEL = "/models/byga/lounge-sofa.gltf";
@@ -44,7 +44,7 @@ export function HybridOfficeAssets() {
           key={`desk-chair-${index}`}
           position={[x, 0, z + 0.72]}
           facing={Math.PI}
-          scale={index > 5 ? 1.04 : 1}
+          scale={index >= analystDesks.length ? 1.04 : 1}
         />
       ))}
       {meetingSeats.map(({ position: [x, z], facing }, index) => (
