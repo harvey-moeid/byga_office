@@ -1,5 +1,5 @@
 import { characterIds } from "../core/contracts";
-import { BOSS_OFFICE_LAYOUT } from "./office-layout";
+import { GROUND_EXECUTIVE_STATION_LAYOUT } from "./office-layout";
 export type Point = readonly [number, number];
 export interface Obstacle {
   x: number;
@@ -28,7 +28,7 @@ export const rooms: Room[] = [
   { label: "Market Wall", x: 0, z: -5, w: 7, d: 3 },
   { label: "Risk Office", x: 6, z: -4, w: 4, d: 4 },
   { label: "War Room", x: 5, z: 1, w: 6, d: 5 },
-  { label: "Boss Office", x: 6, z: 6, w: 4, d: 3 },
+  { label: "Executive Station", x: 6, z: 6, w: 4, d: 3 },
   { label: "Server / Data", x: -7, z: 0, w: 2, d: 3 },
   { label: "Lounge", x: -2, z: 5.5, w: 3, d: 3 },
 ];
@@ -89,7 +89,7 @@ export const analystDesks: Point[] = [
 export const desks: Point[] = [
   ...analystDesks,
   [6, -4], // Risk Office
-  [6, 6], // Boss Office
+  [6, 6], // Executive Station / Low-mode Boss fallback
 ];
 // The rendered furniture and routing share these footprints. Door openings are
 // real gaps, so actors can enter offices instead of crossing glass partitions.
@@ -113,8 +113,14 @@ export const obstacles: Obstacle[] = [
   ...desks.map(([x, z], index) => ({
     x,
     z,
-    w: index === desks.length - 1 ? BOSS_OFFICE_LAYOUT.deskWidth : 1.6,
-    d: index === desks.length - 1 ? BOSS_OFFICE_LAYOUT.deskDepth : 0.85,
+    w:
+      index === desks.length - 1
+        ? GROUND_EXECUTIVE_STATION_LAYOUT.deskWidth
+        : 1.6,
+    d:
+      index === desks.length - 1
+        ? GROUND_EXECUTIVE_STATION_LAYOUT.deskDepth
+        : 0.85,
   })),
   { x: 5, z: 1, w: 3, d: 1.4 },
 ];
