@@ -13,7 +13,7 @@ const schema = {
   volume: "volume",
   timestampUnit: "seconds",
 };
-function env(gap = false) {
+function env(gap = false, stale = false) {
   const prepare = vi.fn((sql: string) => {
     expect(sql).toMatch(/^SELECT /);
     expect(sql).not.toMatch(/\b(INSERT|DELETE|UPDATE|REPLACE)\b/);
@@ -24,7 +24,8 @@ function env(gap = false) {
           const duration = { H1: 3600, M15: 900, M5: 300 }[
             tf as "H1" | "M15" | "M5"
           ];
-          const latest = Math.floor(cutoff / duration) * duration;
+          const latest =
+            Math.floor(cutoff / duration) * duration - (stale ? duration * 2 : 0);
           return {
             results: Array.from({ length: count }, (_, i) => ({
               timestamp:
@@ -99,6 +100,16 @@ describe("Read-only chart repository", () => {
     await expect(readMarket(env(true), now)).rejects.toThrow(
       "Missing or duplicate",
     );
+  });
+  it("keeps runtime freshness strict while allowing deploy-only structural inspection", async () => {
+    await expect(readMarket(env(false, true), now)).rejects.toThrow("Stale");
+    await expect(
+      readMarket(env(false, true), now, 260, 5000, { enforceFreshness: false }),
+    ).resolves.toMatchObject({
+      H1: expect.any(Array),
+      M15: expect.any(Array),
+      M5: expect.any(Array),
+    });
   });
   it("rejects SQL identifier injection before making any query", async () => {
     const e = env();
