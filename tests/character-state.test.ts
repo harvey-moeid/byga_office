@@ -84,6 +84,10 @@ describe("3D character presence", () => {
       characterPresence("boss", { playback: gathering, snapshot }),
     ).toBe("WAITING IN OFFICE");
 
+    expect(
+      characterPresence("quant", { playback: gathering, snapshot }),
+    ).toBe("WALKING TO MEETING");
+
     const speaking = playback("speaking", { speaker: "trend" });
     expect(
       characterPresence("trend", { playback: speaking, snapshot }),
@@ -108,6 +112,9 @@ describe("3D character presence", () => {
     const returning = playback("returning", { stage: "RETURN_TO_DESK" });
     expect(
       characterPresence("trend", { playback: returning, snapshot }),
+    ).toBe("RETURNING");
+    expect(
+      characterPresence("quant", { playback: returning, snapshot }),
     ).toBe("RETURNING");
   });
 
