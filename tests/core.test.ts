@@ -312,11 +312,25 @@ describe("Scanner telemetry and group trigger contract", () => {
   it("builds a dedicated analyst context without unrelated scanner payloads", () => {
     const scannerOutput = scan(market, defaultConfig, "v1");
     const group = analyzeGroups(market, scannerOutput, defaultConfig, "v1")[0];
-    const context = buildGroupContext(market, group, defaultConfig);
+    const context = buildGroupContext(market, group, defaultConfig, "structure");
     expect(context.specialization).toBe("SMC_ICT");
     expect(context.deterministic_snapshot.group).toBe("SMC_ICT");
     expect(context).not.toHaveProperty("scanners");
     expect(context.recent_candles.M5.length).toBeLessThanOrEqual(36);
+  });
+  it("gives Volume and Quant role-specific evidence inside the shared VOLUME group", () => {
+    const scannerOutput = scan(market, defaultConfig, "v1");
+    const group = analyzeGroups(market, scannerOutput, defaultConfig, "v1").find(
+      (item) => item.group === "VOLUME",
+    )!;
+    const volume = buildGroupContext(market, group, defaultConfig, "volume");
+    const quant = buildGroupContext(market, group, defaultConfig, "quant");
+    expect(volume.specialist_evidence).toHaveProperty("volume");
+    expect(volume.specialist_evidence).toHaveProperty("breakout");
+    expect(volume.specialist_evidence).not.toHaveProperty("quant");
+    expect(quant.specialist_evidence).toHaveProperty("quant.mean_reversion");
+    expect(quant.specialist_evidence).toHaveProperty("quant.bollinger");
+    expect(quant.specialist_evidence).not.toHaveProperty("volume");
   });
 });
 describe("Consensus and confidence", () => {
@@ -338,6 +352,23 @@ describe("Consensus and confidence", () => {
     expect(result.tie).toBe(false);
     expect(result.flags).toContain("AI_ABSTENTION_FALLBACK");
     expect(result.flags).toContain("SCANNER_FALLBACK");
+  });
+  it("excludes semantic-invalid Analyst output from vote counts", () => {
+    const a = analysts([
+      "BUY",
+      "BUY",
+      "SELL",
+      "NO_TRADE",
+      "NO_TRADE",
+      "NO_TRADE",
+      "NO_TRADE",
+      "NO_TRADE",
+    ]);
+    a[0].flags.push("SEMANTIC_VALIDATION_FAILED");
+    const result = voting(a, "SELL");
+    expect(result.counts.BUY).toBe(1);
+    expect(result.counts.UNAVAILABLE).toBe(1);
+    expect(result.direction).toBe("SELL");
   });
   it("uses scanner for all NO_TRADE and <4 successful analysts", () => {
     expect(voting(analysts(Array(8).fill("NO_TRADE")), "SELL").direction).toBe(
@@ -377,7 +408,8 @@ describe("Consensus and confidence", () => {
         "UNAVAILABLE",
       ]);
     const c = confidence("BUY", g, a, ["BUY", "NONE", "SELL"], defaultConfig);
-    expect(c.scanner).toBe(50);
+    expect(c.groupConsensus).toBe(50);
+    expect(c.scanner).toBe(c.groupConsensus);
     expect(c.ai).toBe(50);
     expect(c.mtf).toBe(52.5);
     expect(c.total).toBeCloseTo(50.75);
@@ -440,7 +472,20 @@ describe("Risk and context", () => {
           risk_flags: [],
         }),
       ),
-    ).toHaveLength(1));
+    ).toHaveLength(2));
+  it("requires matching directional evidence for every BUY/SELL", () => {
+    const output = analysisSchema.parse({
+      vote: "BUY",
+      confidence: 50,
+      summary: "x",
+      reasoning: "x",
+      evidence: [],
+      risk_flags: [],
+    });
+    expect(semanticErrors(output)).toContain(
+      "Directional BUY/SELL vote requires matching DIRECTIONAL_BIAS evidence",
+    );
+  });
   it("WIB IDs roll over at UTC 17:00", () => {
     expect(wibDate(Date.parse("2026-10-03T16:59:59Z"))).toBe("20261003");
     expect(wibDate(Date.parse("2026-10-03T17:00:00Z"))).toBe("20261004");
@@ -463,7 +508,9 @@ describe("Risk and context", () => {
         confidence: 72,
         summary: "Price plan",
         reasoning: "Supplied levels",
-        evidence: [],
+        evidence: [
+          { code: "DIRECTIONAL_BIAS", direction: vote, detail: "fixture" },
+        ],
         risk_flags: [],
         price_levels: { entry: 100, stop_loss, take_profit },
       });

@@ -1077,7 +1077,7 @@ export class Office extends DurableObject<Env> {
             row,
             c,
             {
-              ...buildGroupContext(s.market, group, s.config),
+              ...buildGroupContext(s.market, group, s.config, c.id),
               case_id: row.id,
               focus: s.focus,
             },
