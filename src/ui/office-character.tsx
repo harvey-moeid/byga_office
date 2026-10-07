@@ -502,6 +502,12 @@ export function OfficeCharacter({
       motionRef.current = nextMotion;
       setMotion(nextMotion);
     }
+    const coffeeSip =
+      atActivity && coffeeActivity
+        ? reduced
+          ? 0.72
+          : 0.5 + Math.sin(clock.elapsedTime * 2.6 + index) * 0.35
+        : 0;
     for (let side = 0; side < 2; side++) {
       const swing = side ? -gait : gait;
       const hip = hips[side].current,
@@ -525,12 +531,6 @@ export function OfficeCharacter({
       const typing =
         decorative && !reduced && sitting && !meeting
           ? Math.sin(clock.elapsedTime * 4 + index + side) * 0.025
-          : 0;
-      const coffeeSip =
-        atActivity && coffeeActivity
-          ? reduced
-            ? 0.72
-            : 0.5 + Math.sin(clock.elapsedTime * 2.6 + index) * 0.35
           : 0;
       const drinking = atActivity && coffeeActivity && side === 1;
       const activityShoulder = stretching
@@ -593,14 +593,14 @@ export function OfficeCharacter({
         atActivity && coffeeActivity
           ? -0.015 - coffeeSip * 0.055
           : reviewing
-        ? -0.04
-        : stretching && !reduced
-          ? Math.sin(clock.elapsedTime * 1.4) * 0.06
-          : sitting && !meeting
-            ? 0.08
-            : speech && !reduced && sitting
-              ? Math.sin(clock.elapsedTime * 2) * 0.03
-              : 0;
+            ? -0.04
+            : stretching && !reduced
+              ? Math.sin(clock.elapsedTime * 1.4) * 0.06
+              : sitting && !meeting
+                ? 0.08
+                : speech && !reduced && sitting
+                  ? Math.sin(clock.elapsedTime * 2) * 0.03
+                  : 0;
     }
   });
   const longHair = index === 1 || index === 4;
