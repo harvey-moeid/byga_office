@@ -11,6 +11,10 @@ export type CharacterMotion =
   | "stretch"
   | "review";
 
+export function showsCoffeeCup(motion: CharacterMotion) {
+  return motion === "coffee";
+}
+
 export function characterMotion({
   walking,
   sitting,
