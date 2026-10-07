@@ -731,7 +731,7 @@ export function OfficeCharacter({
           portal={labelHost}
           position={[0, 2.05, 0]}
           calculatePosition={speechPosition}
-          zIndexRange={[4, 3]}
+          zIndexRange={speech ? [7, 6] : [4, 3]}
         >
           <div
             className="meeting-speech-anchor"
