@@ -33,6 +33,7 @@ import {
 import { RiggedOfficeCharacter } from "./rigged-character";
 import {
   characterMotion,
+  showsCoffeeCup,
   type CharacterMotion,
 } from "./character-motion";
 
@@ -370,7 +371,7 @@ export function OfficeCharacter({
   const activityArrivedRef = useRef<OfficeActivity | undefined>(undefined);
   const meeting = isAttendingMeeting(index, state);
   const activeActivity = meeting ? undefined : activity;
-  const coffee =
+  const coffeeActivity =
     activeActivity?.kind === "coffee" || activeActivity?.kind === "coffee-break";
   const destination = useMemo(() => {
     if (activeActivity) {
@@ -501,6 +502,12 @@ export function OfficeCharacter({
       motionRef.current = nextMotion;
       setMotion(nextMotion);
     }
+    const coffeeSip =
+      atActivity && coffeeActivity
+        ? reduced
+          ? 0.72
+          : 0.5 + Math.sin(clock.elapsedTime * 2.6 + index) * 0.35
+        : 0;
     for (let side = 0; side < 2; side++) {
       const swing = side ? -gait : gait;
       const hip = hips[side].current,
@@ -525,7 +532,7 @@ export function OfficeCharacter({
         decorative && !reduced && sitting && !meeting
           ? Math.sin(clock.elapsedTime * 4 + index + side) * 0.025
           : 0;
-      const drinking = coffee && side === 1 && !walking;
+      const drinking = atActivity && coffeeActivity && side === 1;
       const activityShoulder = stretching
         ? side
           ? -2.25
@@ -542,7 +549,7 @@ export function OfficeCharacter({
         shoulder.rotation.x = MathUtils.damp(
           shoulder.rotation.x,
           drinking
-            ? -1.1
+            ? -0.62 - coffeeSip * 0.58
             : activityShoulder !== undefined
               ? activityShoulder
               : sitting
@@ -559,7 +566,7 @@ export function OfficeCharacter({
         elbow.rotation.x = MathUtils.damp(
           elbow.rotation.x,
           drinking
-            ? -1.65
+            ? -0.72 - coffeeSip * 0.93
             : stretching
               ? -0.2
               : gesturing
@@ -582,15 +589,18 @@ export function OfficeCharacter({
               clock.elapsedTime * (gesturing ? 1.1 : 0.5) + index * 3,
             ) * (gesturing ? 0.16 : 0.08)
           : 0;
-      head.current.rotation.x = reviewing
-        ? -0.04
-        : stretching && !reduced
-          ? Math.sin(clock.elapsedTime * 1.4) * 0.06
-          : sitting && !meeting
-            ? 0.08
-            : speech && !reduced && sitting
-              ? Math.sin(clock.elapsedTime * 2) * 0.03
-              : 0;
+      head.current.rotation.x =
+        atActivity && coffeeActivity
+          ? -0.015 - coffeeSip * 0.055
+          : reviewing
+            ? -0.04
+            : stretching && !reduced
+              ? Math.sin(clock.elapsedTime * 1.4) * 0.06
+              : sitting && !meeting
+                ? 0.08
+                : speech && !reduced && sitting
+                  ? Math.sin(clock.elapsedTime * 2) * 0.03
+                  : 0;
     }
   });
   const longHair = index === 1 || index === 4;
@@ -871,11 +881,26 @@ export function OfficeCharacter({
                   color={appearance.skin}
                   detail={decorative}
                 />
-                {coffee && limb === 1 && (
-                  <mesh position={[0, -0.29, 0.055]}>
-                    <cylinderGeometry args={[0.044, 0.039, 0.08, 12]} />
-                    <meshStandardMaterial color="#e2d4bf" roughness={0.4} />
-                  </mesh>
+                {showsCoffeeCup(motion) && limb === 1 && (
+                  <group position={[0, -0.29, 0.055]}>
+                    <mesh>
+                      <cylinderGeometry args={[0.044, 0.039, 0.08, 12]} />
+                      <meshStandardMaterial color="#e2d4bf" roughness={0.4} />
+                    </mesh>
+                    <mesh
+                      position={[0.043, 0, 0]}
+                      rotation={[0, Math.PI / 2, 0]}
+                    >
+                      <torusGeometry
+                        args={[0.028, 0.007, 6, 12, Math.PI * 1.5]}
+                      />
+                      <meshStandardMaterial color="#e2d4bf" roughness={0.4} />
+                    </mesh>
+                    <mesh position={[0, 0.041, 0]}>
+                      <cylinderGeometry args={[0.033, 0.033, 0.003, 12]} />
+                      <meshStandardMaterial color="#4a2f23" roughness={0.72} />
+                    </mesh>
+                  </group>
                 )}
                 {index === characterIds.indexOf("boss") && state === "DISCORD" && limb === 1 && (
                   <mesh position={[0, -0.28, 0.024]}>

@@ -35,6 +35,19 @@ export const ACTIVITY_TRAVEL_TIMEOUT_MS = 90_000;
 type RandomSource = () => number;
 type Range = readonly [number, number];
 
+// Coffee is served from the real pantry counter rendered at z=7. Actors stop
+// just in front of the cabinetry so routing stays walkable, then face the
+// machine/counter while the cup animation is active.
+export const COFFEE_MACHINE: Point = [-1.15, 7];
+export const COFFEE_SERVICE_SPOTS: Point[] = [
+  [-3.2, 6.35],
+  [-2.65, 6.35],
+  [-2.1, 6.35],
+  [-1.55, 6.35],
+  [-1, 6.35],
+  [-0.45, 6.35],
+];
+
 // Conversation is intentionally group-only. An individual "chat" looked like
 // a character talking to empty space in the overview camera.
 const individualKinds: OfficeActivityKind[] = [
@@ -68,14 +81,7 @@ const individualSpots: Record<
   Exclude<OfficeActivityKind, "group-chat" | "coffee-break" | "group-market-review" | "briefing">,
   Point[]
 > = {
-  coffee: [
-    [-3, 5.4],
-    [-1.2, 5.3],
-    [0, 5.3],
-    [1.2, 5.2],
-    [-0.4, 4.5],
-    [-3.4, 4.5],
-  ],
+  coffee: COFFEE_SERVICE_SPOTS,
   stretch: [
     [-5, -1],
     [-2, -1],
@@ -141,15 +147,8 @@ const groupPlans: Record<
     ],
   },
   "coffee-break": {
-    center: [-1.2, 5.3],
-    spots: [
-      [-3.2, 5.1],
-      [-2.4, 5.1],
-      [-1.6, 5.1],
-      [-0.8, 5.1],
-      [0, 5.1],
-      [0.8, 5.1],
-    ],
+    center: COFFEE_MACHINE,
+    spots: COFFEE_SERVICE_SPOTS,
   },
   "group-market-review": {
     center: [0, -6.6],
@@ -207,7 +206,7 @@ function activityDuration(kind: OfficeActivityKind, random: RandomSource) {
 }
 
 function individualFacing(kind: OfficeActivityKind, spot: Point) {
-  if (kind === "coffee") return facingToward(spot, [-2, 5.5]);
+  if (kind === "coffee") return facingToward(spot, COFFEE_MACHINE);
   if (kind === "market-review") return Math.PI;
   if (kind === "chat") return facingToward(spot, [-3, 1]);
   return Math.PI;
