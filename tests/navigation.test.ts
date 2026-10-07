@@ -380,6 +380,39 @@ describe("two-floor office layout", () => {
     expect(low.position[1]).toBe(0);
   });
 
+  it("keeps L2 gathering and Boss entry routes inside their presentation windows", () => {
+    const routeLength = (
+      start: readonly [number, number, number],
+      route: readonly (readonly [number, number, number])[],
+    ) => {
+      let total = 0;
+      let previous = start;
+      for (const point of route) {
+        total += Math.hypot(
+          point[0] - previous[0],
+          point[1] - previous[1],
+          point[2] - previous[2],
+        );
+        previous = point;
+      }
+      return total;
+    };
+
+    const bossIndex = characterIds.indexOf("boss");
+    characterIds.forEach((_, index) => {
+      if (index === bossIndex) return;
+      const start = characterTarget(index, "MONITORING", 1, true);
+      const meeting = characterTarget(index, "AI_ANALYSIS", 2, true);
+      const route = planWorldRoute(start.position, meeting);
+      expect(routeLength(start.position, route) / 2.7).toBeLessThan(14);
+    });
+
+    const bossStart = characterTarget(bossIndex, "MONITORING", 1, true);
+    const bossMeeting = characterTarget(bossIndex, "BOSS_DECISION", 2, true);
+    const bossRoute = planWorldRoute(bossStart.position, bossMeeting);
+    expect(routeLength(bossStart.position, bossRoute) / 1.8).toBeLessThan(8);
+  });
+
   it("routes an L2 meeting through the staircase and back to L1 without teleporting", () => {
     const analystIndex = 0;
     const start = characterTarget(analystIndex, "MONITORING", 1, true);
