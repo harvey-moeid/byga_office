@@ -20,6 +20,7 @@ import {
   EAST_OUTER_WALL_X,
   MEETING_VIEW,
   STAIR_LAYOUT,
+  UPPER_EAST_WALL_X,
   UPPER_Y,
 } from "../src/ui/office-layout";
 import {
