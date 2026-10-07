@@ -32,6 +32,7 @@ import { OfficeCharacter } from "./office-character";
 import {
   ACTIVITY_TRAVEL_TIMEOUT_MS,
   activityDelayMs,
+  advanceRoamActivity,
   createOfficeActivityEvent,
   type OfficeActivity,
 } from "./office-activity";
@@ -368,12 +369,41 @@ export default function OfficeScene({
         };
         setActivities(event.assignments);
         activityArrivalHandler.current = (id, activity) => {
-          if (
-            disposed ||
-            started.has(id) ||
-            event.assignments[id] !== activity
-          )
+          if (disposed || event.assignments[id] !== activity) return;
+
+          if (activity.kind === "roam") {
+            if (!started.has(id)) {
+              started.add(id);
+              timers.push(
+                window.setTimeout(() => {
+                  if (disposed) return;
+                  const currentRoam = event.assignments[id];
+                  setActivities((current) => {
+                    if (!currentRoam || current[id] !== currentRoam)
+                      return current;
+                    const updated = { ...current };
+                    delete updated[id];
+                    return updated;
+                  });
+                  delete event.assignments[id];
+                  pending.delete(id);
+                  finishIfDone();
+                }, activity.durationMs),
+              );
+            }
+
+            const occupied = Object.entries(event.assignments)
+              .filter(([otherId, current]) => otherId !== id && !!current)
+              .map(([, current]) => current!.destination);
+            const next = advanceRoamActivity(activity, occupied);
+            event.assignments[id] = next;
+            setActivities((current) =>
+              current[id] === activity ? { ...current, [id]: next } : current,
+            );
             return;
+          }
+
+          if (started.has(id)) return;
           started.add(id);
           timers.push(
             window.setTimeout(() => {
