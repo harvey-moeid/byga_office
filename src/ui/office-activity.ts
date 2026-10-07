@@ -78,8 +78,8 @@ const individualSpots: Record<
   stretch: [
     [-5, -1],
     [-2, -1],
-    [-5, 2],
-    [-2, 2],
+    [-5, 1],
+    [-2, 1],
     [-5, 4],
     [-2, 4],
     [5, -3],
@@ -88,8 +88,8 @@ const individualSpots: Record<
   chat: [
     [-5, -1],
     [-2, -1],
-    [-5, 2],
-    [-2, 2],
+    [-5, 1],
+    [-2, 1],
     [-5, 4],
     [-2, 4],
   ],
@@ -103,7 +103,7 @@ const individualSpots: Record<
   ],
   roam: [
     [-6, 2],
-    [-6, -2],
+    [-6.8, -2],
     [1, 5],
     [1, -1],
     [0, 1],
@@ -114,8 +114,8 @@ const individualSpots: Record<
   "desk-break": [
     [-5, -1],
     [-2, -1],
-    [-5, 2],
-    [-2, 2],
+    [-5, 1],
+    [-2, 1],
     [-5, 4],
     [-2, 4],
     [5, -3],
@@ -128,14 +128,15 @@ const groupPlans: Record<
   { center: Point; spots: Point[] }
 > = {
   "group-chat": {
-    center: [0, 1.2],
+    // Keep spontaneous discussions in the open east aisle, not between desks.
+    center: [0.9, 1.5],
     spots: [
-      [0, 0.4],
-      [0.6, 0.2],
-      [0.8, 1.8],
-      [0.1, 2.2],
-      [-0.8, 2],
-      [-0.9, 0.2],
+      [0.8, 0.7],
+      [1.2, 0.7],
+      [1.3, 1.4],
+      [1.2, 2.2],
+      [0.8, 2.5],
+      [0.4, 1.7],
     ],
   },
   "coffee-break": {
@@ -161,14 +162,15 @@ const groupPlans: Record<
     ],
   },
   briefing: {
-    center: [-5.7, 2.1],
+    // Use the quiet west perimeter so a briefing never blocks the back desk row.
+    center: [-6.5, 2.1],
     spots: [
-      [-6.4, 2.5],
-      [-5.7, 2.5],
-      [-5, 2.5],
-      [-6.4, 1.7],
-      [-5.7, 1.7],
-      [-5, 1.7],
+      [-6.9, 1.7],
+      [-6.5, 1.7],
+      [-6.1, 1.7],
+      [-6.9, 2.5],
+      [-6.5, 2.5],
+      [-6.1, 2.5],
     ],
   },
 };
