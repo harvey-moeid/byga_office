@@ -36,6 +36,7 @@ import {
   showsCoffeeCup,
   type CharacterMotion,
 } from "./character-motion";
+import { canOpenSeatedCharacterBubble } from "./character-state";
 
 const appearances: Record<
   AvatarPreset,
@@ -400,7 +401,9 @@ export function OfficeCharacter({
   decorative,
   avatar,
   onSelect,
+  onPeek,
   speech,
+  peek,
   labelHost,
   onSpeechReady,
   onActivityArrive,
@@ -411,7 +414,9 @@ export function OfficeCharacter({
   decorative: boolean;
   avatar: AvatarPreset;
   onSelect: (id: string) => void;
+  onPeek?: (id: CharacterId) => void;
   speech?: ReactNode;
+  peek?: ReactNode;
   labelHost?: RefObject<HTMLDivElement>;
   onSpeechReady?: (id: CharacterId, visible: boolean) => void;
   onActivityArrive?: (id: CharacterId, activity: OfficeActivity) => void;
@@ -478,6 +483,12 @@ export function OfficeCharacter({
       );
   }, [destination]);
   const speechVisible = !!speech && arrived && meeting && speechOnScreen;
+  const peekVisible =
+    !speech &&
+    !!peek &&
+    arrived &&
+    !activeActivity &&
+    speechOnScreen;
   const speechPosition = useMemo(
     () =>
       (element: Object3D, camera: Camera, size: { width: number; height: number }) =>
@@ -494,7 +505,7 @@ export function OfficeCharacter({
     // Otherwise low-FPS/software WebGL makes characters move in slow motion.
     const delta = Math.min(dt, 0.06);
     const movementDelta = Math.min(dt, reduced ? 0.25 : 0.5);
-    if (speech) {
+    if (speech || peek) {
       const probe = speechVisibilityProbe.current.set(0, 2.05, 0);
       root.current.localToWorld(probe);
       probe.project(camera);
@@ -701,10 +712,21 @@ export function OfficeCharacter({
       name={`character-${characterIds[index]}`}
       onClick={(event) => {
         event.stopPropagation();
-        onSelect(characterIds[index]);
+        const id = characterIds[index];
+        if (
+          onPeek &&
+          canOpenSeatedCharacterBubble({
+            seated: arrivedRef.current,
+            hasActivity: !!activeActivity,
+          })
+        ) {
+          onPeek(id);
+          return;
+        }
+        onSelect(id);
       }}
     >
-      {labelHost && speech && (
+      {labelHost && (speech || peek) && (
         <Html
           portal={labelHost}
           position={[0, 2.05, 0]}
@@ -715,7 +737,7 @@ export function OfficeCharacter({
             className="meeting-speech-anchor"
             data-character={characterIds[index]}
           >
-            {speechVisible ? speech : null}
+            {speechVisible ? speech : peekVisible ? peek : null}
           </div>
         </Html>
       )}
