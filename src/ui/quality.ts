@@ -16,12 +16,39 @@ export const profiles: Record<
     shadows: boolean;
     shadowSize: number;
     decorative: boolean;
+    upperFloor: boolean;
   }
 > = {
-  low: { dpr: 1, shadows: false, shadowSize: 256, decorative: false },
-  medium: { dpr: 1.25, shadows: true, shadowSize: 512, decorative: true },
-  high: { dpr: 1.75, shadows: true, shadowSize: 1024, decorative: true },
-  ultra: { dpr: 2, shadows: true, shadowSize: 2048, decorative: true },
+  low: {
+    dpr: 1,
+    shadows: false,
+    shadowSize: 256,
+    decorative: false,
+    upperFloor: false,
+  },
+  medium: {
+    // Spend the medium render budget on the extra floor and complete
+    // procedural furnishing instead of realtime effects.
+    dpr: 1,
+    shadows: false,
+    shadowSize: 256,
+    decorative: false,
+    upperFloor: true,
+  },
+  high: {
+    dpr: 1.75,
+    shadows: true,
+    shadowSize: 1024,
+    decorative: true,
+    upperFloor: true,
+  },
+  ultra: {
+    dpr: 2,
+    shadows: true,
+    shadowSize: 2048,
+    decorative: true,
+    upperFloor: true,
+  },
 };
 
 export function initialQuality(cores: number, memory = 8): Quality {
