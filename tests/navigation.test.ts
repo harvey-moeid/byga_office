@@ -24,6 +24,8 @@ import {
 import {
   FIRST_ACTIVITY_DELAY,
   NEXT_ACTIVITY_DELAY,
+  COFFEE_MACHINE,
+  COFFEE_SERVICE_SPOTS,
   activityDelayMs,
   activityDestinations,
   advanceRoamActivity,
@@ -167,6 +169,20 @@ describe("office navigation", () => {
       });
     }
   });
+  it("serves coffee from walkable spots directly in front of the pantry", () => {
+    expect(COFFEE_MACHINE).toEqual([-1.15, 7]);
+    expect(COFFEE_SERVICE_SPOTS).toHaveLength(6);
+    for (const spot of COFFEE_SERVICE_SPOTS) {
+      expect(spot[1]).toBeGreaterThanOrEqual(6.3);
+      expect(spot[1]).toBeLessThan(6.5);
+      expect(walkable(spot)).toBe(true);
+      characterIds.forEach((_, index) => {
+        const desk = destination(index, "MONITORING");
+        expect(planRoute(desk, spot).length).toBeGreaterThan(0);
+      });
+    }
+  });
+
   it("schedules varied activity events for two to six characters", () => {
     let seed = 0x5eed1234;
     const random = () => {
