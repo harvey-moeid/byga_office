@@ -420,6 +420,37 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
         .run();
     }
   });
+  it("reports stale-but-structurally-valid chart data as DEGRADED health", async () => {
+    const chartDb = await mf.getD1Database("CHART_DB");
+    const rows = await chartDb
+      .prepare(
+        "SELECT open_time,is_closed FROM candles WHERE timeframe='M5' AND open_time<=? ORDER BY open_time DESC LIMIT 2",
+      )
+      .bind(Date.now() - 305000)
+      .all<{ open_time: number; is_closed: number }>();
+    expect(rows.results).toHaveLength(2);
+    try {
+      for (const row of rows.results)
+        await chartDb
+          .prepare("UPDATE candles SET is_closed=0 WHERE timeframe='M5' AND open_time=?")
+          .bind(row.open_time)
+          .run();
+      const health = await call("/health");
+      expect(health.status).toBe(200);
+      expect(await health.json()).toMatchObject({
+        api: "OK",
+        chart_db: "DEGRADED",
+      });
+      const market = await call("/market/status");
+      expect(market.status).toBe(503);
+    } finally {
+      for (const row of rows.results)
+        await chartDb
+          .prepare("UPDATE candles SET is_closed=? WHERE timeframe='M5' AND open_time=?")
+          .bind(row.is_closed, row.open_time)
+          .run();
+    }
+  });
   it("rejects unauthorized Admin and private signals", async () => {
     expect((await call("/admin/config", undefined, false)).status).toBe(401);
     expect((await call("/signals", undefined, false)).status).toBe(401);

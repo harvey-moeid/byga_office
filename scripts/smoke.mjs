@@ -91,26 +91,53 @@ assert.ok(characters.every(c => !("primary_provider" in c) && !("primary_model" 
 let health;
 for (let attempt = 0; attempt < 9; attempt++) {
   health = await (await get("/api/v1/health")).json();
-  if (health.api === "OK" && health.chart_db === "OK") break;
+  if (
+    health.api === "OK" &&
+    ["OK", "DEGRADED"].includes(health.chart_db)
+  )
+    break;
   if (attempt < 8) {
     const delayMs = Math.min(15000, 2000 * 2 ** attempt);
     await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
 }
 assert.equal(health.api, "OK");
-assert.equal(
-  health.chart_db,
-  "OK",
-  "Deployed chart binding or freshness remained unavailable after bounded retries",
+assert.ok(
+  ["OK", "DEGRADED"].includes(health.chart_db),
+  "Deployed chart binding/schema is unavailable after bounded retries",
 );
 assert.notEqual(health.ai_providers, "DOWN", "Runtime provider secret missing");
-const market = await (
-  await get("/api/v1/market/status", 200, { attempts: 9, maxDelayMs: 15000 })
-).json();
-assert.equal(market.status, "OK");
-assert.equal(market.market, "BTCUSDT.P");
-assert.equal(market.development, false, "Production must use real candles");
-for (const tf of ["H1", "M15", "M5"]) assert.equal(market.timeframes[tf].length, 100);
+
+let marketStatus = health.chart_db === "OK" ? "PASS" : "DEGRADED";
+let marketResponse = await fetch(origin + "/api/v1/market/status", {
+  signal: AbortSignal.timeout(20000),
+});
+if (marketResponse.status === 200) {
+  const market = await marketResponse.json();
+  assert.equal(market.status, "OK");
+  assert.equal(market.market, "BTCUSDT.P");
+  assert.equal(market.development, false, "Production must use real candles");
+  for (const tf of ["H1", "M15", "M5"])
+    assert.equal(market.timeframes[tf].length, 100);
+  marketStatus = "PASS";
+} else {
+  const body = await marketResponse.clone().json().catch(() => ({}));
+  assert.equal(
+    marketResponse.status,
+    503,
+    `Market endpoint failed unexpectedly: HTTP ${marketResponse.status}`,
+  );
+  assert.equal(body.status, "DOWN");
+  // Re-check health at the same point in time. Only a freshness-only
+  // degradation may allow deployment to continue; structural failures remain fatal.
+  const currentHealth = await (await get("/api/v1/health")).json();
+  assert.equal(
+    currentHealth.chart_db,
+    "DEGRADED",
+    "Market endpoint failed for a non-freshness chart_db reason",
+  );
+  marketStatus = "DEGRADED";
+}
 let adminAuthentication = "NOT_TESTED";
 if (process.env.ADMIN_PASSWORD) {
   const login = await fetch(origin + "/api/v1/auth/login", {
@@ -196,7 +223,7 @@ if (process.env.ADMIN_PASSWORD) {
 }
 console.log(JSON.stringify({
   origin, infrastructure: "PASS", frontend: "PASS", durable_object: "PASS",
-  admin_access_control: "PASS", admin_authentication: adminAuthentication, market: "PASS", provider_configuration: health.ai_providers,
+  admin_access_control: "PASS", admin_authentication: adminAuthentication, market: marketStatus, provider_configuration: health.ai_providers,
   discord_configuration: health.discord,
   real_ai_inference: "NOT_TESTED", real_discord_delivery: "NOT_TESTED",
 }, null, 2));
