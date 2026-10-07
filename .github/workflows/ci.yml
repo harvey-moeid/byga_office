@@ -58,7 +58,10 @@ jobs:
   browser:
     name: Desktop and mobile browser tests
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    # Playwright itself finishes in ~5 minutes, but Ubuntu mirror downloads for
+    # system browser dependencies can occasionally take >10 minutes. Keep the
+    # browser job bounded while avoiding false-red PRs after all tests pass.
+    timeout-minutes: 30
     env:
       PLAYWRIGHT_HTML_OPEN: never
     steps:
