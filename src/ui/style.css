@@ -447,8 +447,32 @@ p {
   font-size: 12px;
 }
 .meeting-bubble strong span {
-  color: #376b59;
+  color: #5b665f;
   font-size: 10px;
+}
+.meeting-bubble .speech-vote.vote-buy {
+  color: #276548;
+}
+.meeting-bubble .speech-vote.vote-sell {
+  color: #a33b3b;
+}
+.meeting-bubble .speech-vote.vote-no-trade {
+  color: #746b58;
+}
+.meeting-bubble[data-vote="BUY"] {
+  box-shadow:
+    inset 4px 0 0 #4f9b75,
+    0 12px 30px #0005;
+}
+.meeting-bubble[data-vote="SELL"] {
+  box-shadow:
+    inset 4px 0 0 #c66a62,
+    0 12px 30px #0005;
+}
+.meeting-bubble[data-vote="NO_TRADE"] {
+  box-shadow:
+    inset 4px 0 0 #9b9077,
+    0 12px 30px #0005;
 }
 .meeting-bubble .speech-text {
   display: -webkit-box;
@@ -474,7 +498,21 @@ p {
 .boss-bubble,
 .boss-bubble:hover {
   border-color: #d5a94f;
-  box-shadow: 0 12px 35px #d5a94f30;
+}
+.boss-bubble[data-vote="BUY"] {
+  box-shadow:
+    inset 4px 0 0 #4f9b75,
+    0 12px 35px #d5a94f30;
+}
+.boss-bubble[data-vote="SELL"] {
+  box-shadow:
+    inset 4px 0 0 #c66a62,
+    0 12px 35px #d5a94f30;
+}
+.boss-bubble[data-vote="NO_TRADE"] {
+  box-shadow:
+    inset 4px 0 0 #9b9077,
+    0 12px 35px #d5a94f30;
 }
 .meeting-status {
   position: absolute;
@@ -698,6 +736,14 @@ p {
   white-space: nowrap;
   pointer-events: none;
 }
+.screen-market-meta {
+  color: #9fd4c1;
+  font-size: 7px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  white-space: nowrap;
+  pointer-events: none;
+}
 .office-caption {
   border-top: 1px solid var(--border);
   padding: 13px 20px;
@@ -720,6 +766,10 @@ p {
   padding: 4px 7px;
   border-radius: 4px;
   pointer-events: none;
+}
+.office-scene.meeting-active .room-label {
+  opacity: 0.2;
+  filter: saturate(0.55);
 }
 .brand-sign-3d {
   min-width: 180px;
@@ -1097,6 +1147,12 @@ textarea {
 .operations-grid strong {
   font-size: 12px;
 }
+.operations-grid .badge {
+  max-width: 100%;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25;
+}
 .operations-grid .avatar {
   margin-bottom: 5px;
 }
@@ -1193,6 +1249,27 @@ summary {
 .modal h2 {
   font-size: 24px;
   margin: 15px 0;
+}
+.character-live-summary {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.character-live-summary small {
+  color: #9ab1aa;
+  font-size: 10px;
+  letter-spacing: 0.6px;
+}
+.character-live-vote {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.character-live-vote strong {
+  font-size: 11px;
+  color: #c8d8d1;
 }
 .close {
   position: absolute;

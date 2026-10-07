@@ -26,6 +26,8 @@ import {
 } from "../core/contracts";
 import "./style.css";
 import { useData, useOfficeState, useOnline } from "./data";
+import type { OfficeActivityKind } from "./office-activity";
+import { characterGroupLabels, characterPresence } from "./character-state";
 import {
   useMeetingPresentation,
   MeetingStatus,
@@ -281,6 +283,9 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
       useData<{ id: CharacterId; avatar: AvatarPreset }[]>("/characters");
   const [view, setView] = useState(immersive ? "3D" : "Operations");
   const [selected, setSelected] = useState<string>();
+  const [activityKinds, setActivityKinds] = useState<
+    Partial<Record<CharacterId, OfficeActivityKind>>
+  >({});
   const [tf, setTf] = useState("M5");
   useEffect(() => {
     const fallback = () => setView("Operations");
@@ -292,6 +297,21 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
   const render3D = view === "3D" && supportsWebGL();
   const meeting = useMeetingPresentation(render3D);
   const busy = !!state.data?.active || meeting.active;
+  const presenceFor = (id: CharacterId) =>
+    characterPresence(id, {
+      playback: meeting.active ? meeting.playback : undefined,
+      snapshot: meeting.active ? meeting.snapshot : null,
+      activity: activityKinds[id],
+    });
+  const selectedCharacter = characterIds.includes(selected as CharacterId)
+    ? (selected as CharacterId)
+    : undefined;
+  const selectedTurn =
+    selectedCharacter && meeting.active
+      ? meeting.snapshot?.turns.find(
+          (turn) => turn.character === selectedCharacter,
+        )
+      : undefined;
   const notices = (
     <div className={immersive ? "home-notices" : undefined}>
       <Notice error={state.error} retry={state.retry} />
@@ -420,7 +440,9 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
                 onSpeechDetails={meeting.openDetails}
                 onSpeechReady={meeting.onSpeechReady}
                 onSelect={setSelected}
+                onActivityChange={setActivityKinds}
                 prices={market.data?.timeframes.M5.map((c) => c.close) ?? []}
+                marketTimestamp={market.data?.candle_timestamp}
                 avatars={Object.fromEntries(
                   (Array.isArray(characters.data) ? characters.data : []).map(
                     (character) => [character.id, character.avatar],
@@ -442,7 +464,7 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
                         .join("")}
                 </span>
                 <strong>{roles[id]}</strong>
-                <Badge value={busy ? "ACTIVE" : "MONITORING"} />
+                <Badge value={presenceFor(id)} />
               </button>
             ))}
           </div>
@@ -520,7 +542,11 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
               <>
                 <div className="segmented">
                   {["H1", "M15", "M5"].map((t) => (
-                    <button key={t} onClick={() => setTf(t)}>
+                    <button
+                      key={t}
+                      className={tf === t ? "selected" : ""}
+                      onClick={() => setTf(t)}
+                    >
                       {t}
                     </button>
                   ))}
@@ -539,18 +565,38 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
                   Provider diagnostics (Admin)
                 </Link>
               </>
-            ) : (
+            ) : selectedCharacter ? (
               <>
-                <Badge value={busy ? "ANALYZING" : "MONITORING"} />
+                <div className="character-live-summary">
+                  <Badge value={presenceFor(selectedCharacter)} />
+                  <small>{characterGroupLabels[selectedCharacter]}</small>
+                </div>
+                {selectedTurn && (
+                  <p className="character-live-vote">
+                    <Badge value={selectedTurn.analysis.vote} />
+                    <strong>Confidence {selectedTurn.analysis.confidence}%</strong>
+                  </p>
+                )}
                 <p>
-                  {busy
-                    ? "Analisis meeting sedang diproses backend."
-                    : "Memantau pasar. Tidak ada panggilan AI saat aktivitas dekoratif."}
+                  {meeting.active
+                    ? presenceFor(selectedCharacter) === "SPEAKING"
+                      ? "Sedang menyampaikan hasil AI case aktif di ruang meeting."
+                      : presenceFor(selectedCharacter) === "OUTPUT UNAVAILABLE"
+                        ? "Output karakter tidak lolos validasi atau tidak tersedia untuk case aktif."
+                        : "Status ini mengikuti posisi dan tahap karakter pada meeting aktif."
+                    : activityKinds[selectedCharacter]
+                      ? "Aktivitas kantor visual. Tidak memanggil AI dan tidak memengaruhi voting."
+                      : "Memantau pasar. Tidak ada panggilan AI saat aktivitas dekoratif."}
                 </p>
-                <Link className="button primary" to={`/characters/${selected}`}>
+                <Link
+                  className="button primary"
+                  to={`/characters/${selectedCharacter}`}
+                >
                   Lihat Detail ↗
                 </Link>
               </>
+            ) : (
+              <p>Informasi objek belum tersedia.</p>
             )}
           </section>
         </div>

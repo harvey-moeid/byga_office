@@ -35,6 +35,7 @@ import {
   advanceRoamActivity,
   createOfficeActivityEvent,
   type OfficeActivity,
+  type OfficeActivityKind,
 } from "./office-activity";
 import type { ComponentRef, RefObject } from "react";
 import type { MeetingTurn } from "../core/meeting";
@@ -172,10 +173,12 @@ function MarketWall({
   prices,
   labelHost,
   onSelect,
+  timestamp,
 }: {
   prices: number[];
   labelHost: RefObject<HTMLDivElement>;
   onSelect: () => void;
+  timestamp?: number;
 }) {
   const geometry = useMemo(() => {
     const bars = prices.filter(Number.isFinite).slice(-70);
@@ -192,6 +195,15 @@ function MarketWall({
     return value;
   }, [prices]);
   useEffect(() => () => geometry?.dispose(), [geometry]);
+  const latest = prices.filter(Number.isFinite).at(-1);
+  const marketTime = timestamp
+    ? new Intl.DateTimeFormat("id-ID", {
+        timeZone: "Asia/Jakarta",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }).format(timestamp)
+    : "";
   return (
     <group
       position={[0, 1.94, -6.6]}
@@ -225,9 +237,17 @@ function MarketWall({
       )}
       <Html portal={labelHost} position={[-2.15, 0.67, 0.13]}>
         <span className="screen-label">
-          BTCUSDT.P <small>· CLOSED CANDLES</small>
+          BTCUSDT.P <small>· M5 · CLOSED CANDLES</small>
         </span>
       </Html>
+      {latest !== undefined && (
+        <Html portal={labelHost} position={[-2.15, 0.48, 0.13]}>
+          <span className="screen-market-meta">
+            {latest.toLocaleString("id-ID", { maximumFractionDigits: 2 })}
+            {marketTime ? ` · ${marketTime} WIB` : ""}
+          </span>
+        </Html>
+      )}
       {!geometry && (
         <Html portal={labelHost} position={[0, -0.1, 0.13]} center>
           <span className="screen-empty">Menunggu data market</span>
@@ -245,6 +265,8 @@ export default function OfficeScene({
   speech,
   onSpeechDetails,
   onSpeechReady,
+  onActivityChange,
+  marketTimestamp,
 }: {
   state: string;
   onSelect: (id: string) => void;
@@ -254,6 +276,10 @@ export default function OfficeScene({
   speech?: MeetingTurn;
   onSpeechDetails?: (turn: MeetingTurn) => void;
   onSpeechReady?: (id: CharacterId, visible: boolean) => void;
+  onActivityChange?: (
+    activities: Partial<Record<CharacterId, OfficeActivityKind>>,
+  ) => void;
+  marketTimestamp?: number;
 }) {
   const [view, setView] = useState<View>("overview");
   const [reset, setReset] = useState(0);
@@ -452,11 +478,27 @@ export default function OfficeScene({
       timers.forEach((timer) => window.clearTimeout(timer));
     };
   }, [meetingActive]);
+  useEffect(() => {
+    if (!onActivityChange) return;
+    onActivityChange(
+      Object.fromEntries(
+        Object.entries(activities).flatMap(([id, activity]) =>
+          activity ? [[id, activity.kind]] : [],
+        ),
+      ) as Partial<Record<CharacterId, OfficeActivityKind>>,
+    );
+  }, [activities, onActivityChange]);
+  useEffect(
+    () => () => {
+      onActivityChange?.({});
+    },
+    [onActivityChange],
+  );
   const antialias = useRef(quality !== "low");
   return (
     <div
       ref={sceneRoot}
-      className={`office-scene${fullscreen ? " is-fullscreen" : ""}`}
+      className={`office-scene${fullscreen ? " is-fullscreen" : ""}${meetingActive ? " meeting-active" : ""}`}
       aria-label="Kantor trading 3D interaktif"
     >
       <div ref={labelHost} className="scene-label-layer" />
@@ -559,6 +601,7 @@ export default function OfficeScene({
         <MarketWall
           prices={prices}
           labelHost={labelHost}
+          timestamp={marketTimestamp}
           onSelect={() => onSelect("market-wall")}
         />
         {rooms
