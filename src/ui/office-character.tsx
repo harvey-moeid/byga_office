@@ -235,6 +235,11 @@ function speechScreenPosition(
       Math.max(bubbleHeight + gap + 8, size.height - bottomClearance),
     ),
   ];
+  const canvasBounds = document
+    .querySelector(".office-scene canvas")
+    ?.getBoundingClientRect();
+  const offsetX = canvasBounds?.left ?? 0;
+  const offsetY = canvasBounds?.top ?? 0;
   const reserved = [
     ".meeting-status",
     ".home-hud > div",
@@ -246,7 +251,17 @@ function speechScreenPosition(
     ".home-menu-button",
   ]
     .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
-    .map((node) => node.getBoundingClientRect())
+    .map((node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        left: rect.left - offsetX,
+        right: rect.right - offsetX,
+        top: rect.top - offsetY,
+        bottom: rect.bottom - offsetY,
+        width: rect.width,
+        height: rect.height,
+      };
+    })
     .filter((rect) => rect.width > 0 && rect.height > 0);
   const bubbleRect = ([x, y]: [number, number]) => ({
     left: x - bubbleWidth / 2,
