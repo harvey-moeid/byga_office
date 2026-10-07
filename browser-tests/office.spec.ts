@@ -585,6 +585,9 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   // path. High is the first tier that mounts the rigged GLTF characters.
   await quality.selectOption("high");
   await expect(quality).toHaveValue("high");
+  await expect(
+    page.getByRole("button", { name: "Lantai 2", exact: true }),
+  ).toBeVisible();
   await expect
     .poll(() => rigStatuses.includes(200), { timeout: 15_000 })
     .toBe(true);
