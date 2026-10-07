@@ -295,7 +295,8 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
   const notices = (
     <div className={immersive ? "home-notices" : undefined}>
       <Notice error={state.error} retry={state.retry} />
-      <Notice error={market.error} retry={market.retry} />
+      {/* Market freshness is already represented by the market metric/polling.
+          Do not expose backend/schema details as an intrusive home/3D banner. */}
       {market.data?.development && (
         <div className="notice">
           Lingkungan pengembangan lokal · candle fixture bukan data pasar
