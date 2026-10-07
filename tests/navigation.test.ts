@@ -7,6 +7,7 @@ import {
   isAttendingMeeting,
   desks,
   meetingSeats,
+  obstacles,
   seatedFacing,
   planMovement,
   planRoute,
@@ -14,6 +15,13 @@ import {
   walkable,
   type Point,
 } from "../src/ui/navigation";
+import {
+  BOSS_OFFICE_LAYOUT,
+  EAST_OUTER_WALL_X,
+  MEETING_VIEW,
+  STAIR_LAYOUT,
+  UPPER_Y,
+} from "../src/ui/office-layout";
 import {
   initialQuality,
   adaptQuality,
@@ -267,6 +275,55 @@ describe("office navigation", () => {
     );
   });
 });
+describe("two-floor office layout", () => {
+  it("keeps the external staircase clear of the east wall and flush with its landing", () => {
+    const stairLeftEdge = STAIR_LAYOUT.x - STAIR_LAYOUT.width / 2;
+    expect(stairLeftEdge).toBeGreaterThan(EAST_OUTER_WALL_X + 0.1);
+
+    const lastIndex = STAIR_LAYOUT.stepCount - 1;
+    const topStepSurface =
+      STAIR_LAYOUT.startY +
+      lastIndex * STAIR_LAYOUT.rise +
+      STAIR_LAYOUT.stepThickness / 2;
+    const landingSurface =
+      UPPER_Y + 0.02 + STAIR_LAYOUT.landingThickness / 2;
+    expect(Math.abs(topStepSurface - landingSurface)).toBeLessThan(0.05);
+
+    const topStepZ = STAIR_LAYOUT.startZ - lastIndex * STAIR_LAYOUT.run;
+    expect(topStepZ).toBeGreaterThan(
+      STAIR_LAYOUT.landingZ - STAIR_LAYOUT.landingDepth / 2,
+    );
+    expect(topStepZ).toBeLessThan(
+      STAIR_LAYOUT.landingZ + STAIR_LAYOUT.landingDepth / 2,
+    );
+    expect(STAIR_LAYOUT.doorZ).toBe(STAIR_LAYOUT.landingZ);
+    expect(STAIR_LAYOUT.doorWidth).toBeGreaterThan(STAIR_LAYOUT.width);
+  });
+
+  it("keeps the meeting camera below the mezzanine slab", () => {
+    expect(MEETING_VIEW.camera[1]).toBeLessThan(UPPER_Y);
+    expect(MEETING_VIEW.target[1]).toBeLessThan(UPPER_Y);
+    expect(MEETING_VIEW.camera[2]).toBeGreaterThan(MEETING_VIEW.target[2]);
+  });
+
+  it("matches pathfinding to the enlarged Boss desk footprint", () => {
+    const bossObstacle = obstacles.find(
+      ({ x, z }) => x === BOSS_OFFICE_LAYOUT.x && z === BOSS_OFFICE_LAYOUT.z,
+    );
+    expect(bossObstacle).toMatchObject({
+      w: BOSS_OFFICE_LAYOUT.deskWidth,
+      d: BOSS_OFFICE_LAYOUT.deskDepth,
+    });
+
+    const bossIndex = characterIds.indexOf("boss");
+    const bossSeat = destination(bossIndex, "MONITORING");
+    expect(walkable(bossSeat)).toBe(true);
+    expect(
+      planRoute(bossSeat, destination(bossIndex, "BOSS_DECISION")).length,
+    ).toBeGreaterThan(0);
+  });
+});
+
 describe("adaptive quality", () => {
   it("selects conservative profiles for limited CPUs/memory", () => {
     expect(initialQuality(4, 16)).toBe("low");
