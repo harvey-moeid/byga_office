@@ -208,6 +208,7 @@ function speechScreenPosition(
   element: Object3D,
   camera: Camera,
   size: { width: number; height: number },
+  avoidOtherBubbles: boolean,
 ): [number, number] {
   const projected = element
     .getWorldPosition(speechProjection)
@@ -240,7 +241,7 @@ function speechScreenPosition(
     ?.getBoundingClientRect();
   const offsetX = canvasBounds?.left ?? 0;
   const offsetY = canvasBounds?.top ?? 0;
-  const reserved = [
+  const reservedSelectors = [
     ".meeting-status",
     ".home-hud > div",
     ".home-hud .segmented",
@@ -249,14 +250,11 @@ function speechScreenPosition(
     ".scene-quality",
     ".scene-fullscreen",
     ".home-menu-button",
-    ".meeting-speech-anchor .meeting-bubble",
-  ]
+    ...(avoidOtherBubbles ? [".meeting-speech-anchor .meeting-bubble"] : []),
+  ];
+  const reserved = reservedSelectors
     .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
-    .filter(
-      (node) =>
-        !node.closest(`[data-character="${character}"]`) &&
-        !node.closest(`[data-character="${character}"] .meeting-bubble`),
-    )
+    .filter((node) => !node.closest(`[data-character="${character}"]`))
     .map((node) => {
       const rect = node.getBoundingClientRect();
       return {
@@ -497,8 +495,14 @@ export function OfficeCharacter({
   const speechPosition = useMemo(
     () =>
       (element: Object3D, camera: Camera, size: { width: number; height: number }) =>
-        speechScreenPosition(characterIds[index], element, camera, size),
-    [index],
+        speechScreenPosition(
+          characterIds[index],
+          element,
+          camera,
+          size,
+          !speech,
+        ),
+    [index, speech],
   );
   useEffect(() => {
     onSpeechReady?.(characterIds[index], speechVisible);
