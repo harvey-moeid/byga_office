@@ -29,6 +29,7 @@ import { OfficeEnvironment } from "./office-environment";
 import { HybridOfficeAssets } from "./office-assets";
 import { PremiumOfficeAccents } from "./office-premium";
 import { UpperFloorOffice } from "./office-upper-floor";
+import { MEETING_VIEW } from "./office-layout";
 import { OfficeCharacter } from "./office-character";
 import type { CharacterMotion } from "./character-motion";
 import {
@@ -112,8 +113,8 @@ const views: Record<
   },
   meeting: {
     label: "Ruang meeting",
-    camera: [10.4, 6.4, 10.5],
-    target: [5, 1.05, 1],
+    camera: MEETING_VIEW.camera,
+    target: MEETING_VIEW.target,
   },
   boss: {
     label: "Ruang bos",

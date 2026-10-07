@@ -1,5 +1,10 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { InstancedMesh, Object3D } from "three";
+import {
+  STAIR_LAYOUT,
+  UPPER_EAST_WALL_X,
+  UPPER_Y,
+} from "./office-layout";
 
 type Triple = [number, number, number];
 type Shape = "box" | "cylinder" | "sphere";
@@ -58,7 +63,6 @@ const finishes: Record<
   rug: { color: "#405955", roughness: 1 },
 };
 
-const UPPER_Y = 3.55;
 
 function buildUpperFloor(detail: boolean): Part[] {
   const parts: Part[] = [];
@@ -89,7 +93,47 @@ function buildUpperFloor(detail: boolean): Part[] {
   box([4.9, UPPER_Y + 0.13, -3.7], [5.5, 0.02, 4.25], "rug");
   box([4.65, UPPER_Y + 0.13, 4.85], [4.2, 0.02, 2.7], "rug");
 
-  box([8.25, UPPER_Y + 1.48, 0.45], [0.14, 2.96, 13.25], "darkWood");
+  // Split the east wall around a real stair doorway instead of letting the
+  // landing terminate into an opaque wall.
+  const eastWallMinZ = -6.175;
+  const eastWallMaxZ = 7.075;
+  const doorMinZ = STAIR_LAYOUT.doorZ - STAIR_LAYOUT.doorWidth / 2;
+  const doorMaxZ = STAIR_LAYOUT.doorZ + STAIR_LAYOUT.doorWidth / 2;
+  box(
+    [UPPER_EAST_WALL_X, UPPER_Y + 1.48, (eastWallMinZ + doorMinZ) / 2],
+    [0.14, 2.96, doorMinZ - eastWallMinZ],
+    "darkWood",
+  );
+  box(
+    [UPPER_EAST_WALL_X, UPPER_Y + 1.48, (doorMaxZ + eastWallMaxZ) / 2],
+    [0.14, 2.96, eastWallMaxZ - doorMaxZ],
+    "darkWood",
+  );
+  const lintelHeight = 2.96 - STAIR_LAYOUT.doorHeight;
+  box(
+    [
+      UPPER_EAST_WALL_X,
+      UPPER_Y + STAIR_LAYOUT.doorHeight + lintelHeight / 2,
+      STAIR_LAYOUT.doorZ,
+    ],
+    [0.14, lintelHeight, STAIR_LAYOUT.doorWidth],
+    "darkWood",
+  );
+  for (const z of [doorMinZ, doorMaxZ])
+    box(
+      [UPPER_EAST_WALL_X - 0.02, UPPER_Y + STAIR_LAYOUT.doorHeight / 2, z],
+      [0.08, STAIR_LAYOUT.doorHeight, 0.08],
+      "metal",
+    );
+  box(
+    [
+      UPPER_EAST_WALL_X - 0.02,
+      UPPER_Y + STAIR_LAYOUT.doorHeight,
+      STAIR_LAYOUT.doorZ,
+    ],
+    [0.08, 0.08, STAIR_LAYOUT.doorWidth],
+    "metal",
+  );
   box([5.0, UPPER_Y + 1.48, -6.1], [6.45, 2.96, 0.14], "darkWood");
   for (let z = -5.5; z <= 6.1; z += 1.45) {
     box([1.75, UPPER_Y + 0.72, z], [0.055, 1.35, 0.055], "metal");
@@ -97,15 +141,76 @@ function buildUpperFloor(detail: boolean): Part[] {
   }
   box([1.75, UPPER_Y + 1.38, 0.4], [0.08, 0.06, 12.9], "metal");
 
-  // External stair placement keeps existing floor-one character routing intact.
-  for (let i = 0; i < 14; i++) {
-    const y = 0.18 + i * 0.245;
-    const z = 6.3 - i * 0.39;
-    box([9.05, y, z], [1.15, 0.16, 0.42], "wood");
-    box([8.55, y - 0.08, z], [0.08, Math.max(0.18, y * 0.95), 0.08], "metal");
-    box([9.55, y - 0.08, z], [0.08, Math.max(0.18, y * 0.95), 0.08], "metal");
+  // Keep the staircase external so floor-one routing remains unchanged, but
+  // keep every tread fully outside the east wall and connect it to a real
+  // doorway/landing. Lightweight boxes stay in the same instanced batches.
+  const totalRise = (STAIR_LAYOUT.stepCount - 1) * STAIR_LAYOUT.rise;
+  const totalRun = (STAIR_LAYOUT.stepCount - 1) * STAIR_LAYOUT.run;
+  const stairLength = Math.hypot(totalRise, totalRun);
+  const stairAngle = Math.atan2(totalRise, totalRun);
+  const stairMidY = STAIR_LAYOUT.startY + totalRise / 2;
+  const stairMidZ = STAIR_LAYOUT.startZ - totalRun / 2;
+  const railX = STAIR_LAYOUT.width / 2 - 0.06;
+
+  for (let i = 0; i < STAIR_LAYOUT.stepCount; i++) {
+    const y = STAIR_LAYOUT.startY + i * STAIR_LAYOUT.rise;
+    const z = STAIR_LAYOUT.startZ - i * STAIR_LAYOUT.run;
+    box(
+      [STAIR_LAYOUT.x, y, z],
+      [STAIR_LAYOUT.width, STAIR_LAYOUT.stepThickness, STAIR_LAYOUT.stepDepth],
+      "wood",
+    );
+    if (i % 2 === 0 || i === STAIR_LAYOUT.stepCount - 1)
+      for (const side of [-1, 1])
+        box(
+          [STAIR_LAYOUT.x + side * railX, y + 0.45, z],
+          [0.06, 0.9, 0.06],
+          "metal",
+        );
   }
-  box([8.78, UPPER_Y + 0.02, 0.98], [1.75, 0.15, 1.3], "floor");
+  for (const side of [-1, 1]) {
+    box(
+      [STAIR_LAYOUT.x + side * railX, stairMidY - 0.1, stairMidZ],
+      [0.08, 0.12, stairLength],
+      "metal",
+      [-stairAngle, 0, 0],
+    );
+    box(
+      [STAIR_LAYOUT.x + side * railX, stairMidY + 0.85, stairMidZ],
+      [0.065, 0.065, stairLength + 0.15],
+      "metal",
+      [-stairAngle, 0, 0],
+    );
+  }
+  box(
+    [STAIR_LAYOUT.landingX, UPPER_Y + 0.02, STAIR_LAYOUT.landingZ],
+    [
+      STAIR_LAYOUT.landingWidth,
+      STAIR_LAYOUT.landingThickness,
+      STAIR_LAYOUT.landingDepth,
+    ],
+    "floor",
+  );
+  // Guard the exposed east side of the landing while leaving the stair throat
+  // and doorway clear.
+  for (const z of [
+    STAIR_LAYOUT.landingZ - STAIR_LAYOUT.landingDepth / 2 + 0.08,
+    STAIR_LAYOUT.landingZ + STAIR_LAYOUT.landingDepth / 2 - 0.08,
+  ])
+    box(
+      [STAIR_LAYOUT.landingX + STAIR_LAYOUT.landingWidth / 2 - 0.05, UPPER_Y + 0.55, z],
+      [0.06, 1.05, 0.06],
+      "metal",
+    );
+  box(
+    [
+      STAIR_LAYOUT.landingX + STAIR_LAYOUT.landingWidth / 2 - 0.05,
+      UPPER_Y + 1.02,
+      STAIR_LAYOUT.landingZ,
+    ],
+    [0.06, 0.06, STAIR_LAYOUT.landingDepth - 0.15],
+    "metal",
+  );
 
   const desk = (x: number, z: number) => {
     box([x, UPPER_Y + 0.76, z], [1.55, 0.08, 0.78], "wood");

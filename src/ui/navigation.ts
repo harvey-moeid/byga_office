@@ -1,4 +1,5 @@
 import { characterIds } from "../core/contracts";
+import { BOSS_OFFICE_LAYOUT } from "./office-layout";
 export type Point = readonly [number, number];
 export interface Obstacle {
   x: number;
@@ -109,7 +110,12 @@ export const furnishings: Obstacle[] = [
 export const obstacles: Obstacle[] = [
   ...partitions,
   ...furnishings,
-  ...desks.map(([x, z]) => ({ x, z, w: 1.6, d: 0.85 })),
+  ...desks.map(([x, z], index) => ({
+    x,
+    z,
+    w: index === desks.length - 1 ? BOSS_OFFICE_LAYOUT.deskWidth : 1.6,
+    d: index === desks.length - 1 ? BOSS_OFFICE_LAYOUT.deskDepth : 0.85,
+  })),
   { x: 5, z: 1, w: 3, d: 1.4 },
 ];
 export function walkable([x, z]: Point, geometry: Obstacle[] = obstacles) {

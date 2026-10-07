@@ -13,6 +13,10 @@ import {
   partitions,
   meetingSeats,
 } from "./navigation";
+import {
+  BOSS_OFFICE_LAYOUT,
+  EAST_OUTER_WALL_X,
+} from "./office-layout";
 
 type Triple = [number, number, number];
 type Finish =
@@ -180,7 +184,7 @@ function buildOffice(detail: boolean): Part[] {
   // An open architectural cutaway: the front and roof stay out of the view.
   box([0, 0.48, -7.55], [17.7, 0.96, 0.18], "plaster");
   box([0, 3.18, -7.55], [17.7, 0.34, 0.18], "plaster");
-  box([8.7, 1.55, 0], [0.18, 3.1, 15.3], "plaster");
+  box([EAST_OUTER_WALL_X, 1.55, 0], [0.18, 3.1, 15.3], "plaster");
   box([-8.7, 0.35, 0], [0.18, 0.7, 15.3], "plaster");
   for (let i = 0; i < 8; i++) {
     const x = -7.65 + i * 2.18;
@@ -221,36 +225,120 @@ function buildOffice(detail: boolean): Part[] {
   box([5, 0.035, 1], [4.8, 0.015, 4.5], "rug");
   desks.forEach(([x, z], index) => {
     const executive = index >= analystDesks.length;
-    box([x, 0.76, z], [1.6, 0.065, 0.85], executive ? "walnut" : "oak");
+    const bossDesk = index === desks.length - 1;
+    const deskWidth = bossDesk ? BOSS_OFFICE_LAYOUT.deskWidth : 1.6;
+    const deskDepth = bossDesk ? BOSS_OFFICE_LAYOUT.deskDepth : 0.85;
+    const legX = bossDesk ? deskWidth / 2 - 0.16 : 0.67;
+    box(
+      [x, 0.76, z],
+      [deskWidth, bossDesk ? 0.085 : 0.065, deskDepth],
+      executive ? "walnut" : "oak",
+    );
     for (const side of [-1, 1]) {
-      box([x + side * 0.67, 0.38, z], [0.035, 0.72, 0.72], "metal");
-      box([x + side * 0.67, 0.035, z], [0.09, 0.025, 0.8], "metal");
+      box(
+        [x + side * legX, 0.38, z],
+        [0.035, 0.72, deskDepth - 0.13],
+        "metal",
+      );
+      box(
+        [x + side * legX, 0.035, z],
+        [0.09, 0.025, deskDepth - 0.05],
+        "metal",
+      );
     }
-    box([x, 0.6, z - 0.3], [1.35, 0.08, 0.06], "metal");
-    monitor(x - 0.38, z - 0.22);
-    monitor(x + 0.38, z - 0.22);
-    box([x, 0.8, z + 0.2], [0.75, 0.008, 0.31], "leather");
+    box(
+      [x, 0.6, z - deskDepth * 0.35],
+      [deskWidth - 0.25, bossDesk ? 0.38 : 0.08, 0.06],
+      bossDesk ? "walnut" : "metal",
+    );
+    if (bossDesk) {
+      for (const offset of [-0.62, 0, 0.62])
+        monitor(x + offset, z - 0.27, 0.58);
+    } else {
+      monitor(x - 0.38, z - 0.22);
+      monitor(x + 0.38, z - 0.22);
+    }
+    box(
+      [x, 0.8, z + 0.2],
+      [bossDesk ? 1.18 : 0.75, 0.008, bossDesk ? 0.38 : 0.31],
+      "leather",
+    );
     box([x - 0.06, 0.815, z + 0.18], [0.4, 0.021, 0.13], "metal");
     oval([x + 0.29, 0.818, z + 0.19], [0.033, 0.015, 0.05], "metal");
     if (detail) {
       for (let row = 0; row < 3; row++)
-        for (let key = 0; key < 9; key++)
+        for (let key = 0; key < (bossDesk ? 12 : 9); key++)
           box(
-            [x - 0.23 + key * 0.042, 0.829, z + 0.135 + row * 0.04],
+            [x - (bossDesk ? 0.31 : 0.23) + key * 0.052, 0.829, z + 0.135 + row * 0.04],
             [0.032, 0.006, 0.022],
             "paper",
           );
       box(
-        [x - 0.6, 0.801, z + 0.14],
+        [x - (bossDesk ? 0.82 : 0.6), 0.801, z + 0.14],
         [0.17, 0.017, 0.22],
         "paper",
         [0, -0.12, 0],
       );
-      cylinder([x + 0.62, 0.85, z + 0.13], 0.044, 0.1, "ceramic");
-      box([x - 0.75, 0.4, z - 0.25], [0.14, 0.52, 0.45], "metal");
+      cylinder([x + (bossDesk ? 0.85 : 0.62), 0.85, z + 0.13], 0.044, 0.1, "ceramic");
+      box(
+        [x - (bossDesk ? 0.98 : 0.75), 0.4, z - 0.25],
+        [0.14, 0.52, 0.45],
+        "metal",
+      );
     }
     if (!detail) chair(x, z + 0.72);
   });
+
+  // Give the Boss Office a clear executive hierarchy without adding new
+  // materials or remote assets. These parts remain inside the existing
+  // instanced batches, so Medium keeps its lightweight render budget.
+  box(
+    [BOSS_OFFICE_LAYOUT.x, 0.028, BOSS_OFFICE_LAYOUT.z + 0.08],
+    [BOSS_OFFICE_LAYOUT.rugWidth, 0.018, BOSS_OFFICE_LAYOUT.rugDepth],
+    "rug",
+  );
+  box(
+    [
+      BOSS_OFFICE_LAYOUT.x,
+      BOSS_OFFICE_LAYOUT.featureWallHeight / 2,
+      BOSS_OFFICE_LAYOUT.featureWallZ,
+    ],
+    [
+      BOSS_OFFICE_LAYOUT.featureWallWidth,
+      BOSS_OFFICE_LAYOUT.featureWallHeight,
+      0.1,
+    ],
+    "walnut",
+  );
+  box(
+    [
+      BOSS_OFFICE_LAYOUT.x,
+      1.45,
+      BOSS_OFFICE_LAYOUT.featureWallZ - 0.055,
+    ],
+    [1.9, 0.7, 0.025],
+    "screen",
+  );
+  box(
+    [
+      BOSS_OFFICE_LAYOUT.x,
+      BOSS_OFFICE_LAYOUT.featureWallHeight - 0.16,
+      BOSS_OFFICE_LAYOUT.featureWallZ - 0.07,
+    ],
+    [2.65, 0.04, 0.025],
+    "light",
+  );
+  for (let i = 0; i < 5; i++)
+    box(
+      [
+        BOSS_OFFICE_LAYOUT.x - 0.68 + i * 0.34,
+        1.34 + (i % 3) * 0.11,
+        BOSS_OFFICE_LAYOUT.featureWallZ - 0.075,
+      ],
+      [0.22, 0.025, 0.01],
+      i % 2 ? "led" : "paper",
+    );
+  plant(7.45, 6.82, 1.35);
   box([5, 0.76, 1], [3, 0.09, 1.4], "walnut");
   for (const x of [4, 6]) box([x, 0.38, 1], [0.08, 0.72, 0.8], "metal");
   if (!detail)
