@@ -2207,11 +2207,12 @@ Idempotency, degraded flows, responsive optimization, WebGL fallback, security r
 
 ```text
 BTCUSDT candle closes
-→ scanners inspect market
-→ scanner consensus detects opportunity
-→ Trading Office activates
-→ six specialist AI analysts analyze independently in parallel
-→ votes are counted
+→ six deterministic scanners produce telemetry/evidence
+→ four deterministic groups resolve direction
+→ group consensus detects opportunity
+→ Trading Office activates and revalidates the latest closed market
+→ eight specialist AI analysts analyze independently in parallel (two per group)
+→ semantic-valid votes are counted
 → deterministic Risk Engine creates trade structure
 → Risk Manager evaluates it
 → Boss performs final review
