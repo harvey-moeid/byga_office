@@ -4,6 +4,11 @@ import type { MeetingSnapshot, MeetingTurn } from "../core/meeting";
 import { useData } from "./data";
 import { advanceMeeting, speechExcerpt, type MeetingPlayback } from "./meeting";
 import { roles } from "./shared";
+import {
+  characterPeekCopy,
+  type CharacterPresence,
+} from "./character-state";
+import type { CharacterMotion } from "./character-motion";
 
 export function useMeetingPresentation(render3D: boolean) {
   const data = useData<{ meeting: MeetingSnapshot | null }>(
@@ -62,6 +67,55 @@ export function useMeetingPresentation(render3D: boolean) {
     retry: data.retry,
     onSpeechReady,
   };
+}
+
+export function CharacterPeekBubble({
+  character,
+  presence,
+  group,
+  motion,
+  turn,
+  onDetails,
+}: {
+  character: CharacterId;
+  presence: CharacterPresence;
+  group: string;
+  motion?: CharacterMotion;
+  turn?: MeetingTurn;
+  onDetails: () => void;
+}) {
+  const voteClass = turn
+    ? `vote-${turn.analysis.vote.toLowerCase().replaceAll("_", "-")}`
+    : "";
+  return (
+    <button
+      className={`meeting-bubble character-peek-bubble${character === "boss" ? " boss-bubble" : ""}`}
+      data-vote={turn?.analysis.vote}
+      aria-label={`Buka info ${roles[character]}`}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        onDetails();
+      }}
+    >
+      <strong>
+        {roles[character]}
+        <span className="character-peek-status">{presence.replaceAll("_", " ")}</span>
+      </strong>
+      <span className="character-peek-group">{group}</span>
+      {turn ? (
+        <>
+          <span className={`speech-vote ${voteClass}`}>
+            {turn.analysis.vote} · {turn.analysis.confidence}%
+          </span>
+          <span className="speech-text">{speechExcerpt(turn.analysis.summary)}</span>
+        </>
+      ) : (
+        <span className="speech-text">{characterPeekCopy(presence, motion)}</span>
+      )}
+      <small>Ketuk untuk info karakter</small>
+    </button>
+  );
 }
 
 export function SpeechBubble({

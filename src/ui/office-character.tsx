@@ -208,6 +208,7 @@ function speechScreenPosition(
   element: Object3D,
   camera: Camera,
   size: { width: number; height: number },
+  avoidOtherBubbles: boolean,
 ): [number, number] {
   const projected = element
     .getWorldPosition(speechProjection)
@@ -240,7 +241,7 @@ function speechScreenPosition(
     ?.getBoundingClientRect();
   const offsetX = canvasBounds?.left ?? 0;
   const offsetY = canvasBounds?.top ?? 0;
-  const reserved = [
+  const reservedSelectors = [
     ".meeting-status",
     ".home-hud > div",
     ".home-hud .segmented",
@@ -249,8 +250,11 @@ function speechScreenPosition(
     ".scene-quality",
     ".scene-fullscreen",
     ".home-menu-button",
-  ]
+    ...(avoidOtherBubbles ? [".meeting-speech-anchor .meeting-bubble"] : []),
+  ];
+  const reserved = reservedSelectors
     .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+    .filter((node) => !node.closest(`[data-character="${character}"]`))
     .map((node) => {
       const rect = node.getBoundingClientRect();
       return {
@@ -400,10 +404,13 @@ export function OfficeCharacter({
   decorative,
   avatar,
   onSelect,
+  onPeek,
   speech,
+  peek,
   labelHost,
   onSpeechReady,
   onActivityArrive,
+  onMotionChange,
 }: {
   index: number;
   state: string;
@@ -411,10 +418,13 @@ export function OfficeCharacter({
   decorative: boolean;
   avatar: AvatarPreset;
   onSelect: (id: string) => void;
+  onPeek?: (id: CharacterId) => void;
   speech?: ReactNode;
+  peek?: ReactNode;
   labelHost?: RefObject<HTMLDivElement>;
   onSpeechReady?: (id: CharacterId, visible: boolean) => void;
   onActivityArrive?: (id: CharacterId, activity: OfficeActivity) => void;
+  onMotionChange?: (id: CharacterId, motion: CharacterMotion) => void;
 }) {
   const appearance = appearances[avatar];
   const outfit = outfits[characterIds[index]];
@@ -434,6 +444,9 @@ export function OfficeCharacter({
   const speechVisibilityProbe = useRef(new Vector3());
   const [motion, setMotion] = useState<CharacterMotion>("type");
   const motionRef = useRef<CharacterMotion>("type");
+  useEffect(() => {
+    onMotionChange?.(characterIds[index], motion);
+  }, [index, motion, onMotionChange]);
   const arrivedRef = useRef(false);
   const activityArrivedRef = useRef<OfficeActivity | undefined>(undefined);
   const meeting = isAttendingMeeting(index, state);
@@ -478,11 +491,18 @@ export function OfficeCharacter({
       );
   }, [destination]);
   const speechVisible = !!speech && arrived && meeting && speechOnScreen;
+  const peekVisible = !speech && !!peek && speechOnScreen;
   const speechPosition = useMemo(
     () =>
       (element: Object3D, camera: Camera, size: { width: number; height: number }) =>
-        speechScreenPosition(characterIds[index], element, camera, size),
-    [index],
+        speechScreenPosition(
+          characterIds[index],
+          element,
+          camera,
+          size,
+          !speech,
+        ),
+    [index, speech],
   );
   useEffect(() => {
     onSpeechReady?.(characterIds[index], speechVisible);
@@ -494,7 +514,7 @@ export function OfficeCharacter({
     // Otherwise low-FPS/software WebGL makes characters move in slow motion.
     const delta = Math.min(dt, 0.06);
     const movementDelta = Math.min(dt, reduced ? 0.25 : 0.5);
-    if (speech) {
+    if (speech || peek) {
       const probe = speechVisibilityProbe.current.set(0, 2.05, 0);
       root.current.localToWorld(probe);
       probe.project(camera);
@@ -701,21 +721,26 @@ export function OfficeCharacter({
       name={`character-${characterIds[index]}`}
       onClick={(event) => {
         event.stopPropagation();
-        onSelect(characterIds[index]);
+        const id = characterIds[index];
+        if (onPeek) {
+          onPeek(id);
+          return;
+        }
+        onSelect(id);
       }}
     >
-      {labelHost && speech && (
+      {labelHost && (speech || peek) && (
         <Html
           portal={labelHost}
           position={[0, 2.05, 0]}
           calculatePosition={speechPosition}
-          zIndexRange={[4, 3]}
+          zIndexRange={speech ? [7, 6] : [4, 3]}
         >
           <div
             className="meeting-speech-anchor"
             data-character={characterIds[index]}
           >
-            {speechVisible ? speech : null}
+            {speechVisible ? speech : peekVisible ? peek : null}
           </div>
         </Html>
       )}

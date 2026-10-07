@@ -4,6 +4,7 @@ import type { MeetingPlayback } from "../src/ui/meeting";
 import {
   activityLabels,
   characterGroupLabels,
+  characterPeekCopy,
   characterPresence,
 } from "../src/ui/character-state";
 
@@ -44,6 +45,27 @@ function playback(
 }
 
 describe("3D character presence", () => {
+  it("describes walking and decorative activity from actual motion", () => {
+    expect(characterPeekCopy("WALKING TO MEETING", "walk")).toBe(
+      "Menuju ruang meeting.",
+    );
+    expect(characterPeekCopy("COFFEE BREAK", "walk")).toBe(
+      "Menuju area coffee break.",
+    );
+    expect(characterPeekCopy("COFFEE BREAK", "coffee")).toContain(
+      "Sedang coffee break",
+    );
+    expect(characterPeekCopy("GROUP MARKET REVIEW", "review")).toBe(
+      "Sedang mengecek Market Wall.",
+    );
+    expect(characterPeekCopy("RETURNING", "walk")).toBe(
+      "Kembali ke meja kerja.",
+    );
+    expect(characterPeekCopy("MONITORING", "walk")).toBe(
+      "Kembali ke meja kerja.",
+    );
+  });
+
   it("keeps decorative activity explicit without implying an AI call", () => {
     expect(
       characterPresence("volume", {
@@ -61,6 +83,10 @@ describe("3D character presence", () => {
     expect(
       characterPresence("boss", { playback: gathering, snapshot }),
     ).toBe("WAITING IN OFFICE");
+
+    expect(
+      characterPresence("quant", { playback: gathering, snapshot }),
+    ).toBe("WALKING TO MEETING");
 
     const speaking = playback("speaking", { speaker: "trend" });
     expect(
@@ -86,6 +112,9 @@ describe("3D character presence", () => {
     const returning = playback("returning", { stage: "RETURN_TO_DESK" });
     expect(
       characterPresence("trend", { playback: returning, snapshot }),
+    ).toBe("RETURNING");
+    expect(
+      characterPresence("quant", { playback: returning, snapshot }),
     ).toBe("RETURNING");
   });
 

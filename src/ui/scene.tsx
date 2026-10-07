@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, Html, OrbitControls } from "@react-three/drei";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   TOUCH,
   ACESFilmicToneMapping,
@@ -29,6 +29,7 @@ import { OfficeEnvironment } from "./office-environment";
 import { HybridOfficeAssets } from "./office-assets";
 import { PremiumOfficeAccents } from "./office-premium";
 import { OfficeCharacter } from "./office-character";
+import type { CharacterMotion } from "./character-motion";
 import {
   ACTIVITY_TRAVEL_TIMEOUT_MS,
   activityDelayMs,
@@ -39,7 +40,14 @@ import {
 } from "./office-activity";
 import type { ComponentRef, RefObject } from "react";
 import type { MeetingTurn } from "../core/meeting";
-import { SpeechBubble } from "./meeting-view";
+import type { CharacterPresence } from "./character-state";
+import { CharacterPeekBubble, SpeechBubble } from "./meeting-view";
+
+type CharacterBubbleContext = {
+  presence: CharacterPresence;
+  group: string;
+  turn?: MeetingTurn;
+};
 
 // Generate reflection lighting locally; no external HDR download is needed.
 function softwareRendering(gl: WebGLRenderer) {
@@ -267,6 +275,7 @@ export default function OfficeScene({
   onSpeechReady,
   onActivityChange,
   marketTimestamp,
+  characterContexts = {},
 }: {
   state: string;
   onSelect: (id: string) => void;
@@ -280,9 +289,11 @@ export default function OfficeScene({
     activities: Partial<Record<CharacterId, OfficeActivityKind>>,
   ) => void;
   marketTimestamp?: number;
+  characterContexts?: Partial<Record<CharacterId, CharacterBubbleContext>>;
 }) {
   const [view, setView] = useState<View>("overview");
   const [reset, setReset] = useState(0);
+  const [peekCharacter, setPeekCharacter] = useState<CharacterId>();
   const sceneRoot = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const beforeMeetingView = useRef<View>("overview");
@@ -322,6 +333,10 @@ export default function OfficeScene({
       await element.requestFullscreen().catch(() => undefined);
     }
   };
+  useEffect(() => {
+    setPeekCharacter(undefined);
+  }, [meetingId, state]);
+
   useEffect(() => {
     if (meetingId) {
       if (!meetingWasActive.current) {
@@ -366,6 +381,19 @@ export default function OfficeScene({
   const [activities, setActivities] = useState<
     Partial<Record<CharacterId, OfficeActivity>>
   >({});
+  const [motions, setMotions] = useState<
+    Partial<Record<CharacterId, CharacterMotion>>
+  >({});
+  const handleMotionChange = useCallback(
+    (character: CharacterId, motion: CharacterMotion) => {
+      setMotions((current) =>
+        current[character] === motion
+          ? current
+          : { ...current, [character]: motion },
+      );
+    },
+    [],
+  );
   const firstActivity = useRef(true);
   const activityArrivalHandler = useRef<
     (id: CharacterId, activity: OfficeActivity) => void
@@ -519,6 +547,7 @@ export default function OfficeScene({
       </button>
       <Canvas
         shadows={profile.shadows}
+        onPointerMissed={() => setPeekCharacter(undefined)}
         dpr={profile.dpr}
         camera={{
           position: views.overview.camera,
@@ -643,27 +672,54 @@ export default function OfficeScene({
               )}
             </group>
           ))}
-        {characterIds.map((id, index) => (
-          <OfficeCharacter
-            key={id}
-            index={index}
-            avatar={avatars[id] ?? "professional"}
-            state={state}
-            activity={activities[id]}
-            decorative={profile.decorative}
-            onSelect={onSelect}
-            labelHost={labelHost}
-            onSpeechReady={onSpeechReady}
-            onActivityArrive={(id, activity) =>
-              activityArrivalHandler.current(id, activity)
-            }
-            speech={
-              speech?.character === id && onSpeechDetails ? (
-                <SpeechBubble turn={speech} onDetails={onSpeechDetails} />
-              ) : undefined
-            }
-          />
-        ))}
+        {characterIds.map((id, index) => {
+          const context = characterContexts[id];
+          return (
+            <OfficeCharacter
+              key={id}
+              index={index}
+              avatar={avatars[id] ?? "professional"}
+              state={state}
+              activity={activities[id]}
+              decorative={profile.decorative}
+              onSelect={onSelect}
+              onPeek={
+                context
+                  ? (character) =>
+                      setPeekCharacter((current) =>
+                        current === character ? undefined : character,
+                      )
+                  : undefined
+              }
+              labelHost={labelHost}
+              onSpeechReady={onSpeechReady}
+              onActivityArrive={(id, activity) =>
+                activityArrivalHandler.current(id, activity)
+              }
+              onMotionChange={handleMotionChange}
+              speech={
+                speech?.character === id && onSpeechDetails ? (
+                  <SpeechBubble turn={speech} onDetails={onSpeechDetails} />
+                ) : undefined
+              }
+              peek={
+                peekCharacter === id && context ? (
+                  <CharacterPeekBubble
+                    character={id}
+                    presence={context.presence}
+                    group={context.group}
+                    motion={motions[id]}
+                    turn={context.turn}
+                    onDetails={() => {
+                      setPeekCharacter(undefined);
+                      onSelect(id);
+                    }}
+                  />
+                ) : undefined
+              }
+            />
+          );
+        })}
         {qualityMode === "auto" && (
           <PerformanceMonitor quality={quality} onQuality={setQuality} />
         )}
