@@ -369,7 +369,10 @@ Account dan kedua database telah diperiksa melalui GET/SELECT konektor Cloudflar
 - [x] Simpan structured input snapshot
 - [x] Simpan rendered prompt dengan retention
 - [x] Redact secrets
-- [x] Buat default prompt 8 karakter
+- [x] Buat default prompt 10 karakter
+- [x] Locked decision rubric spesifik untuk seluruh 8 Analyst
+- [x] Dedicated locked authority contract Risk Manager
+- [x] Dedicated locked authority contract Boss
 
 ---
 
@@ -387,10 +390,12 @@ Account dan kedua database telah diperiksa melalui GET/SELECT konektor Cloudflar
 - [x] Summarize candle lama
 - [x] Implement safe truncate
 - [x] Simpan `context_compressed`
+- [x] Volume Analyst mendapat specialist evidence volume + breakout/retest
+- [x] Quant Analyst mendapat specialist evidence mean-reversion + Bollinger/RSI/ATR
 
 ---
 
-# Milestone 13 — Six AI Analysts
+# Milestone 13 — Eight AI Analysts
 
 - [x] Buat Trend Analyst
 - [x] Buat Structure Analyst
@@ -398,6 +403,8 @@ Account dan kedua database telah diperiksa melalui GET/SELECT konektor Cloudflar
 - [x] Buat Liquidity Analyst
 - [x] Buat Volume Analyst
 - [x] Buat Quant Analyst
+- [x] Buat Derivatives Analyst
+- [x] Buat Market Positioning Analyst
 - [x] Configure primary provider/model
 - [x] Configure fallback provider/model
 - [x] Configure temperature
@@ -405,7 +412,7 @@ Account dan kedua database telah diperiksa melalui GET/SELECT konektor Cloudflar
 - [x] Configure max output tokens
 - [x] Default Analyst max output = 1500
 - [x] Configure timeout
-- [x] Run 6 Analyst parallel
+- [x] Run 8 Analyst parallel (2 per deterministic group)
 - [x] Pastikan Analyst tidak melihat output Analyst lain
 - [x] Parse BUY/SELL/NO_TRADE
 - [x] Parse individual confidence
@@ -426,7 +433,8 @@ Account dan kedua database telah diperiksa melalui GET/SELECT konektor Cloudflar
 - [x] Validate price direction consistency (entry/SL/TP terstruktur; unit/provider fixture lulus)
 - [x] Flag `SEMANTIC_VALIDATION_FAILED`
 - [x] Retry jika validation gagal
-- [x] Jika persistent invalid → gunakan vote response terakhir
+- [x] Jika persistent invalid → audit raw response, set Analyst `UNAVAILABLE`, jangan masukkan vote ke voting
+- [x] BUY/SELL wajib punya matching `DIRECTIONAL_BIAS` evidence
 - [x] First failure severity kuning
 - [x] Persistent failure severity merah
 - [x] Public hanya melihat generic warning
@@ -441,8 +449,8 @@ Account dan kedua database telah diperiksa melalui GET/SELECT konektor Cloudflar
 - [x] Implement SELL count
 - [x] Implement NO_TRADE abstain
 - [x] Implement UNAVAILABLE
-- [x] Minimum normal success = 3/6
-- [x] <3 success → `AI_DEGRADED`
+- [x] Minimum normal success = 4/8
+- [x] <4 success → `AI_DEGRADED`
 - [x] Implement AI majority
 - [x] Implement AI tie
 - [x] Implement all-NO_TRADE fallback ke scanner
@@ -514,15 +522,16 @@ Account dan kedua database telah diperiksa melalui GET/SELECT konektor Cloudflar
 
 # Milestone 19 — Final Confidence Engine
 
-- [x] Implement configurable Scanner weight
-- [x] Default Scanner = 30%
+- [x] Implement configurable Group Consensus weight
+- [x] Default Group Consensus = 30%
 - [x] Implement configurable AI weight
 - [x] Default AI = 40%
 - [x] Implement configurable MTF weight
 - [x] Default MTF = 30%
 - [x] Validate total = 100%
-- [x] Scanner Consensus = aligned scanners / 6
-- [x] AI Consensus = aligned AI votes / 6
+- [x] Group Consensus = aligned groups / 4
+- [x] Pertahankan `score.scanner` sebagai compatibility alias untuk `score.groupConsensus`
+- [x] AI Consensus = aligned semantic-valid AI votes / 8
 - [x] NO_TRADE tetap denominator
 - [x] UNAVAILABLE tetap denominator
 - [x] Implement H1 weight 30%
