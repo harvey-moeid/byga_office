@@ -4,7 +4,11 @@ import type { MeetingSnapshot, MeetingTurn } from "../core/meeting";
 import { useData } from "./data";
 import { advanceMeeting, speechExcerpt, type MeetingPlayback } from "./meeting";
 import { roles } from "./shared";
-import type { CharacterPresence } from "./character-state";
+import {
+  characterPeekCopy,
+  type CharacterPresence,
+} from "./character-state";
+import type { CharacterMotion } from "./character-motion";
 
 export function useMeetingPresentation(render3D: boolean) {
   const data = useData<{ meeting: MeetingSnapshot | null }>(
@@ -65,35 +69,18 @@ export function useMeetingPresentation(render3D: boolean) {
   };
 }
 
-function characterPeekCopy(presence: CharacterPresence) {
-  switch (presence) {
-    case "MONITORING":
-      return "Memantau market dari meja kerja.";
-    case "SEATED":
-      return "Duduk di ruang meeting dan menunggu giliran.";
-    case "WAITING IN OFFICE":
-      return "Menunggu tahap meeting berikutnya dari ruang kerja.";
-    case "WAITING FOR OUTPUT":
-      return "Menunggu output AI untuk case meeting aktif.";
-    case "OUTPUT UNAVAILABLE":
-      return "Output untuk case aktif tidak tersedia atau tidak lolos validasi.";
-    case "SPEAKING":
-      return "Sedang menyampaikan hasil analisis.";
-    default:
-      return "Status karakter mengikuti aktivitas kantor yang sedang berlangsung.";
-  }
-}
-
 export function CharacterPeekBubble({
   character,
   presence,
   group,
+  motion,
   turn,
   onDetails,
 }: {
   character: CharacterId;
   presence: CharacterPresence;
   group: string;
+  motion?: CharacterMotion;
   turn?: MeetingTurn;
   onDetails: () => void;
 }) {
@@ -124,7 +111,7 @@ export function CharacterPeekBubble({
           <span className="speech-text">{speechExcerpt(turn.analysis.summary)}</span>
         </>
       ) : (
-        <span className="speech-text">{characterPeekCopy(presence)}</span>
+        <span className="speech-text">{characterPeekCopy(presence, motion)}</span>
       )}
       <small>Ketuk untuk info karakter</small>
     </button>
