@@ -31,11 +31,14 @@ describe("characterMotion", () => {
     },
   );
 
-  it("maps stretch activity to the stretch clip", () => {
-    expect(
-      characterMotion({ ...base, atActivity: true, activityKind: "stretch" }),
-    ).toBe("stretch");
-  });
+  it.each(["stretch", "desk-break"] as const)(
+    "maps %s activity to the stretch clip",
+    (activityKind) => {
+      expect(
+        characterMotion({ ...base, atActivity: true, activityKind }),
+      ).toBe("stretch");
+    },
+  );
 
   it.each(["chat", "group-chat", "briefing"] as const)(
     "maps %s activity to the talk clip",
@@ -70,13 +73,13 @@ describe("characterMotion", () => {
     ).toBe("meeting-talk");
   });
 
-  it("keeps unmatched standing activity neutral", () => {
+  it("keeps roam visually moving while the next waypoint is assigned", () => {
     expect(
       characterMotion({
         ...base,
         atActivity: true,
         activityKind: "roam",
       }),
-    ).toBe("idle");
+    ).toBe("walk");
   });
 });
