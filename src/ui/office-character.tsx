@@ -494,17 +494,22 @@ export function OfficeCharacter({
     // Otherwise low-FPS/software WebGL makes characters move in slow motion.
     const delta = Math.min(dt, 0.06);
     const movementDelta = Math.min(dt, reduced ? 0.25 : 0.5);
-    const probe = speechVisibilityProbe.current.set(0, 2.05, 0);
-    root.current.localToWorld(probe);
-    probe.project(camera);
-    const onScreen =
-      probe.z >= -1 &&
-      probe.z <= 1 &&
-      Math.abs(probe.x) <= 0.98 &&
-      Math.abs(probe.y) <= 0.98;
-    if (speechOnScreenRef.current !== onScreen) {
-      speechOnScreenRef.current = onScreen;
-      setSpeechOnScreen(onScreen);
+    if (speech) {
+      const probe = speechVisibilityProbe.current.set(0, 2.05, 0);
+      root.current.localToWorld(probe);
+      probe.project(camera);
+      const onScreen =
+        probe.z >= -1 &&
+        probe.z <= 1 &&
+        Math.abs(probe.x) <= 0.98 &&
+        Math.abs(probe.y) <= 0.98;
+      if (speechOnScreenRef.current !== onScreen) {
+        speechOnScreenRef.current = onScreen;
+        setSpeechOnScreen(onScreen);
+      }
+    } else if (speechOnScreenRef.current) {
+      speechOnScreenRef.current = false;
+      setSpeechOnScreen(false);
     }
     const point = path.current[0];
     let walking = false;
@@ -699,7 +704,7 @@ export function OfficeCharacter({
         onSelect(characterIds[index]);
       }}
     >
-      {labelHost && (
+      {labelHost && speech && (
         <Html
           portal={labelHost}
           position={[0, 2.05, 0]}
