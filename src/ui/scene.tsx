@@ -29,6 +29,7 @@ import { OfficeEnvironment } from "./office-environment";
 import { HybridOfficeAssets } from "./office-assets";
 import { PremiumOfficeAccents } from "./office-premium";
 import { OfficeCharacter } from "./office-character";
+import type { CharacterMotion } from "./character-motion";
 import {
   ACTIVITY_TRAVEL_TIMEOUT_MS,
   activityDelayMs,
@@ -380,6 +381,9 @@ export default function OfficeScene({
   const [activities, setActivities] = useState<
     Partial<Record<CharacterId, OfficeActivity>>
   >({});
+  const [motions, setMotions] = useState<
+    Partial<Record<CharacterId, CharacterMotion>>
+  >({});
   const firstActivity = useRef(true);
   const activityArrivalHandler = useRef<
     (id: CharacterId, activity: OfficeActivity) => void
@@ -679,6 +683,13 @@ export default function OfficeScene({
               onActivityArrive={(id, activity) =>
                 activityArrivalHandler.current(id, activity)
               }
+              onMotionChange={(character, motion) =>
+                setMotions((current) =>
+                  current[character] === motion
+                    ? current
+                    : { ...current, [character]: motion },
+                )
+              }
               speech={
                 speech?.character === id && onSpeechDetails ? (
                   <SpeechBubble turn={speech} onDetails={onSpeechDetails} />
@@ -690,6 +701,7 @@ export default function OfficeScene({
                     character={id}
                     presence={context.presence}
                     group={context.group}
+                    motion={motions[id]}
                     turn={context.turn}
                     onDetails={() => {
                       setPeekCharacter(undefined);
