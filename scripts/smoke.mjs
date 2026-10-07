@@ -138,7 +138,6 @@ if (marketResponse.status === 200) {
   );
   marketStatus = "DEGRADED";
 }
-await marketResponse.body?.cancel();
 let adminAuthentication = "NOT_TESTED";
 if (process.env.ADMIN_PASSWORD) {
   const login = await fetch(origin + "/api/v1/auth/login", {
