@@ -4,6 +4,7 @@ import type { MeetingSnapshot, MeetingTurn } from "../core/meeting";
 import { useData } from "./data";
 import { advanceMeeting, speechExcerpt, type MeetingPlayback } from "./meeting";
 import { roles } from "./shared";
+import type { CharacterPresence } from "./character-state";
 
 export function useMeetingPresentation(render3D: boolean) {
   const data = useData<{ meeting: MeetingSnapshot | null }>(
@@ -62,6 +63,72 @@ export function useMeetingPresentation(render3D: boolean) {
     retry: data.retry,
     onSpeechReady,
   };
+}
+
+function characterPeekCopy(presence: CharacterPresence) {
+  switch (presence) {
+    case "MONITORING":
+      return "Memantau market dari meja kerja.";
+    case "SEATED":
+      return "Duduk di ruang meeting dan menunggu giliran.";
+    case "WAITING IN OFFICE":
+      return "Menunggu tahap meeting berikutnya dari ruang kerja.";
+    case "WAITING FOR OUTPUT":
+      return "Menunggu output AI untuk case meeting aktif.";
+    case "OUTPUT UNAVAILABLE":
+      return "Output untuk case aktif tidak tersedia atau tidak lolos validasi.";
+    case "SPEAKING":
+      return "Sedang menyampaikan hasil analisis.";
+    default:
+      return "Status karakter mengikuti aktivitas kantor yang sedang berlangsung.";
+  }
+}
+
+export function CharacterPeekBubble({
+  character,
+  presence,
+  group,
+  turn,
+  onDetails,
+}: {
+  character: CharacterId;
+  presence: CharacterPresence;
+  group: string;
+  turn?: MeetingTurn;
+  onDetails: () => void;
+}) {
+  const voteClass = turn
+    ? `vote-${turn.analysis.vote.toLowerCase().replaceAll("_", "-")}`
+    : "";
+  return (
+    <button
+      className={`meeting-bubble character-peek-bubble${character === "boss" ? " boss-bubble" : ""}`}
+      data-vote={turn?.analysis.vote}
+      aria-label={`Buka info ${roles[character]}`}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation();
+        onDetails();
+      }}
+    >
+      <strong>
+        {roles[character]}
+        <span className="character-peek-status">{presence.replaceAll("_", " ")}</span>
+      </strong>
+      <span className="character-peek-group">{group}</span>
+      {turn ? (
+        <>
+          <span className={`speech-vote ${voteClass}`}>
+            {turn.analysis.vote} · {turn.analysis.confidence}%
+          </span>
+          <span className="speech-text">{speechExcerpt(turn.analysis.summary)}</span>
+        </>
+      ) : (
+        <span className="speech-text">{characterPeekCopy(presence)}</span>
+      )}
+      <small>Ketuk untuk info karakter</small>
+    </button>
+  );
 }
 
 export function SpeechBubble({
