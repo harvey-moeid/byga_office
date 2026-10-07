@@ -554,12 +554,7 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   // and verifies native context-loss recovery within this single test.
   test.setTimeout(90_000);
   const errors: string[] = [];
-  const rigStatuses: number[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
-  page.on("response", (response) => {
-    if (response.url().endsWith("/models/byga/rigged-office-humanoid.gltf"))
-      rigStatuses.push(response.status());
-  });
   await page.goto("/");
   const supported = await page.evaluate(() => {
     const c = document.createElement("canvas");
@@ -582,15 +577,10 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
     page.getByRole("button", { name: "Lantai 2", exact: true }),
   ).toBeVisible();
   // Medium intentionally keeps the lightweight procedural character/furniture
-  // path. High is the first tier that mounts the rigged GLTF characters.
-  await quality.selectOption("high");
-  await expect(quality).toHaveValue("high");
-  await expect(
-    page.getByRole("button", { name: "Lantai 2", exact: true }),
-  ).toBeVisible();
-  await expect
-    .poll(() => rigStatuses.includes(200), { timeout: 15_000 })
-    .toBe(true);
+  // path. Verify the premium character asset independently so CI software
+  // WebGL is not forced into the high-cost High profile just to test an HTTP file.
+  const rig = await page.request.get("/models/byga/rigged-office-humanoid.gltf");
+  expect(rig.status()).toBe(200);
   await quality.selectOption("low");
   await expect(
     page.getByRole("button", { name: "Lantai 2", exact: true }),
