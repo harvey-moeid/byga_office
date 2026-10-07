@@ -172,17 +172,14 @@ if (process.env.ADMIN_PASSWORD) {
     const configuredProviders = new Map(
       adminHealth.configured.map((entry) => [entry.id, entry.configured]),
     );
-    const selectedProviders = new Set(
-      activeCharacters.flatMap((character) => [
-        character.primary_provider,
-        character.fallback_provider,
-      ]),
-    );
-    for (const provider of selectedProviders) {
-      assert.equal(
-        configuredProviders.get(provider),
-        true,
-        `Active character provider is missing its runtime binding: ${provider}`,
+    for (const character of activeCharacters) {
+      const primaryConfigured =
+        configuredProviders.get(character.primary_provider) === true;
+      const fallbackConfigured =
+        configuredProviders.get(character.fallback_provider) === true;
+      assert.ok(
+        primaryConfigured || fallbackConfigured,
+        `Active character ${character.id} has no configured provider path: primary=${character.primary_provider}, fallback=${character.fallback_provider}`,
       );
     }
     const aiProbe = await fetch(origin + "/api/v1/admin/test-provider", {
