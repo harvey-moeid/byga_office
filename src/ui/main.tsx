@@ -312,6 +312,18 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
           (turn) => turn.character === selectedCharacter,
         )
       : undefined;
+  const characterContexts = Object.fromEntries(
+    characterIds.map((id) => [
+      id,
+      {
+        presence: presenceFor(id),
+        group: characterGroupLabels[id],
+        turn: meeting.active
+          ? meeting.snapshot?.turns.find((turn) => turn.character === id)
+          : undefined,
+      },
+    ]),
+  );
   const notices = (
     <div className={immersive ? "home-notices" : undefined}>
       <Notice error={state.error} retry={state.retry} />
@@ -443,6 +455,7 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
                 onActivityChange={setActivityKinds}
                 prices={market.data?.timeframes.M5.map((c) => c.close) ?? []}
                 marketTimestamp={market.data?.candle_timestamp}
+                characterContexts={characterContexts}
                 avatars={Object.fromEntries(
                   (Array.isArray(characters.data) ? characters.data : []).map(
                     (character) => [character.id, character.avatar],
