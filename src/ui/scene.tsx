@@ -691,7 +691,10 @@ export default function OfficeScene({
                     presence={context.presence}
                     group={context.group}
                     turn={context.turn}
-                    onDetails={() => onSelect(id)}
+                    onDetails={() => {
+                      setPeekCharacter(undefined);
+                      onSelect(id);
+                    }}
                   />
                 ) : undefined
               }
