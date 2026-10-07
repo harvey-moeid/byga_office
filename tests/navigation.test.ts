@@ -296,6 +296,14 @@ describe("two-floor office layout", () => {
     expect(topStepZ).toBeLessThan(
       STAIR_LAYOUT.landingZ + STAIR_LAYOUT.landingDepth / 2,
     );
+    const stairRightEdge = STAIR_LAYOUT.x + STAIR_LAYOUT.width / 2;
+    const landingRightEdge =
+      STAIR_LAYOUT.landingX + STAIR_LAYOUT.landingWidth / 2;
+    expect(landingRightEdge).toBeGreaterThanOrEqual(stairRightEdge);
+    expect(
+      STAIR_LAYOUT.landingX - STAIR_LAYOUT.landingWidth / 2,
+    ).toBeLessThanOrEqual(UPPER_EAST_WALL_X);
+
     expect(STAIR_LAYOUT.doorZ).toBe(STAIR_LAYOUT.landingZ);
     expect(STAIR_LAYOUT.doorWidth).toBeGreaterThan(STAIR_LAYOUT.width);
   });
