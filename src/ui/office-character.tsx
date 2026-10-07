@@ -477,7 +477,9 @@ export function OfficeCharacter({
     const gait =
       walking && !reduced ? Math.sin(clock.elapsedTime * 8 + index) * 0.42 : 0;
     const activityKind = activeActivity?.kind;
-    const stretching = atActivity && activityKind === "stretch";
+    const stretching =
+      atActivity &&
+      (activityKind === "stretch" || activityKind === "desk-break");
     const gesturing =
       atActivity &&
       (activityKind === "chat" ||
