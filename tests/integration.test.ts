@@ -424,8 +424,9 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     const chartDb = await mf.getD1Database("CHART_DB");
     const rows = await chartDb
       .prepare(
-        "SELECT open_time,is_closed FROM candles WHERE timeframe='M5' ORDER BY open_time DESC LIMIT 2",
+        "SELECT open_time,is_closed FROM candles WHERE timeframe='M5' AND open_time<=? ORDER BY open_time DESC LIMIT 2",
       )
+      .bind(Date.now() - 305000)
       .all<{ open_time: number; is_closed: number }>();
     expect(rows.results).toHaveLength(2);
     try {
