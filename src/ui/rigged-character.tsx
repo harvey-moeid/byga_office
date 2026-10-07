@@ -9,7 +9,7 @@ import {
   VectorKeyframeTrack,
 } from "three";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
-import type { CharacterMotion } from "./character-motion";
+import { showsCoffeeCup, type CharacterMotion } from "./character-motion";
 import {
   buildCharacterVisual,
   type RiggedCharacterStyle,
@@ -489,7 +489,7 @@ export function RiggedOfficeCharacter({
   useEffect(() => {
     const coffee = root.getObjectByName("AccessoryCoffeeCup");
     const phone = root.getObjectByName("AccessoryPhone");
-    if (coffee) coffee.visible = motion === "coffee";
+    if (coffee) coffee.visible = showsCoffeeCup(motion);
     if (phone) phone.visible = showPhone;
   }, [motion, root, showPhone]);
 
