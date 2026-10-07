@@ -249,8 +249,14 @@ function speechScreenPosition(
     ".scene-quality",
     ".scene-fullscreen",
     ".home-menu-button",
+    ".meeting-speech-anchor .meeting-bubble",
   ]
     .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+    .filter(
+      (node) =>
+        !node.closest(`[data-character="${character}"]`) &&
+        !node.closest(`[data-character="${character}"] .meeting-bubble`),
+    )
     .map((node) => {
       const rect = node.getBoundingClientRect();
       return {
