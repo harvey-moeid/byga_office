@@ -551,11 +551,16 @@ export function OfficeCharacter({
       else {
         walking = true;
         direction.current.copy(point).sub(position.current).normalize();
+        // Cross-floor meetings have a fixed 14s gathering window. Keep long
+        // stair transfers brisk enough to finish before the first speaker,
+        // while preserving normal office walking for decorative activity.
         const travelSpeed = reduced
           ? 4
           : floorTransitioning.current
-            ? 2.35
-            : 1.25;
+            ? 2.7
+            : meeting
+              ? 1.8
+              : 1.25;
         position.current.addScaledVector(
           direction.current,
           Math.min(distance, movementDelta * travelSpeed),
