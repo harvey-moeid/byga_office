@@ -315,6 +315,18 @@ describe("two-floor office layout", () => {
     );
   });
 
+  it("keeps the floor-one glass partition clear of the stair throat", () => {
+    const stairMinX = STAIR_LAYOUT.x - STAIR_LAYOUT.width / 2 - 0.12;
+    const stairMaxX = STAIR_LAYOUT.x + STAIR_LAYOUT.width / 2 + 0.12;
+    const crossingPartitions = partitions.filter(
+      (partition) =>
+        Math.abs(partition.z - 4) < 0.2 &&
+        partition.x + partition.w / 2 > stairMinX &&
+        partition.x - partition.w / 2 < stairMaxX,
+    );
+    expect(crossingPartitions).toEqual([]);
+  });
+
   it("keeps floor-specific meeting cameras on the correct level", () => {
     expect(LOWER_MEETING_VIEW.camera[1]).toBeLessThan(UPPER_FLOOR_Y);
     expect(LOWER_MEETING_VIEW.target[1]).toBeLessThan(UPPER_FLOOR_Y);
