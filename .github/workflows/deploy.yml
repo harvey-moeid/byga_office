@@ -104,7 +104,11 @@ jobs:
           appendFileSync(process.env.GITHUB_ENV,
             "BYGA_DEPLOY_CONFIG=" + path + "\nBYGA_PUBLIC_ORIGIN=" + config.vars.PUBLIC_ORIGIN + "\n");
           JS
-      - name: Real market schema, closed candles, gaps and freshness
+      - name: Real market schema, closed candles, gaps and freshness health
+        env:
+          # Upstream chart lag is an operational warning, not a software-deploy failure.
+          # The Worker itself remains strict and will not trade stale candles.
+          BYGA_LIVE_MARKET_FRESHNESS_POLICY: warn
         run: node scripts/live-market.mjs
       - name: Real OpenRouter and Gemini discovery and bounded structured inference
         run: node scripts/live-ai.mjs
