@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { characterIds } from "../src/core/contracts";
 import {
+  analystDesks,
+  analystFloor,
   destination,
   isAttendingMeeting,
   desks,
@@ -27,6 +29,48 @@ import {
   createOfficeActivityEvent,
 } from "../src/ui/office-activity";
 describe("office navigation", () => {
+  it("keeps the eight analyst workstations centered, spaced and clear of the floor label", () => {
+    expect(analystDesks).toHaveLength(8);
+    expect(desks.slice(0, analystDesks.length)).toEqual(analystDesks);
+
+    const rowCounts = new Map<number, number>();
+    for (const [x, z] of analystDesks) {
+      rowCounts.set(z, (rowCounts.get(z) ?? 0) + 1);
+      // Desk footprint stays comfortably inside the Analyst Floor.
+      expect(x - 0.8).toBeGreaterThan(
+        analystFloor.x - analystFloor.w / 2 + 0.25,
+      );
+      expect(x + 0.8).toBeLessThan(
+        analystFloor.x + analystFloor.w / 2 - 0.25,
+      );
+      expect(z - 0.425).toBeGreaterThan(
+        analystFloor.z - analystFloor.d / 2 + 0.15,
+      );
+      // The seated character/chair anchor also stays inside the room.
+      expect(z + 0.72).toBeLessThanOrEqual(
+        analystFloor.z + analystFloor.d / 2,
+      );
+    }
+    expect([...rowCounts.values()]).toEqual([3, 3, 2]);
+
+    for (let i = 0; i < analystDesks.length; i++)
+      for (let j = i + 1; j < analystDesks.length; j++) {
+        const [ax, az] = analystDesks[i];
+        const [bx, bz] = analystDesks[j];
+        const separatedX = Math.abs(ax - bx) >= 2.4;
+        const separatedZ = Math.abs(az - bz) >= 1.8;
+        expect(
+          separatedX || separatedZ,
+          `analyst desks ${i} and ${j} overlap their visual clearance`,
+        ).toBe(true);
+      }
+
+    expect(analystFloor.labelPosition).toBeDefined();
+    expect(analystFloor.labelPosition![0]).toBeLessThan(
+      Math.min(...analystDesks.map(([x]) => x)) - 1,
+    );
+  });
+
   for (const state of ["AI_ANALYSIS", "MONITORING", "COFFEE"])
     it(`all ten characters reach ${state} without crossing furniture/walls`, () => {
       characterIds.forEach((_, i) => {
