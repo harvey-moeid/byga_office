@@ -6,9 +6,23 @@ export interface Obstacle {
   w: number;
   d: number;
 }
-export const rooms = [
+export interface Room extends Obstacle {
+  label: string;
+  /** Optional world-space label anchor used to keep room titles clear of furniture. */
+  labelPosition?: Point;
+}
+export const analystFloor: Room = {
+  label: "Analyst Floor",
+  x: -3,
+  z: 0,
+  w: 9,
+  d: 6,
+  // Park the title on the quiet left edge instead of over the third desk row.
+  labelPosition: [-6.9, 2.7],
+};
+export const rooms: Room[] = [
   { label: "BYGA Lobby", x: -6, z: 5.5, w: 4, d: 3 },
-  { label: "Analyst Floor", x: -3, z: 0, w: 9, d: 6 },
+  analystFloor,
   { label: "Scanner Command", x: -6, z: -5, w: 4, d: 3 },
   { label: "Market Wall", x: 0, z: -5, w: 7, d: 3 },
   { label: "Risk Office", x: 6, z: -4, w: 4, d: 4 },
@@ -45,17 +59,25 @@ export function isAttendingMeeting(index: number, state: string) {
       ["BOSS_DECISION", "DISCORD"].includes(state))
   );
 }
+/**
+ * Eight analyst workstations use a centered 3-3-2 composition. The wider
+ * aisles keep characters readable from the overview camera and preserve clear
+ * walking routes between rows without adding any render-time cost.
+ */
+export const analystDesks: Point[] = [
+  [-5.7, -1.85],
+  [-3, -1.85],
+  [-0.3, -1.85],
+  [-5.7, 0.15],
+  [-3, 0.15],
+  [-0.3, 0.15],
+  [-4.35, 2.15],
+  [-1.65, 2.15],
+];
 export const desks: Point[] = [
-  [-4, -2],
-  [-1, -2],
-  [-4, 1],
-  [-1, 1],
-  [-4, 3],
-  [-1, 3],
-  [1, -2],
-  [1, 1],
-  [6, -4],
-  [6, 6],
+  ...analystDesks,
+  [6, -4], // Risk Office
+  [6, 6], // Boss Office
 ];
 // The rendered furniture and routing share these footprints. Door openings are
 // real gaps, so actors can enter offices instead of crossing glass partitions.
