@@ -280,8 +280,15 @@ async function route(request: Request, env: Env): Promise<Response> {
       const delay = await marketProcessingDelay(env);
       await readMarket(env, Date.now(), 260, delay);
       chart = "OK";
-    } catch {
-      /* Public health deliberately excludes schema/SQL/config errors. */
+    } catch (error) {
+      // Freshness lag is operational degradation, not a broken binding/schema.
+      // Runtime market reads remain strict and still reject stale candles.
+      if (
+        error instanceof Error &&
+        /^Stale (H1|M15|M5) data$/.test(error.message)
+      )
+        chart = "DEGRADED";
+      /* Public health deliberately excludes schema/SQL/config error details. */
     }
     const states = (await (await office(env, "/providers")).json()) as {
       state: string;
