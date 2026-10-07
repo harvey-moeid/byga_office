@@ -99,7 +99,8 @@ export const partitions: Obstacle[] = [
   { x: 3.3, z: -1.6, w: 1.5, d: 0.08 },
   { x: 6.8, z: -1.6, w: 2.4, d: 0.08 },
   { x: 3.2, z: 4, w: 1.3, d: 0.08 },
-  { x: 6.7, z: 4, w: 2.6, d: 0.08 },
+  // Leave the east end open for the internal staircase throat.
+  { x: 6.15, z: 4, w: 1.5, d: 0.08 },
 ];
 export const furnishings: Obstacle[] = [
   { x: -6.2, z: 5.7, w: 2.1, d: 0.8 }, // Lobby sofa
