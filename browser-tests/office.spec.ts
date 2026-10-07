@@ -578,10 +578,20 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   await expect(quality.locator('option[value="ultra"]')).toHaveText("Ultra");
   await quality.selectOption("medium");
   await expect(quality).toHaveValue("medium");
+  await expect(
+    page.getByRole("button", { name: "Lantai 2", exact: true }),
+  ).toBeVisible();
+  // Medium intentionally keeps the lightweight procedural character/furniture
+  // path. High is the first tier that mounts the rigged GLTF characters.
+  await quality.selectOption("high");
+  await expect(quality).toHaveValue("high");
   await expect
     .poll(() => rigStatuses.includes(200), { timeout: 15_000 })
     .toBe(true);
   await quality.selectOption("low");
+  await expect(
+    page.getByRole("button", { name: "Lantai 2", exact: true }),
+  ).toHaveCount(0);
   expect(
     await page.evaluate(() => localStorage.getItem("byga:3d-quality")),
   ).toBe("low");
