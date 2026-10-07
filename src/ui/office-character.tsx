@@ -36,7 +36,6 @@ import {
   showsCoffeeCup,
   type CharacterMotion,
 } from "./character-motion";
-import { canOpenSeatedCharacterBubble } from "./character-state";
 
 const appearances: Record<
   AvatarPreset,
@@ -407,6 +406,7 @@ export function OfficeCharacter({
   labelHost,
   onSpeechReady,
   onActivityArrive,
+  onMotionChange,
 }: {
   index: number;
   state: string;
@@ -420,6 +420,7 @@ export function OfficeCharacter({
   labelHost?: RefObject<HTMLDivElement>;
   onSpeechReady?: (id: CharacterId, visible: boolean) => void;
   onActivityArrive?: (id: CharacterId, activity: OfficeActivity) => void;
+  onMotionChange?: (id: CharacterId, motion: CharacterMotion) => void;
 }) {
   const appearance = appearances[avatar];
   const outfit = outfits[characterIds[index]];
@@ -439,6 +440,9 @@ export function OfficeCharacter({
   const speechVisibilityProbe = useRef(new Vector3());
   const [motion, setMotion] = useState<CharacterMotion>("type");
   const motionRef = useRef<CharacterMotion>("type");
+  useEffect(() => {
+    onMotionChange?.(characterIds[index], motion);
+  }, [index, motion, onMotionChange]);
   const arrivedRef = useRef(false);
   const activityArrivedRef = useRef<OfficeActivity | undefined>(undefined);
   const meeting = isAttendingMeeting(index, state);
@@ -483,12 +487,7 @@ export function OfficeCharacter({
       );
   }, [destination]);
   const speechVisible = !!speech && arrived && meeting && speechOnScreen;
-  const peekVisible =
-    !speech &&
-    !!peek &&
-    arrived &&
-    !activeActivity &&
-    speechOnScreen;
+  const peekVisible = !speech && !!peek && speechOnScreen;
   const speechPosition = useMemo(
     () =>
       (element: Object3D, camera: Camera, size: { width: number; height: number }) =>
@@ -713,13 +712,7 @@ export function OfficeCharacter({
       onClick={(event) => {
         event.stopPropagation();
         const id = characterIds[index];
-        if (
-          onPeek &&
-          canOpenSeatedCharacterBubble({
-            seated: arrivedRef.current,
-            hasActivity: !!activeActivity,
-          })
-        ) {
+        if (onPeek) {
           onPeek(id);
           return;
         }
