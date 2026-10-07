@@ -5,8 +5,11 @@ import {
   TOUCH,
   ACESFilmicToneMapping,
   BufferGeometry,
+  CanvasTexture,
   Float32BufferAttribute,
+  LinearFilter,
   PMREMGenerator,
+  SRGBColorSpace,
   type WebGLRenderer,
 } from "three";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
@@ -29,7 +32,20 @@ import { OfficeEnvironment } from "./office-environment";
 import { HybridOfficeAssets } from "./office-assets";
 import { PremiumOfficeAccents } from "./office-premium";
 import { UpperFloorOffice } from "./office-upper-floor";
-import { MEETING_VIEW } from "./office-layout";
+import {
+  BOSS_OFFICE_LAYOUT,
+  LOWER_BOSS_VIEW,
+  LOWER_MEETING_VIEW,
+  UPPER_BOSS_VIEW,
+  UPPER_FLOOR_Y,
+  UPPER_MEETING_LAYOUT,
+  UPPER_MEETING_VIEW,
+} from "./office-layout";
+import {
+  chooseMeetingVenue,
+  type MeetingFloor,
+  type MeetingVenueRecord,
+} from "./meeting-venue";
 import { OfficeCharacter } from "./office-character";
 import type { CharacterMotion } from "./character-motion";
 import {
@@ -88,6 +104,7 @@ type View =
   | "boss"
   | "upper";
 const QUALITY_STORAGE_KEY = "byga:3d-quality";
+const MEETING_VENUE_STORAGE_KEY = "byga:meeting-venue";
 const views: Record<
   View,
   {
@@ -113,13 +130,13 @@ const views: Record<
   },
   meeting: {
     label: "Ruang meeting",
-    camera: MEETING_VIEW.camera,
-    target: MEETING_VIEW.target,
+    camera: LOWER_MEETING_VIEW.camera,
+    target: LOWER_MEETING_VIEW.target,
   },
   boss: {
     label: "Ruang bos",
-    camera: [10.7, 4.5, 9.6],
-    target: [6, 0.9, 5.75],
+    camera: LOWER_BOSS_VIEW.camera,
+    target: LOWER_BOSS_VIEW.target,
   },
   upper: {
     label: "Lantai 2",
@@ -131,14 +148,23 @@ function CameraView({
   view,
   reset,
   controls,
+  meetingFloor,
+  upperFloorEnabled,
 }: {
   view: View;
   reset: number;
   controls: RefObject<ComponentRef<typeof OrbitControls> | null>;
+  meetingFloor: MeetingFloor;
+  upperFloorEnabled: boolean;
 }) {
   const { camera, size } = useThree();
   useEffect(() => {
-    const setting = views[view];
+    const setting =
+      view === "meeting" && meetingFloor === 2 && upperFloorEnabled
+        ? { ...views.meeting, ...UPPER_MEETING_VIEW }
+        : view === "boss" && upperFloorEnabled
+          ? { ...views.boss, ...UPPER_BOSS_VIEW }
+          : views[view];
     const aspect = size.width / size.height;
     const factor =
       view === "overview"
@@ -161,7 +187,16 @@ function CameraView({
       );
     camera.lookAt(...setting.target);
     controls.current?.update();
-  }, [camera, controls, view, reset, size.width, size.height]);
+  }, [
+    camera,
+    controls,
+    meetingFloor,
+    reset,
+    size.height,
+    size.width,
+    upperFloorEnabled,
+    view,
+  ]);
   return null;
 }
 function PerformanceMonitor({
@@ -192,12 +227,10 @@ function PerformanceMonitor({
 }
 function MarketWall({
   prices,
-  labelHost,
   onSelect,
   timestamp,
 }: {
   prices: number[];
-  labelHost: RefObject<HTMLDivElement>;
   onSelect: () => void;
   timestamp?: number;
 }) {
@@ -225,6 +258,45 @@ function MarketWall({
         hour12: false,
       }).format(timestamp)
     : "";
+  const screenTexture = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1024;
+    canvas.height = 368;
+    const context = canvas.getContext("2d");
+    if (context) {
+      context.fillStyle = "#102128";
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.fillStyle = "#dce9e5";
+      context.font = "700 46px system-ui, sans-serif";
+      context.fillText("BTCUSDT.P", 46, 62);
+      context.fillStyle = "#83a8a1";
+      context.font = "600 27px system-ui, sans-serif";
+      context.fillText("M5 · CLOSED CANDLES", 46, 106);
+      context.fillStyle = "#eff7f4";
+      context.font = "700 42px system-ui, sans-serif";
+      context.fillText(
+        latest === undefined
+          ? "WAITING FOR MARKET DATA"
+          : latest.toLocaleString("id-ID", { maximumFractionDigits: 2 }),
+        46,
+        326,
+      );
+      if (marketTime) {
+        context.textAlign = "right";
+        context.fillStyle = "#9fb7b2";
+        context.font = "600 26px system-ui, sans-serif";
+        context.fillText(`${marketTime} WIB`, 978, 326);
+        context.textAlign = "left";
+      }
+    }
+    const texture = new CanvasTexture(canvas);
+    texture.colorSpace = SRGBColorSpace;
+    texture.minFilter = LinearFilter;
+    texture.magFilter = LinearFilter;
+    texture.needsUpdate = true;
+    return texture;
+  }, [latest, marketTime]);
+  useEffect(() => () => screenTexture.dispose(), [screenTexture]);
   return (
     <group
       position={[0, 1.94, -6.6]}
@@ -241,38 +313,15 @@ function MarketWall({
           metalness={0.4}
         />
       </mesh>
-      <mesh position={[0, 0, 0.087]}>
-        <boxGeometry args={[4.93, 1.78, 0.012]} />
-        <meshStandardMaterial
-          color="#12212a"
-          emissive="#152c36"
-          emissiveIntensity={0.25}
-          roughness={0.4}
-        />
+      <mesh position={[0, 0, 0.091]}>
+        <planeGeometry args={[4.93, 1.78]} />
+        <meshBasicMaterial map={screenTexture} toneMapped={false} />
       </mesh>
       {geometry && (
         <line>
           <primitive object={geometry} attach="geometry" />
           <lineBasicMaterial color="#80c3ae" />
         </line>
-      )}
-      <Html portal={labelHost} position={[-2.15, 0.67, 0.13]}>
-        <span className="screen-label">
-          BTCUSDT.P <small>· M5 · CLOSED CANDLES</small>
-        </span>
-      </Html>
-      {latest !== undefined && (
-        <Html portal={labelHost} position={[-2.15, 0.48, 0.13]}>
-          <span className="screen-market-meta">
-            {latest.toLocaleString("id-ID", { maximumFractionDigits: 2 })}
-            {marketTime ? ` · ${marketTime} WIB` : ""}
-          </span>
-        </Html>
-      )}
-      {!geometry && (
-        <Html portal={labelHost} position={[0, -0.1, 0.13]} center>
-          <span className="screen-empty">Menunggu data market</span>
-        </Html>
       )}
     </group>
   );
@@ -309,6 +358,8 @@ export default function OfficeScene({
   const [peekCharacter, setPeekCharacter] = useState<CharacterId>();
   const sceneRoot = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
+  const [meetingFloor, setMeetingFloor] = useState<MeetingFloor>(1);
+  const meetingVenueCase = useRef<string>();
   const beforeMeetingView = useRef<View>("overview");
   const meetingWasActive = useRef(false);
   useEffect(() => {
@@ -390,6 +441,47 @@ export default function OfficeScene({
     setQuality(qualityMode === "auto" ? deviceQuality : qualityMode);
   }, [deviceQuality, qualityMode]);
   const profile = profiles[quality];
+  useEffect(() => {
+    if (!meetingId) return;
+
+    const parseStoredVenue = (): MeetingVenueRecord | undefined => {
+      try {
+        const raw = window.localStorage.getItem(MEETING_VENUE_STORAGE_KEY);
+        if (!raw) return undefined;
+        const value = JSON.parse(raw) as Partial<MeetingVenueRecord>;
+        return typeof value.caseId === "string" &&
+          (value.floor === 1 || value.floor === 2)
+          ? { caseId: value.caseId, floor: value.floor }
+          : undefined;
+      } catch {
+        return undefined;
+      }
+    };
+
+    if (meetingVenueCase.current === meetingId) {
+      if (!profile.upperFloor) {
+        meetingVenueCase.current = meetingId;
+        setMeetingFloor(1);
+        window.localStorage.setItem(
+          MEETING_VENUE_STORAGE_KEY,
+          JSON.stringify({ caseId: meetingId, floor: 1 }),
+        );
+      }
+      return;
+    }
+
+    const venue = chooseMeetingVenue(
+      meetingId,
+      profile.upperFloor,
+      parseStoredVenue(),
+    );
+    meetingVenueCase.current = meetingId;
+    setMeetingFloor(venue.floor);
+    window.localStorage.setItem(
+      MEETING_VENUE_STORAGE_KEY,
+      JSON.stringify(venue),
+    );
+  }, [meetingId, profile.upperFloor]);
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
   useEffect(() => {
     if (!profile.upperFloor && view === "upper") {
@@ -644,6 +736,32 @@ export default function OfficeScene({
             shadows={profile.shadows}
           />
         )}
+        {profile.upperFloor && (
+          <>
+            <Html
+              portal={labelHost}
+              position={[
+                BOSS_OFFICE_LAYOUT.x,
+                UPPER_FLOOR_Y + 0.18,
+                BOSS_OFFICE_LAYOUT.roomMinZ + 0.25,
+              ]}
+              center
+            >
+              <span className="room-label">BOSS OFFICE · L2</span>
+            </Html>
+            <Html
+              portal={labelHost}
+              position={[
+                UPPER_MEETING_LAYOUT.x,
+                UPPER_FLOOR_Y + 0.18,
+                UPPER_MEETING_LAYOUT.z + 2.05,
+              ]}
+              center
+            >
+              <span className="room-label">STRATEGY ROOM · L2</span>
+            </Html>
+          </>
+        )}
         {profile.decorative && <HybridOfficeAssets />}
         {profile.decorative && (
           <PremiumOfficeAccents
@@ -654,7 +772,6 @@ export default function OfficeScene({
         {profile.decorative && <InteriorReflections />}
         <MarketWall
           prices={prices}
-          labelHost={labelHost}
           timestamp={marketTimestamp}
           onSelect={() => onSelect("market-wall")}
         />
@@ -707,6 +824,8 @@ export default function OfficeScene({
               state={state}
               activity={activities[id]}
               decorative={profile.decorative}
+              meetingFloor={meetingFloor}
+              upperFloorEnabled={profile.upperFloor}
               onSelect={onSelect}
               onPeek={
                 context
@@ -748,7 +867,13 @@ export default function OfficeScene({
         {qualityMode === "auto" && (
           <PerformanceMonitor quality={quality} onQuality={setQuality} />
         )}
-        <CameraView view={view} reset={reset} controls={controls} />
+        <CameraView
+          view={view}
+          reset={reset}
+          controls={controls}
+          meetingFloor={meetingFloor}
+          upperFloorEnabled={profile.upperFloor}
+        />
         <OrbitControls
           ref={controls}
           makeDefault
