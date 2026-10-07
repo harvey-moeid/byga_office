@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { characterMotion } from "../src/ui/character-motion";
+import {
+  characterMotion,
+  showsCoffeeCup,
+} from "../src/ui/character-motion";
 
 const base = {
   walking: false,
@@ -30,6 +33,12 @@ describe("characterMotion", () => {
       ).toBe("coffee");
     },
   );
+
+  it("keeps the cup hidden during travel and shows it only while drinking", () => {
+    expect(showsCoffeeCup("walk")).toBe(false);
+    expect(showsCoffeeCup("idle")).toBe(false);
+    expect(showsCoffeeCup("coffee")).toBe(true);
+  });
 
   it.each(["stretch", "desk-break"] as const)(
     "maps %s activity to the stretch clip",
