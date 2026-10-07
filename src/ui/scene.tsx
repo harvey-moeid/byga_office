@@ -549,7 +549,11 @@ export default function OfficeScene({
             >
               <Html
                 portal={labelHost}
-                position={[room.x, 0.1, room.z + room.d / 2 - 0.15]}
+                position={[
+                  room.labelPosition?.[0] ?? room.x,
+                  0.1,
+                  room.labelPosition?.[1] ?? room.z + room.d / 2 - 0.15,
+                ]}
                 center
               >
                 <span className="room-label">{room.label}</span>
