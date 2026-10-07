@@ -43,9 +43,13 @@ const CHART_DB = {
   },
 };
 const attempts = 4;
+const freshnessPolicy = process.env.BYGA_LIVE_MARKET_FRESHNESS_POLICY ?? "strict";
+if (!["strict", "warn"].includes(freshnessPolicy))
+  throw new Error("BYGA_LIVE_MARKET_FRESHNESS_POLICY must be strict or warn.");
 let market;
 let checkedAt = Date.now();
 let lastError;
+let freshnessDegraded = false;
 for (let attempt = 1; attempt <= attempts; attempt++) {
   checkedAt = Date.now();
   try {
@@ -58,7 +62,24 @@ for (let attempt = 1; attempt <= attempts; attempt++) {
     lastError = error;
     const transientFreshness =
       error instanceof Error && /Stale (?:H1|M15|M5) data/.test(error.message);
-    if (!transientFreshness || attempt === attempts) throw error;
+    if (!transientFreshness) throw error;
+    if (attempt === attempts) {
+      if (freshnessPolicy === "strict") throw error;
+      freshnessDegraded = true;
+      console.warn(
+        `::warning title=Chart freshness degraded::${error.message} after ${attempts} attempts. Deployment continues, but runtime trading remains freshness-gated.`,
+      );
+      // Re-run the same read-only schema/closed-candle/count/gap validation with
+      // freshness disabled. Any structural or permission error still fails deploy.
+      market = await readMarket(
+        { CHART_DB, CHART_SCHEMA: config.vars.CHART_SCHEMA },
+        checkedAt,
+        260,
+        5000,
+        { enforceFreshness: false },
+      );
+      break;
+    }
     const delayMs = attempt * 15000;
     console.warn(
       `Chart freshness attempt ${attempt}/${attempts} failed: ${error.message}; retrying in ${delayMs}ms`,
@@ -72,9 +93,12 @@ console.log(JSON.stringify({
   market: "BTCUSDT.P",
   schema: "live",
   read_only: true,
+  freshness: freshnessDegraded ? "degraded" : "passed",
   timeframes: Object.fromEntries(Object.entries(market).map(([tf, candles]) => [tf, {
     candles: candles.length,
     latest_closed_open: new Date(candles.at(-1).timestamp).toISOString(),
-    validation: "OHLC, gaps and freshness passed",
+    validation: freshnessDegraded
+      ? "OHLC, closed candles and gaps passed; freshness degraded"
+      : "OHLC, closed candles, gaps and freshness passed",
   }])),
 }, null, 2));
