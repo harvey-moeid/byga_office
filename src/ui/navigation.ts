@@ -65,14 +65,14 @@ export function isAttendingMeeting(index: number, state: string) {
  * walking routes between rows without adding any render-time cost.
  */
 export const analystDesks: Point[] = [
-  [-5.7, -1.85],
-  [-3, -1.85],
-  [-0.3, -1.85],
-  [-5.7, 0.15],
-  [-3, 0.15],
-  [-0.3, 0.15],
-  [-4.35, 2.15],
-  [-1.65, 2.15],
+  [-5.6, -2],
+  [-3, -2],
+  [-0.4, -2],
+  [-5.6, 0],
+  [-3, 0],
+  [-0.4, 0],
+  [-4.3, 2],
+  [-1.7, 2],
 ];
 export const desks: Point[] = [
   ...analystDesks,
