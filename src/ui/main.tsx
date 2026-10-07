@@ -539,7 +539,11 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
               <>
                 <div className="segmented">
                   {["H1", "M15", "M5"].map((t) => (
-                    <button key={t} onClick={() => setTf(t)}>
+                    <button
+                      key={t}
+                      className={tf === t ? "selected" : ""}
+                      onClick={() => setTf(t)}
+                    >
                       {t}
                     </button>
                   ))}
