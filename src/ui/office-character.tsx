@@ -204,6 +204,7 @@ type Triple = [number, number, number];
 const speechProjection = new Vector3();
 
 function speechScreenPosition(
+  character: CharacterId,
   element: Object3D,
   camera: Camera,
   size: { width: number; height: number },
@@ -215,19 +216,67 @@ function speechScreenPosition(
   const rawY = (-projected.y * 0.5 + 0.5) * size.height;
   const compact = size.width <= 600;
   const landscape = size.height <= 480;
+  const measured = document
+    .querySelector(`[data-character="${character}"] .meeting-bubble`)
+    ?.getBoundingClientRect();
+  const bubbleWidth = measured?.width ?? (compact ? 220 : landscape ? 248 : 250);
+  const bubbleHeight = measured?.height ?? (landscape ? 88 : compact ? 108 : 120);
   const halfWidth = Math.min(
-    compact ? 108 : landscape ? 124 : 136,
+    bubbleWidth / 2,
     Math.max(0, size.width / 2 - 14),
   );
-  const bubbleHeight = landscape ? 88 : compact ? 108 : 120;
+  const gap = 14;
   const bottomClearance = landscape ? 72 : compact ? 104 : 86;
-  const minAnchorY = bubbleHeight + 14;
-  const maxAnchorY = Math.max(minAnchorY, size.height - bottomClearance);
-
-  return [
-    MathUtils.clamp(rawX, halfWidth + 12, size.width - halfWidth - 12),
-    MathUtils.clamp(rawY, minAnchorY, maxAnchorY),
+  const clampPoint = ([x, y]: [number, number]): [number, number] => [
+    MathUtils.clamp(x, halfWidth + 12, size.width - halfWidth - 12),
+    MathUtils.clamp(
+      y,
+      bubbleHeight + gap + 8,
+      Math.max(bubbleHeight + gap + 8, size.height - bottomClearance),
+    ),
   ];
+  const reserved = [
+    ".meeting-status",
+    ".home-hud > div",
+    ".home-hud .segmented",
+    ".home-notices",
+    ".scene-controls",
+    ".scene-quality",
+    ".scene-fullscreen",
+    ".home-menu-button",
+  ]
+    .flatMap((selector) => Array.from(document.querySelectorAll(selector)))
+    .map((node) => node.getBoundingClientRect())
+    .filter((rect) => rect.width > 0 && rect.height > 0);
+  const bubbleRect = ([x, y]: [number, number]) => ({
+    left: x - bubbleWidth / 2,
+    right: x + bubbleWidth / 2,
+    top: y - gap - bubbleHeight,
+    bottom: y - gap,
+  });
+  const clear = (point: [number, number]) => {
+    const rect = bubbleRect(point);
+    return reserved.every(
+      (block) =>
+        rect.right + 8 <= block.left ||
+        rect.left - 8 >= block.right ||
+        rect.bottom + 8 <= block.top ||
+        rect.top - 8 >= block.bottom,
+    );
+  };
+  const base = clampPoint([rawX, rawY]);
+  const horizontal = Math.max(96, bubbleWidth * 0.72);
+  const vertical = Math.max(90, bubbleHeight * 0.9);
+  const candidates: [number, number][] = [
+    base,
+    clampPoint([base[0] + horizontal, base[1]]),
+    clampPoint([base[0] - horizontal, base[1]]),
+    clampPoint([base[0], base[1] - vertical]),
+    clampPoint([base[0], base[1] + vertical]),
+    clampPoint([base[0] + horizontal, base[1] - vertical]),
+    clampPoint([base[0] - horizontal, base[1] - vertical]),
+  ];
+  return candidates.find(clear) ?? base;
 }
 function Oval({
   at,
@@ -365,6 +414,9 @@ export function OfficeCharacter({
     new Vector3(desks[index][0], 0, desks[index][1] + 0.72),
   );
   const [arrived, setArrived] = useState(false);
+  const [speechOnScreen, setSpeechOnScreen] = useState(false);
+  const speechOnScreenRef = useRef(false);
+  const speechVisibilityProbe = useRef(new Vector3());
   const [motion, setMotion] = useState<CharacterMotion>("type");
   const motionRef = useRef<CharacterMotion>("type");
   const arrivedRef = useRef(false);
@@ -410,17 +462,35 @@ export function OfficeCharacter({
         ...([movement.destination[0], 0, movement.destination[1]] as Triple),
       );
   }, [destination]);
-  const speechVisible = !!speech && arrived && meeting;
+  const speechVisible = !!speech && arrived && meeting && speechOnScreen;
+  const speechPosition = useMemo(
+    () =>
+      (element: Object3D, camera: Camera, size: { width: number; height: number }) =>
+        speechScreenPosition(characterIds[index], element, camera, size),
+    [index],
+  );
   useEffect(() => {
     onSpeechReady?.(characterIds[index], speechVisible);
     return () => onSpeechReady?.(characterIds[index], false);
   }, [index, speechVisible, onSpeechReady]);
-  useFrame(({ clock }, dt) => {
+  useFrame(({ clock, camera }, dt) => {
     if (!root.current || !body.current) return;
     // Keep pose damping conservative, but let locomotion follow wall-clock time.
     // Otherwise low-FPS/software WebGL makes characters move in slow motion.
     const delta = Math.min(dt, 0.06);
     const movementDelta = Math.min(dt, reduced ? 0.25 : 0.5);
+    const probe = speechVisibilityProbe.current.set(0, 2.05, 0);
+    root.current.localToWorld(probe);
+    probe.project(camera);
+    const onScreen =
+      probe.z >= -1 &&
+      probe.z <= 1 &&
+      Math.abs(probe.x) <= 0.98 &&
+      Math.abs(probe.y) <= 0.98;
+    if (speechOnScreenRef.current !== onScreen) {
+      speechOnScreenRef.current = onScreen;
+      setSpeechOnScreen(onScreen);
+    }
     const point = path.current[0];
     let walking = false;
     if (point) {
@@ -618,7 +688,7 @@ export function OfficeCharacter({
         <Html
           portal={labelHost}
           position={[0, 2.05, 0]}
-          calculatePosition={speechScreenPosition}
+          calculatePosition={speechPosition}
           zIndexRange={[4, 3]}
         >
           <div
