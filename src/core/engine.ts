@@ -368,11 +368,34 @@ export function analyzeGroups(
           : `Volume: ${volumeDirection} confirmed by M5 volume expansion, body and ROC`,
       ],
       payload: {
+        // Keep the legacy top-level volume keys for audit/API compatibility.
         volume_ratio: fast.volumeRatio,
         recent_volume_ratio: volumeExpansion,
         body: fast.body,
         roc: fast.roc,
         price: fast.price,
+        volume: {
+          direction: volumeDirection,
+          volume_ratio: fast.volumeRatio,
+          recent_volume_ratio: volumeExpansion,
+          body: fast.body,
+          roc: fast.roc,
+          price: fast.price,
+        },
+        breakout: {
+          direction: byName.breakout.direction,
+          levels: byName.breakout.levels,
+          reasons: byName.breakout.reasons,
+          detail: byName.breakout.indicators.M5,
+        },
+        quant: {
+          mean_reversion: byName["mean-reversion"].direction,
+          bollinger: fast.bb,
+          rsi: fast.rsi,
+          atr: fast.atr,
+          roc: fast.roc,
+          price: fast.price,
+        },
       },
       ...common,
     },
@@ -429,16 +452,28 @@ export function buildGroupContext(
   context: MarketContext,
   group: GroupSnapshot,
   config: TradingConfig,
+  analyst?: CharacterId,
 ) {
   const candles = {
     H1: context.H1.slice(-Math.min(config.context.H1, 12)),
     M15: context.M15.slice(-Math.min(config.context.M15, 24)),
     M5: context.M5.slice(-Math.min(config.context.M5, 36)),
   };
+  const specialistEvidence =
+    analyst === "volume" && group.group === "VOLUME"
+      ? {
+          volume: group.payload.volume,
+          breakout: group.payload.breakout,
+        }
+      : analyst === "quant" && group.group === "VOLUME"
+        ? { quant: group.payload.quant }
+        : group.payload;
   return {
     market: MARKET,
     specialization: group.group,
+    analyst,
     deterministic_snapshot: group,
+    specialist_evidence: specialistEvidence,
     recent_candles: candles,
   };
 }
@@ -469,7 +504,18 @@ export function voting(
   boss: "BUY" | "SELL" | "NO_TRADE" = "NO_TRADE",
 ) {
   const counts = { BUY: 0, SELL: 0, NO_TRADE: 0, UNAVAILABLE: 0 };
-  for (const r of results) counts[r.output?.vote ?? "UNAVAILABLE"]++;
+  for (const r of results) {
+    // Defense in depth: only fully successful, semantically valid outputs vote.
+    if (
+      r.status !== "SUCCESS" ||
+      !r.output ||
+      r.flags.includes("SEMANTIC_VALIDATION_FAILED")
+    ) {
+      counts.UNAVAILABLE++;
+      continue;
+    }
+    counts[r.output.vote]++;
+  }
   const expected = Math.max(1, results.length);
   const success = counts.BUY + counts.SELL + counts.NO_TRADE;
   const minimumSuccess = Math.ceil(expected / 2);
@@ -517,10 +563,13 @@ export function confidence(
 ) {
   if (!groups.length || !analysts.length || mtf.length !== 3)
     throw new Error("Confidence requires groups, analysts and 3 timeframes");
-  const sc =
-      (groups.filter((s) => s.direction === direction).length / groups.length) * 100,
+  const groupConsensus =
+      (groups.filter((s) => s.direction === direction).length / groups.length) *
+      100,
     ai =
-      (analysts.filter((a) => a.output?.vote === direction).length /
+      (analysts.filter(
+        (a) => a.status === "SUCCESS" && a.output?.vote === direction,
+      ).length /
         analysts.length) *
       100;
   const alignment = mtf.reduce(
@@ -532,11 +581,13 @@ export function confidence(
     0,
   );
   return {
-    scanner: sc,
+    groupConsensus,
+    // Backward-compatible alias. New consumers should use groupConsensus.
+    scanner: groupConsensus,
     ai,
     mtf: alignment,
     total:
-      (sc * config.confidenceWeights[0] +
+      (groupConsensus * config.confidenceWeights[0] +
         ai * config.confidenceWeights[1] +
         alignment * config.confidenceWeights[2]) /
       100,
@@ -608,9 +659,16 @@ export function semanticErrors(output: AnalystResult["output"]) {
   if (!output) return ["No structured output"];
   if (output.vote === "NO_TRADE") return [];
   const opposing = output.vote === "BUY" ? "SELL" : "BUY";
-  const errors = output.evidence
-    .filter((e) => e.code === "DIRECTIONAL_BIAS" && e.direction === opposing)
-    .map(() => "Vote contradicts explicit directional bias evidence");
+  const directional = output.evidence.filter(
+    (e) => e.code === "DIRECTIONAL_BIAS",
+  );
+  const errors: string[] = [];
+  if (!directional.some((e) => e.direction === output.vote))
+    errors.push(
+      "Directional BUY/SELL vote requires matching DIRECTIONAL_BIAS evidence",
+    );
+  if (directional.some((e) => e.direction === opposing))
+    errors.push("Vote contradicts explicit directional bias evidence");
   const levels = output.price_levels;
   if (levels) {
     if (

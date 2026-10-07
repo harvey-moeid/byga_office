@@ -28,7 +28,7 @@ Sistem menggabungkan:
 
 Tujuan produk bukan sekadar menghasilkan BUY/SELL, tetapi membuat seluruh proses analisis dapat **dilihat, ditelusuri, dijelaskan, dikonfigurasi, dan diaudit**.
 
-Pengguna melihat sebuah kantor miniatur yang hidup. Enam AI Analyst bekerja di meja masing-masing, Risk Manager berada di Risk Office, dan Boss berada di Boss Office.
+Pengguna melihat sebuah kantor miniatur yang hidup. Delapan AI Analyst bekerja di meja masing-masing dalam empat grup spesialis, Risk Manager berada di Risk Office, dan Boss berada di Boss Office.
 
 Ketika market memenuhi trigger, seluruh kantor bertransisi dari monitoring ke proses analisis hingga keputusan final.
 
@@ -122,15 +122,20 @@ Tidak ada API key AI di browser atau D1.
 ```text
 Closed M5 Candle
 ↓
-Run 6 Deterministic Scanners
+Run 6 Deterministic Scanners (telemetry/evidence)
 ↓
-Evaluate Scanner Trigger
+Build 4 Deterministic Analysis Groups
+SMC/ICT · Indicators · Volume · Derivatives/Positioning
+↓
+Evaluate Group Consensus (default 2 of 4)
 ↓
 Create Analysis Case
 ↓
-6 AI Analysts run in parallel
+Revalidate latest closed market/group direction
 ↓
-Majority Voting
+8 AI Analysts run in parallel (2 per group)
+↓
+AI Voting
 ↓
 Deterministic Risk Engine
 ↓
@@ -149,23 +154,30 @@ Office returns to Monitoring
 
 ---
 
-## 6. Scanner Trigger Rules
+## 6. Four-Group Trigger Rules
 
-Scanner dijalankan setelah setiap **closed M5 candle**.
+Enam scanner tetap dijalankan setelah setiap **closed M5 candle** sebagai deterministic telemetry/evidence.
 
 Tambahkan short processing delay untuk memastikan candle benar-benar final.
 
 Gunakan `last_processed_candle` untuk mencegah duplicate scan.
 
-AI Office hanya aktif ketika:
-- minimal 2 scanner memberikan arah yang sama;
-- satu arah memiliki jumlah scanner lebih tinggi secara unik.
+Scanner tersebut dibentuk menjadi empat deterministic analysis groups:
+- `SMC_ICT`
+- `INDICATORS`
+- `VOLUME`
+- `DERIVATIVES_POSITIONING`
 
-Contoh:
-- `3 BUY / 2 SELL / 1 NONE` → BUY trigger
-- `2 BUY / 2 SELL / 2 NONE` → tidak ada trigger
+AI Office AUTO hanya aktif ketika:
+- minimal `scannerConsensusMin` group memberikan arah yang sama (default 2 dari 4);
+- arah tersebut lebih banyak daripada arah lawan.
 
-Tie tidak menjalankan AI Office.
+Contoh default:
+- `2 BUY / 1 SELL / 1 NONE` → BUY trigger
+- `2 BUY / 2 SELL` → tidak ada trigger
+- `1 BUY / 1 SELL / 2 NONE` → tidak ada trigger
+
+Enam scanner tidak lagi melakukan vote langsung untuk AUTO trigger. Revalidation dan simulation menggunakan rule empat grup yang sama.
 
 ---
 
@@ -282,41 +294,44 @@ Contoh:
 
 ## 10. AI Trading Office Characters
 
-Total **8 AI Characters**.
+Total **10 AI Characters**.
 
-Enam Analyst:
+Delapan Analyst:
 1. Trend Analyst
 2. Structure Analyst
 3. Momentum Analyst
 4. Liquidity Analyst
 5. Volume Analyst
 6. Quant Analyst
+7. Derivatives Analyst
+8. Market Positioning Analyst
 
 Tambahan:
-7. Risk Manager
-8. Boss / Head Trader
+9. Risk Manager
+10. Boss / Head Trader
 
 ---
 
 ## 11. Analyst Specialization
 
-- Trend Analyst ↔ Trend Scanner
-- Structure Analyst ↔ Market Structure Scanner
-- Momentum Analyst ↔ Momentum Scanner
-- Liquidity Analyst ↔ Liquidity / SMC Scanner
-- Volume Analyst ↔ Breakout / Volume Scanner
-- Quant Analyst ↔ Mean Reversion / Statistical analysis
+Empat grup deterministic masing-masing memiliki dua Analyst:
+- `SMC_ICT` → Structure Analyst + Liquidity Analyst
+- `INDICATORS` → Trend Analyst + Momentum Analyst
+- `VOLUME` → Volume Analyst + Quant Analyst
+- `DERIVATIVES_POSITIONING` → Derivatives Analyst + Market Positioning Analyst
 
-Semua Analyst menerima context penuh:
-- H1 OHLCV
-- M15 OHLCV
-- M5 OHLCV
-- 6 scanner outputs
-- indicator snapshots
-- market structure
-- active case metadata
+Setiap Analyst menerima:
+- bounded H1/M15/M5 recent candles;
+- deterministic snapshot grupnya;
+- specialist evidence yang sesuai peran;
+- active case metadata.
 
-Analyst bebas tidak setuju dengan scanner.
+Context khusus grup VOLUME:
+- Volume Analyst menerima volume expansion/body/ROC plus breakout/retest evidence;
+- Quant Analyst menerima mean-reversion, Bollinger, RSI, ATR, ROC dan price context;
+- Quant tidak dipaksa mengikuti arah deterministic VOLUME group.
+
+Analyst bebas tidak setuju dengan deterministic group selama vote BUY/SELL memiliki directional evidence yang valid.
 
 ---
 
@@ -326,7 +341,7 @@ MVP hanya menggunakan **1 AI analysis round**.
 
 Tidak ada multi-round debate.
 
-Enam Analyst dipanggil **secara parallel**.
+Delapan Analyst dipanggil **secara parallel**.
 
 Setiap Analyst bekerja independen dan tidak melihat jawaban Analyst lain.
 
@@ -350,6 +365,8 @@ Confidence individual hanya informational.
 Prinsip:
 
 **1 Analyst = 1 Vote**
+
+Hanya output berstatus `SUCCESS` dan lolos semantic validation yang mempunyai hak vote.
 
 ---
 
@@ -417,14 +434,24 @@ Role inti tidak dapat dihapus Admin.
 ## 16. Prompt Architecture
 
 Prompt terdiri dari:
-- Locked Core Role Prompt
-- Admin Editable Custom Instructions
-- Admin Editable Personality
-- Locked Structured Output Contract
+- Locked Core Role Prompt;
+- Locked role-specific Decision Rubric;
+- dedicated Risk Manager authority contract atau Boss authority contract untuk dua role tersebut;
+- Admin Editable Custom Instructions;
+- Admin Editable Personality;
+- Locked Structured Output Contract.
 
 Core Role menentukan kompetensi karakter.
 
+Decision Rubric menentukan evidence hierarchy dan kondisi BUY/SELL/NO_TRADE per karakter.
+
+Risk Manager bersifat advisory dan tidak boleh mengubah deterministic levels atau final voting authority.
+
+Boss mengikuti authority voting: tidak boleh reverse normal non-tied majority dan hanya menjadi directional tie-breaker pada true BUY=SELL tie.
+
 Personality hanya memengaruhi gaya karakter, bukan aturan trading.
+
+Semua BUY/SELL wajib menyertakan evidence `DIRECTIONAL_BIAS` dengan `direction` yang sama dengan vote. Tanpa evidence tersebut output semantic-invalid.
 
 ---
 
@@ -483,29 +510,24 @@ Hanya parsed structured output yang masuk pipeline normal.
 Backend memiliki deterministic semantic validator.
 
 Validator mengecek konsistensi:
-- vote
-- directional bias
-- reason codes
-- evidence
-- risk flags
-- BUY/SELL direction
-- price relationships
+- vote;
+- mandatory matching `DIRECTIONAL_BIAS` untuk setiap BUY/SELL;
+- opposing directional evidence;
+- evidence;
+- risk flags;
+- BUY/SELL direction;
+- price relationships;
+- Boss authority terhadap normal majority.
 
 Jika response semantic invalid, retry mengikuti provider policy.
 
-Jika primary + fallback masih invalid setelah retry, vote response terakhir tetap digunakan.
+Jika primary + fallback tetap semantic-invalid setelah seluruh retry:
+- response/raw tetap tersimpan untuk audit;
+- karakter berakhir `UNAVAILABLE` dengan `SEMANTIC_VALIDATION_FAILED`;
+- structured output invalid **tidak** diteruskan sebagai voting output;
+- vote invalid dihitung sebagai `UNAVAILABLE`, bukan BUY/SELL/NO_TRADE.
 
-Response diberi:
-
-`SEMANTIC_VALIDATION_FAILED`
-
-Confidence asli model tetap ditampilkan.
-
-Severity:
-- first validation failure → warning kuning
-- persistent failure → merah
-
-Warning melekat pada karakter, bukan otomatis case-level degradation.
+Jika retry berikutnya menghasilkan output valid, karakter kembali `SUCCESS` dan output valid tersebut boleh voting; history kegagalan tetap tersimpan sebagai warning/audit.
 
 Public Viewer hanya melihat pesan umum:
 
@@ -609,31 +631,31 @@ Tidak ada paid provider polling berkala.
 
 ## 26. Analyst Success Threshold
 
-Minimal **3 dari 6 Analyst** harus berhasil untuk normal AI consensus.
+Minimal **4 dari 8 Analyst** harus berhasil untuk normal AI consensus.
 
-Jika kurang dari 3:
-- case → `AI_DEGRADED`
-- arah fallback menggunakan scanner direction
-- case tetap boleh menghasilkan signal
+Jika kurang dari 4:
+- case → `AI_DEGRADED`;
+- arah fallback menggunakan deterministic group direction;
+- case tetap boleh menghasilkan signal jika deterministic risk proposal valid.
 
 ---
 
 ## 27. Analyst UNAVAILABLE
 
-Jika provider/fallback gagal, Analyst menjadi:
+Jika provider/fallback gagal atau seluruh response berakhir semantic-invalid, Analyst menjadi:
 
 `UNAVAILABLE`
 
-UNAVAILABLE tetap dianggap bagian dari total 6 untuk AI Consensus calculation.
+`UNAVAILABLE` tetap bagian dari denominator total 8 untuk AI Consensus, tetapi tidak mempunyai vote.
 
 Contoh:
 - 3 BUY
 - 1 SELL
-- 2 UNAVAILABLE
+- 4 UNAVAILABLE
 
-AI Consensus:
+AI Consensus BUY:
 
-`3 / 6 = 50%`
+`3 / 8 = 37.5%`
 
 ---
 
@@ -641,32 +663,33 @@ AI Consensus:
 
 `NO_TRADE` adalah abstain untuk pemilihan arah.
 
+Hanya `SUCCESS` + semantic-valid output yang dihitung sebagai BUY/SELL/NO_TRADE. Semantic-invalid output diperlakukan `UNAVAILABLE`.
+
+Minimal dua directional BUY/SELL votes diperlukan sebelum plurality AI dapat menentukan arah.
+
 Contoh:
 - 2 BUY
 - 1 SELL
-- 3 NO_TRADE
+- 5 NO_TRADE
 
 → BUY menang 2 vs 1.
 
-Final Confidence tetap menghitung jumlah total 6 Analyst.
+Final Confidence tetap menggunakan denominator total 8 Analyst.
 
 ---
 
 ## 29. AI Tie
 
-Jika BUY = SELL, Boss bertindak sebagai tie-breaker.
+Jika BUY = SELL dan directional quorum terpenuhi, Boss bertindak sebagai tie-breaker.
 
-Dalam tie, Boss boleh memilih:
+Dalam true tie, Boss boleh memilih:
 - BUY
 - SELL
 - NO_TRADE
 
-Jika Boss memilih NO_TRADE:
-- cek scanner unique majority
-- jika ada → gunakan scanner direction + `SCANNER_FALLBACK`
-- jika tidak → `NO_CONSENSUS`
+BUY/SELL Boss juga wajib memiliki matching `DIRECTIONAL_BIAS` evidence.
 
-Tidak ada signal pada `NO_CONSENSUS`.
+Jika Boss memilih NO_TRADE atau Boss unavailable, orchestrator menggunakan deterministic fallback direction yang sudah dihitung dari empat group/context. Tidak ada fabricated Analyst vote.
 
 ---
 
@@ -674,9 +697,9 @@ Tidak ada signal pada `NO_CONSENSUS`.
 
 Jika:
 
-`0 BUY / 0 SELL / 6 NO_TRADE`
+`0 BUY / 0 SELL / 8 NO_TRADE`
 
-gunakan scanner trigger direction.
+gunakan deterministic group fallback direction dan tandai fallback pada audit/vote flags.
 
 ---
 
@@ -789,50 +812,53 @@ LOW_RR tidak menurunkan Final Confidence.
 
 ## 37. Risk Manager
 
-Risk Manager berjalan setelah seluruh Analyst mencapai terminal state:
+Risk Manager berjalan setelah seluruh delapan Analyst mencapai terminal state:
 - SUCCESS
 - TIMEOUT
 - UNAVAILABLE
 
 Risk Manager menerima:
-- OHLCV
-- scanner outputs
-- Analyst voting
-- deterministic Risk Engine proposal
-- Entry Zone
-- Preferred Entry
-- SL
-- TP
-- R:R
+- OHLCV;
+- four-group snapshots;
+- delapan Analyst outputs/status;
+- Analyst voting;
+- deterministic Risk Engine proposals;
+- Entry Zone / Preferred Entry / SL / TP / R:R.
+
+Risk Manager menggunakan **dedicated locked authority contract**:
+- advisory only;
+- tidak boleh mengubah deterministic preferred entry, SL atau TP;
+- BUY/SELL hanya boleh mendukung `voting.direction` yang mempunyai proposal;
+- jika proposal/direction tidak valid, vote `NO_TRADE`;
+- jika `price_levels` diisi, nilainya harus menyalin proposal yang diberikan.
 
 Jika Risk Manager gagal:
-- gunakan deterministic Risk Engine apa adanya
-- signal/case diberi degraded metadata terkait fallback
+- gunakan deterministic Risk Engine apa adanya;
+- signal/case diberi degraded metadata terkait fallback.
 
 ---
 
 ## 38. Boss / Head Trader
 
 Boss menerima:
-- full scanner context
-- all Analyst summaries
-- vote composition
-- Risk Engine
-- Risk Manager
-- H1/M15/M5 context
+- four-group deterministic context;
+- seluruh valid Analyst outputs/status;
+- vote composition;
+- Risk Engine proposals;
+- Risk Manager review;
+- H1/M15/M5 context.
 
-Boss tidak hanya membaca jumlah vote.
+Boss menggunakan **dedicated locked authority contract** dan tidak hanya membaca jumlah vote.
 
-Pada normal majority:
-- majority BUY → Boss hanya BUY / NO_TRADE
-- majority SELL → Boss hanya SELL / NO_TRADE
+Pada normal non-degraded, non-tied majority:
+- majority BUY → Boss hanya BUY / NO_TRADE;
+- majority SELL → Boss hanya SELL / NO_TRADE.
 
 Boss tidak boleh membalik arah normal majority.
 
-Jika Boss memilih NO_TRADE pada normal majority:
-- final direction fallback ke majority AI
+Pada true BUY=SELL tie, Boss boleh BUY/SELL/NO_TRADE dengan matching evidence.
 
-Boss NO_TRADE tetap tersimpan sebagai disagreement.
+Boss NO_TRADE tetap tersimpan sebagai disagreement; orchestrator mempertahankan majority/deterministic fallback authority.
 
 ---
 
@@ -842,23 +868,27 @@ Confidence bersifat deterministic.
 
 Default formula:
 
-**30% Scanner Consensus + 40% AI Vote Consensus + 30% MTF Alignment**
+**30% Group Consensus + 40% AI Vote Consensus + 30% MTF Alignment**
 
 Bobot configurable di Admin.
 
 Total harus selalu 100%.
 
+Backend mengekspor field canonical `groupConsensus`. Field lama `scanner` tetap tersedia sementara sebagai alias dengan nilai yang sama untuk backward compatibility.
+
 ---
 
-## 40. Scanner Consensus
+## 40. Group Consensus
 
 Formula:
 
 ```text
-number_of_scanners_matching_final_direction / 6 × 100
+number_of_groups_matching_final_direction / 4 × 100
 ```
 
-NONE tetap masuk denominator.
+`NONE` tetap masuk denominator.
+
+Nama legacy `scanner` pada object score adalah compatibility alias dari `groupConsensus`, bukan lagi six-scanner consensus.
 
 ---
 
@@ -867,12 +897,12 @@ NONE tetap masuk denominator.
 Formula:
 
 ```text
-number_of_AI_votes_matching_final_direction / 6 × 100
+number_of_semantic-valid_AI_votes_matching_final_direction / 8 × 100
 ```
 
-Denominator selalu 6.
+Denominator selalu 8.
 
-NO_TRADE dan UNAVAILABLE tidak mendukung arah final.
+`NO_TRADE`, `UNAVAILABLE`, TIMEOUT dan persistent semantic-invalid tidak mendukung arah final.
 
 Confidence individual AI tidak digunakan.
 
@@ -1156,7 +1186,7 @@ Admin memilih historical candle/snapshot dari `chart_db`.
 
 Simulation menjalankan seluruh pipeline:
 - 6 scanners
-- 6 AI Analysts
+- 8 AI Analysts
 - voting
 - Risk Engine
 - Risk Manager
@@ -2177,11 +2207,12 @@ Idempotency, degraded flows, responsive optimization, WebGL fallback, security r
 
 ```text
 BTCUSDT candle closes
-→ scanners inspect market
-→ scanner consensus detects opportunity
-→ Trading Office activates
-→ six specialist AI analysts analyze independently in parallel
-→ votes are counted
+→ six deterministic scanners produce telemetry/evidence
+→ four deterministic groups resolve direction
+→ group consensus detects opportunity
+→ Trading Office activates and revalidates the latest closed market
+→ eight specialist AI analysts analyze independently in parallel (two per group)
+→ semantic-valid votes are counted
 → deterministic Risk Engine creates trade structure
 → Risk Manager evaluates it
 → Boss performs final review

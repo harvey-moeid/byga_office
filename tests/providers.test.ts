@@ -11,6 +11,7 @@ import {
   defaultPolicy,
   parseOutput,
   requestAI,
+  renderPrompt,
   runCharacter,
   discoverModels,
   isProviderConfigured,
@@ -211,9 +212,9 @@ describe("Provider adapters", () => {
     );
     expect(fetcher).toHaveBeenCalledTimes(4);
     expect(audit).toHaveBeenCalledTimes(4);
+    expect(result.status).toBe("UNAVAILABLE");
     expect(result.flags).toContain("SEMANTIC_VALIDATION_FAILED");
-    expect(result.output?.vote).toBe("BUY");
-    expect(result.output?.confidence).toBe(75);
+    expect(result.output).toBeUndefined();
     expect(result.validationErrors.join(" ")).toContain(
       "Price levels contradict vote",
     );
@@ -298,7 +299,7 @@ describe("Provider adapters", () => {
     expect(f).toHaveBeenCalledTimes(4);
     expect(result.status).toBe("UNAVAILABLE");
   });
-  it("retains last structurally valid vote after persistent semantic errors", async () => {
+  it("never exposes a persistent semantic-invalid response as a voting output", async () => {
     const { r } = runtime();
     const bad = {
       ...output,
@@ -325,8 +326,62 @@ describe("Provider adapters", () => {
       f,
       async () => {},
     );
-    expect(result.output?.vote).toBe("BUY");
+    expect(result.status).toBe("UNAVAILABLE");
+    expect(result.output).toBeUndefined();
     expect(result.flags).toContain("SEMANTIC_VALIDATION_FAILED");
+  });
+  it("rejects BUY/SELL without matching directional evidence after all retries", async () => {
+    const { r } = runtime();
+    const noDirectionalEvidence = {
+      ...output,
+      evidence: [
+        {
+          code: "TREND_CONTEXT",
+          direction: "BUY",
+          detail: "Not authoritative directional evidence",
+        },
+      ],
+    };
+    const f = vi.fn(
+      async (input: RequestInfo | URL) =>
+        new Response(
+          JSON.stringify(
+            response(
+              String(input).includes("googleapis") ? "gemini" : "openai",
+              JSON.stringify(noDirectionalEvidence),
+            ),
+          ),
+        ),
+    ) as typeof fetch;
+    const result = await runCharacter(
+      env,
+      defaultCharacters()[0],
+      {},
+      r,
+      f,
+      async () => {},
+    );
+    expect(f).toHaveBeenCalledTimes(4);
+    expect(result.status).toBe("UNAVAILABLE");
+    expect(result.output).toBeUndefined();
+    expect(result.validationErrors.join(" ")).toContain(
+      "requires matching DIRECTIONAL_BIAS evidence",
+    );
+  });
+  it("renders role-specific rubrics with dedicated Risk and Boss authority", () => {
+    for (const character of defaultCharacters()) {
+      const prompt = renderPrompt(character, {});
+      expect(prompt).toContain("Decision rubric:");
+      expect(prompt).toContain(
+        "BUY/SELL requires at least one evidence item with code DIRECTIONAL_BIAS",
+      );
+    }
+    expect(
+      renderPrompt(defaultCharacters().find((c) => c.id === "risk")!, {}),
+    ).toContain("Risk Manager authority contract:");
+    expect(
+      renderPrompt(defaultCharacters().find((c) => c.id === "boss")!, {}),
+    ).toContain("Boss authority contract:");
   });
   it("skips open primary and uses fallback", async () => {
     const { r, circuits } = runtime();
