@@ -1,8 +1,11 @@
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { InstancedMesh, Object3D } from "three";
 import {
+  BOSS_OFFICE_LAYOUT,
   STAIR_LAYOUT,
   UPPER_EAST_WALL_X,
+  UPPER_MEETING_LAYOUT,
+  UPPER_MEETING_SEATS,
   UPPER_Y,
 } from "./office-layout";
 
@@ -88,69 +91,34 @@ function buildUpperFloor(detail: boolean): Part[] {
   const sphere = (at: Triple, scale: Triple, finish: Finish) =>
     add("sphere", at, scale, finish);
 
-  box([5.0, UPPER_Y, 0.45], [6.6, 0.18, 13.4], "floor");
-  box([5.0, UPPER_Y + 0.105, 0.45], [6.28, 0.035, 13.05], "wood");
-  box([4.9, UPPER_Y + 0.13, -3.7], [5.5, 0.02, 4.25], "rug");
-  box([4.65, UPPER_Y + 0.13, 4.85], [4.2, 0.02, 2.7], "rug");
-
-  // Split the east wall around a real stair doorway instead of letting the
-  // landing terminate into an opaque wall.
-  const eastWallMinZ = -6.175;
-  const eastWallMaxZ = 7.075;
-  const doorMinZ = STAIR_LAYOUT.doorZ - STAIR_LAYOUT.doorWidth / 2;
-  const doorMaxZ = STAIR_LAYOUT.doorZ + STAIR_LAYOUT.doorWidth / 2;
-  box(
-    [UPPER_EAST_WALL_X, UPPER_Y + 1.48, (eastWallMinZ + doorMinZ) / 2],
-    [0.14, 2.96, doorMinZ - eastWallMinZ],
-    "darkWood",
-  );
-  box(
-    [UPPER_EAST_WALL_X, UPPER_Y + 1.48, (doorMaxZ + eastWallMaxZ) / 2],
-    [0.14, 2.96, eastWallMaxZ - doorMaxZ],
-    "darkWood",
-  );
-  const lintelHeight = 2.96 - STAIR_LAYOUT.doorHeight;
-  box(
-    [
-      UPPER_EAST_WALL_X,
-      UPPER_Y + STAIR_LAYOUT.doorHeight + lintelHeight / 2,
-      STAIR_LAYOUT.doorZ,
-    ],
-    [0.14, lintelHeight, STAIR_LAYOUT.doorWidth],
-    "darkWood",
-  );
-  for (const z of [doorMinZ, doorMaxZ])
+  const deck = (at: Triple, scale: Triple) => {
+    box(at, scale, "floor");
     box(
-      [UPPER_EAST_WALL_X - 0.02, UPPER_Y + STAIR_LAYOUT.doorHeight / 2, z],
-      [0.08, STAIR_LAYOUT.doorHeight, 0.08],
-      "metal",
+      [at[0], at[1] + 0.105, at[2]],
+      [Math.max(0.05, scale[0] - 0.05), 0.035, Math.max(0.05, scale[2] - 0.05)],
+      "wood",
     );
-  box(
-    [
-      UPPER_EAST_WALL_X - 0.02,
-      UPPER_Y + STAIR_LAYOUT.doorHeight,
-      STAIR_LAYOUT.doorZ,
-    ],
-    [0.08, 0.08, STAIR_LAYOUT.doorWidth],
-    "metal",
-  );
-  box([5.0, UPPER_Y + 1.48, -6.1], [6.45, 2.96, 0.14], "darkWood");
-  for (let z = -5.5; z <= 6.1; z += 1.45) {
-    box([1.75, UPPER_Y + 0.72, z], [0.055, 1.35, 0.055], "metal");
-    box([1.75, UPPER_Y + 1.37, z], [0.09, 0.055, 1.35], "metal");
-  }
-  box([1.75, UPPER_Y + 1.38, 0.4], [0.08, 0.06, 12.9], "metal");
+  };
 
-  // Keep the staircase external so floor-one routing remains unchanged, but
-  // keep every tread fully outside the east wall and connect it to a real
-  // doorway/landing. Lightweight boxes stay in the same instanced batches.
+  // Split the upper slab around a real internal stairwell. The long opening
+  // keeps the staircase visible from the cutaway instead of clipping through
+  // the mezzanine or sitting outside the office panel.
+  deck([4.36, UPPER_Y, 0.45], [5.32, 0.18, 13.4]);
+  deck([7.635, UPPER_Y, -2.45], [1.23, 0.18, 7.6]);
+  deck([7.635, UPPER_Y, 6.85], [1.23, 0.18, 0.6]);
+
+  box([UPPER_EAST_WALL_X, UPPER_Y + 1.48, 0.45], [0.14, 2.96, 13.25], "darkWood");
+  box([5.0, UPPER_Y + 1.48, -6.1], [6.45, 2.96, 0.14], "darkWood");
+
+  // Internal staircase occupies the former floor-one Boss Office edge. It is
+  // fully inside the east wall and lands on the upper corridor.
   const totalRise = (STAIR_LAYOUT.stepCount - 1) * STAIR_LAYOUT.rise;
   const totalRun = (STAIR_LAYOUT.stepCount - 1) * STAIR_LAYOUT.run;
   const stairLength = Math.hypot(totalRise, totalRun);
   const stairAngle = Math.atan2(totalRise, totalRun);
   const stairMidY = STAIR_LAYOUT.startY + totalRise / 2;
   const stairMidZ = STAIR_LAYOUT.startZ - totalRun / 2;
-  const railX = STAIR_LAYOUT.width / 2 - 0.06;
+  const railX = STAIR_LAYOUT.width / 2 - 0.045;
 
   for (let i = 0; i < STAIR_LAYOUT.stepCount; i++) {
     const y = STAIR_LAYOUT.startY + i * STAIR_LAYOUT.rise;
@@ -163,27 +131,28 @@ function buildUpperFloor(detail: boolean): Part[] {
     if (i % 2 === 0 || i === STAIR_LAYOUT.stepCount - 1)
       for (const side of [-1, 1])
         box(
-          [STAIR_LAYOUT.x + side * railX, y + 0.45, z],
-          [0.06, 0.9, 0.06],
+          [STAIR_LAYOUT.x + side * railX, y + 0.46, z],
+          [0.055, 0.92, 0.055],
           "metal",
         );
   }
   for (const side of [-1, 1]) {
     box(
       [STAIR_LAYOUT.x + side * railX, stairMidY - 0.1, stairMidZ],
-      [0.08, 0.12, stairLength],
+      [0.075, 0.12, stairLength],
       "metal",
       [-stairAngle, 0, 0],
     );
     box(
-      [STAIR_LAYOUT.x + side * railX, stairMidY + 0.85, stairMidZ],
-      [0.065, 0.065, stairLength + 0.15],
+      [STAIR_LAYOUT.x + side * railX, stairMidY + 0.9, stairMidZ],
+      [0.06, 0.06, stairLength + 0.15],
       "metal",
       [-stairAngle, 0, 0],
     );
   }
+
   box(
-    [STAIR_LAYOUT.landingX, UPPER_Y + 0.02, STAIR_LAYOUT.landingZ],
+    [STAIR_LAYOUT.landingX, UPPER_Y + 0.04, STAIR_LAYOUT.landingZ],
     [
       STAIR_LAYOUT.landingWidth,
       STAIR_LAYOUT.landingThickness,
@@ -191,51 +160,45 @@ function buildUpperFloor(detail: boolean): Part[] {
     ],
     "floor",
   );
-  // Guard the exposed east side of the landing while leaving the stair throat
-  // and doorway clear.
-  for (const z of [
-    STAIR_LAYOUT.landingZ - STAIR_LAYOUT.landingDepth / 2 + 0.08,
-    STAIR_LAYOUT.landingZ + STAIR_LAYOUT.landingDepth / 2 - 0.08,
-  ])
+  box(
+    [STAIR_LAYOUT.landingX, UPPER_Y + 0.13, STAIR_LAYOUT.landingZ],
+    [STAIR_LAYOUT.landingWidth - 0.05, 0.035, STAIR_LAYOUT.landingDepth - 0.05],
+    "wood",
+  );
+
+  // Guard the open stairwell edge while leaving the landing/corridor entrance
+  // clear. The rails are intentionally sparse on Medium to keep the geometry
+  // cheap while still reading as a real stairwell.
+  const guardStartZ = STAIR_LAYOUT.openingMinZ + 0.55;
+  const guardEndZ = STAIR_LAYOUT.openingMaxZ - 0.15;
+  for (let z = guardStartZ; z <= guardEndZ; z += 0.9)
     box(
-      [STAIR_LAYOUT.landingX + STAIR_LAYOUT.landingWidth / 2 - 0.05, UPPER_Y + 0.55, z],
-      [0.06, 1.05, 0.06],
+      [STAIR_LAYOUT.openingWestX, UPPER_Y + 0.62, z],
+      [0.055, 1.05, 0.055],
       "metal",
     );
   box(
     [
-      STAIR_LAYOUT.landingX + STAIR_LAYOUT.landingWidth / 2 - 0.05,
-      UPPER_Y + 1.02,
-      STAIR_LAYOUT.landingZ,
+      STAIR_LAYOUT.openingWestX,
+      UPPER_Y + 1.1,
+      (guardStartZ + guardEndZ) / 2,
     ],
-    [0.06, 0.06, STAIR_LAYOUT.landingDepth - 0.15],
+    [0.065, 0.06, guardEndZ - guardStartZ + 0.1],
     "metal",
   );
 
-  const desk = (x: number, z: number) => {
-    box([x, UPPER_Y + 0.76, z], [1.55, 0.08, 0.78], "wood");
-    for (const dx of [-0.63, 0.63])
-      box([x + dx, UPPER_Y + 0.39, z], [0.055, 0.72, 0.62], "metal");
-    box([x, UPPER_Y + 1.18, z - 0.22], [0.78, 0.48, 0.055], "screen");
-    box([x, UPPER_Y + 0.96, z - 0.21], [0.05, 0.37, 0.05], "metal");
-    box([x, UPPER_Y + 0.8, z + 0.18], [0.72, 0.025, 0.27], "metal");
-    if (detail)
-      for (let row = 0; row < 3; row++)
-        for (let key = 0; key < 8; key++)
-          box(
-            [x - 0.19 + key * 0.052, UPPER_Y + 0.825, z + 0.13 + row * 0.04],
-            [0.038, 0.008, 0.024],
-            "paper",
-          );
-  };
-
-  const chair = (x: number, z: number, facing = Math.PI) => {
+  const chair = (x: number, z: number, facing = Math.PI, executive = false) => {
     cylinder([x, UPPER_Y + 0.25, z], 0.04, 0.36, "metal");
-    box([x, UPPER_Y + 0.48, z], [0.5, 0.08, 0.46], "fabric", [0, facing, 0]);
     box(
-      [x, UPPER_Y + 0.82, z - 0.2 * Math.cos(facing)],
-      [0.48, 0.58, 0.07],
-      "fabric",
+      [x, UPPER_Y + 0.48, z],
+      [executive ? 0.58 : 0.5, 0.08, executive ? 0.5 : 0.46],
+      executive ? "darkWood" : "fabric",
+      [0, facing, 0],
+    );
+    box(
+      [x, UPPER_Y + (executive ? 0.87 : 0.82), z - 0.2 * Math.cos(facing)],
+      [executive ? 0.56 : 0.48, executive ? 0.68 : 0.58, 0.07],
+      executive ? "fabric" : "fabric",
       [0, facing, 0],
     );
     for (let i = 0; i < 5; i++) {
@@ -249,62 +212,10 @@ function buildUpperFloor(detail: boolean): Part[] {
     }
   };
 
-  [
-    [3.2, -4.6],
-    [5.25, -4.6],
-    [7.0, -4.6],
-  ].forEach(([x, z]) => {
-    desk(x, z);
-    chair(x, z + 0.72);
-  });
-
-  box([5.25, UPPER_Y + 0.76, -1.25], [3.5, 0.1, 1.2], "darkWood");
-  for (const x of [4.05, 5.25, 6.45]) {
-    chair(x, -0.25, Math.PI);
-    chair(x, -2.25, 0);
-  }
-  for (const x of [4.35, 5.05, 5.75, 6.45])
-    box([x, UPPER_Y + 0.82, -1.25], [0.25, 0.018, 0.34], "paper");
-
-  for (let i = 0; i < 4; i++) {
-    const x = 3.05 + i * 1.35;
-    box([x, UPPER_Y + 1.78, -6.0], [1.15, 0.72, 0.06], "screen");
-    box([x, UPPER_Y + 2.15, -5.96], [1.0, 0.025, 0.02], "light");
-    if (detail)
-      for (let row = 0; row < 4; row++)
-        box(
-          [x - 0.28 + row * 0.18, UPPER_Y + 1.66 + (row % 2) * 0.14, -5.955],
-          [0.12, 0.018, 0.015],
-          row % 2 ? "paper" : "light",
-        );
-  }
-
-  box([4.25, UPPER_Y + 0.38, 5.25], [2.25, 0.44, 0.88], "fabric");
-  box([4.25, UPPER_Y + 0.82, 5.62], [2.25, 0.62, 0.14], "fabric");
-  for (const x of [3.2, 5.3])
-    box([x, UPPER_Y + 0.54, 5.25], [0.16, 0.58, 0.86], "fabric");
-  box([4.25, UPPER_Y + 0.4, 4.05], [1.35, 0.08, 0.65], "darkWood");
-  for (const x of [3.72, 4.78])
-    box([x, UPPER_Y + 0.2, 4.05], [0.055, 0.38, 0.5], "metal");
-
-  box([7.25, UPPER_Y + 0.58, 5.25], [1.25, 1.05, 0.62], "darkWood");
-  box([7.25, UPPER_Y + 1.12, 5.25], [1.32, 0.06, 0.68], "ceramic");
-  box([7.0, UPPER_Y + 1.32, 5.12], [0.36, 0.42, 0.34], "metal");
-  box([7.0, UPPER_Y + 1.42, 4.93], [0.24, 0.12, 0.02], "screen");
-  for (const x of [7.42, 7.62])
-    cylinder([x, UPPER_Y + 1.22, 5.05], 0.05, 0.12, "ceramic");
-
-  for (const z of [1.7, 3.1]) {
-    box([7.85, UPPER_Y + 1.0, z], [0.55, 1.85, 1.15], "darkWood");
-    for (let shelf = 0; shelf < 4; shelf++)
-      box([7.53, UPPER_Y + 0.35 + shelf * 0.45, z], [0.04, 0.04, 1.02], "wood");
-    for (let book = 0; book < (detail ? 10 : 6); book++)
-      box(
-        [7.48, UPPER_Y + 0.48 + (book % 4) * 0.45, z - 0.42 + (book % 5) * 0.18],
-        [0.04, 0.24, 0.1],
-        book % 3 === 0 ? "paper" : "fabric",
-      );
-  }
+  const monitor = (x: number, z: number, width = 0.72) => {
+    box([x, UPPER_Y + 1.22, z], [width, 0.48, 0.055], "screen");
+    box([x, UPPER_Y + 0.98, z + 0.01], [0.05, 0.38, 0.05], "metal");
+  };
 
   const plant = (x: number, z: number, height: number) => {
     cylinder([x, UPPER_Y + 0.22, z], 0.24, 0.42, "ceramic");
@@ -324,17 +235,146 @@ function buildUpperFloor(detail: boolean): Part[] {
     }
   };
 
-  [
-    [2.25, -5.35, 1.25],
-    [7.55, -5.2, 1.35],
-    [2.35, 2.85, 1.15],
-    [7.45, 4.05, 1.3],
-    [2.45, 6.25, 1.2],
-    [6.2, 6.2, 1.15],
-  ].forEach(([x, z, height]) => plant(x, z, height));
+  // L2 Strategy Room: ten seats so every analyst, Risk Manager, and Boss has
+  // a deterministic position. The east aisle stays clear for stair traffic.
+  box(
+    [UPPER_MEETING_LAYOUT.x, UPPER_Y + 0.13, UPPER_MEETING_LAYOUT.z],
+    [UPPER_MEETING_LAYOUT.rugWidth, 0.02, UPPER_MEETING_LAYOUT.rugDepth],
+    "rug",
+  );
+  box(
+    [UPPER_MEETING_LAYOUT.x, UPPER_Y + 0.76, UPPER_MEETING_LAYOUT.z],
+    [UPPER_MEETING_LAYOUT.tableWidth, 0.1, UPPER_MEETING_LAYOUT.tableDepth],
+    "darkWood",
+  );
+  for (const x of [3.25, 6.05])
+    box(
+      [x, UPPER_Y + 0.38, UPPER_MEETING_LAYOUT.z],
+      [0.09, 0.72, 0.85],
+      "metal",
+    );
+  UPPER_MEETING_SEATS.forEach(({ position, facing }, index) =>
+    chair(position[0], position[1], facing, index === UPPER_MEETING_SEATS.length - 1),
+  );
+  for (const x of [3.2, 4.15, 5.1, 6.05]) {
+    monitor(x, -5.96, 0.8);
+    box([x, UPPER_Y + 2.16, -5.94], [0.72, 0.025, 0.02], "light");
+  }
+  // Glass front with a doorway on the east side.
+  box([3.55, UPPER_Y + 1.14, 0.05], [2.5, 2.05, 0.06], "glass");
+  box([5.72, UPPER_Y + 1.14, 0.05], [0.95, 2.05, 0.06], "glass");
 
-  for (const z of [-4.8, -1.6, 1.7, 5.1])
-    box([5.0, UPPER_Y + 2.72, z], [4.6, 0.045, 0.1], "light");
+  // L2 Boss Office: private glass room, larger executive desk, triple market
+  // monitors, guest seating, credenza, plants, and a warm feature wall.
+  box(
+    [BOSS_OFFICE_LAYOUT.x, UPPER_Y + 0.135, BOSS_OFFICE_LAYOUT.z],
+    [BOSS_OFFICE_LAYOUT.rugWidth, 0.02, BOSS_OFFICE_LAYOUT.rugDepth],
+    "rug",
+  );
+  box(
+    [
+      BOSS_OFFICE_LAYOUT.x,
+      UPPER_Y + BOSS_OFFICE_LAYOUT.featureWallHeight / 2,
+      BOSS_OFFICE_LAYOUT.featureWallZ,
+    ],
+    [
+      BOSS_OFFICE_LAYOUT.featureWallWidth,
+      BOSS_OFFICE_LAYOUT.featureWallHeight,
+      0.11,
+    ],
+    "darkWood",
+  );
+  box(
+    [BOSS_OFFICE_LAYOUT.x, UPPER_Y + 1.62, BOSS_OFFICE_LAYOUT.featureWallZ - 0.065],
+    [2.2, 0.72, 0.025],
+    "screen",
+  );
+  box(
+    [BOSS_OFFICE_LAYOUT.x, UPPER_Y + 2.35, BOSS_OFFICE_LAYOUT.featureWallZ - 0.07],
+    [2.8, 0.04, 0.025],
+    "light",
+  );
+
+  // Glass enclosure and door gap.
+  const officeMidZ =
+    (BOSS_OFFICE_LAYOUT.roomMinZ + BOSS_OFFICE_LAYOUT.roomMaxZ) / 2;
+  box(
+    [
+      BOSS_OFFICE_LAYOUT.roomMinX,
+      UPPER_Y + 1.18,
+      officeMidZ,
+    ],
+    [0.06, 2.15, BOSS_OFFICE_LAYOUT.roomMaxZ - BOSS_OFFICE_LAYOUT.roomMinZ],
+    "glass",
+  );
+  box(
+    [
+      BOSS_OFFICE_LAYOUT.roomMaxX,
+      UPPER_Y + 1.18,
+      officeMidZ + 0.45,
+    ],
+    [0.06, 2.15, 2.55],
+    "glass",
+  );
+  box([3.55, UPPER_Y + 1.18, BOSS_OFFICE_LAYOUT.roomMinZ], [3.0, 2.15, 0.06], "glass");
+  box([6.62, UPPER_Y + 1.18, BOSS_OFFICE_LAYOUT.roomMinZ], [0.52, 2.15, 0.06], "glass");
+
+  box(
+    [BOSS_OFFICE_LAYOUT.deskX, UPPER_Y + 0.76, BOSS_OFFICE_LAYOUT.deskZ],
+    [BOSS_OFFICE_LAYOUT.deskWidth, 0.09, BOSS_OFFICE_LAYOUT.deskDepth],
+    "darkWood",
+  );
+  for (const side of [-1, 1])
+    box(
+      [
+        BOSS_OFFICE_LAYOUT.deskX + side * 0.95,
+        UPPER_Y + 0.38,
+        BOSS_OFFICE_LAYOUT.deskZ,
+      ],
+      [0.055, 0.72, 0.78],
+      "metal",
+    );
+  for (const offset of [-0.68, 0, 0.68])
+    monitor(
+      BOSS_OFFICE_LAYOUT.deskX + offset,
+      BOSS_OFFICE_LAYOUT.deskZ - 0.29,
+      0.62,
+    );
+  box(
+    [BOSS_OFFICE_LAYOUT.deskX, UPPER_Y + 0.81, BOSS_OFFICE_LAYOUT.deskZ + 0.23],
+    [1.32, 0.025, 0.36],
+    "metal",
+  );
+  chair(
+    BOSS_OFFICE_LAYOUT.seatX,
+    BOSS_OFFICE_LAYOUT.seatZ,
+    BOSS_OFFICE_LAYOUT.facing,
+    true,
+  );
+
+  // Guest sofa and coffee table keep the room useful without blocking the
+  // corridor from the stair landing.
+  box([3.0, UPPER_Y + 0.42, 4.22], [1.55, 0.48, 0.78], "fabric");
+  box([3.0, UPPER_Y + 0.79, 4.52], [1.55, 0.62, 0.12], "fabric");
+  box([3.0, UPPER_Y + 0.42, 5.05], [0.9, 0.08, 0.55], "darkWood");
+  for (const x of [2.68, 3.32])
+    box([x, UPPER_Y + 0.22, 5.05], [0.055, 0.4, 0.42], "metal");
+
+  box([2.55, UPPER_Y + 0.65, 6.2], [0.82, 1.05, 0.48], "darkWood");
+  for (let shelf = 0; shelf < 3; shelf++)
+    box([2.55, UPPER_Y + 0.33 + shelf * 0.34, 5.94], [0.7, 0.035, 0.05], "wood");
+
+  plant(6.35, 6.08, 1.25);
+  plant(2.55, 3.78, 1.0);
+  plant(6.35, -5.2, 1.15);
+
+  // Small strategy console outside the private room.
+  box([3.15, UPPER_Y + 0.76, 1.75], [1.65, 0.08, 0.72], "wood");
+  monitor(3.15, 1.48, 0.82);
+  chair(3.15, 2.35);
+
+  for (const z of [-4.8, -1.8, 1.6, 5.15])
+    box([4.85, UPPER_Y + 2.72, z], [4.25, 0.045, 0.1], "light");
 
   return parts;
 }
