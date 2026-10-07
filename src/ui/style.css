@@ -1658,6 +1658,18 @@ footer {
   bottom: max(36px, env(safe-area-inset-bottom));
   left: max(24px, env(safe-area-inset-left));
 }
+/* Keep the scene fullscreen action clear of the fixed Home menu.
+   Once the scene itself is fullscreen, the menu is no longer visible, so the
+   action can safely return to the top-right corner. */
+.home-stage .scene-fullscreen {
+  top: max(82px, calc(env(safe-area-inset-top) + 82px));
+  right: max(24px, env(safe-area-inset-right));
+}
+.home-stage .office-scene.is-fullscreen .scene-fullscreen,
+.home-stage .office-scene:fullscreen .scene-fullscreen {
+  top: max(16px, calc(env(safe-area-inset-top) + 16px));
+  right: max(16px, env(safe-area-inset-right));
+}
 @media (max-width: 600px) {
   .home-hud {
     top: max(18px, env(safe-area-inset-top));
@@ -1691,6 +1703,15 @@ footer {
   .home-stage .scene-quality {
     bottom: max(76px, calc(env(safe-area-inset-bottom) + 60px));
     left: 16px;
+  }
+  .home-stage .scene-fullscreen {
+    top: max(76px, calc(env(safe-area-inset-top) + 76px));
+    right: max(16px, env(safe-area-inset-right));
+  }
+  .home-stage .office-scene.is-fullscreen .scene-fullscreen,
+  .home-stage .office-scene:fullscreen .scene-fullscreen {
+    top: max(12px, calc(env(safe-area-inset-top) + 12px));
+    right: max(12px, env(safe-area-inset-right));
   }
 }
 .home-stage.home-fallback {
