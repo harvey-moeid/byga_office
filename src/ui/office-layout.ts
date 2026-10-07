@@ -14,7 +14,7 @@ export const STAIR_LAYOUT = {
   run: 0.35,
   landingX: 9.05,
   landingZ: 1.15,
-  landingWidth: 1.8,
+  landingWidth: 2.0,
   landingDepth: 1.6,
   landingThickness: 0.15,
   doorZ: 1.15,
