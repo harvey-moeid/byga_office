@@ -74,6 +74,7 @@ export function SpeechBubble({
   return (
     <button
       className={`meeting-bubble${turn.character === "boss" ? " boss-bubble" : ""}`}
+      data-vote={turn.analysis.vote}
       aria-label={`Baca percakapan ${roles[turn.character]}`}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => {
@@ -82,7 +83,14 @@ export function SpeechBubble({
       }}
     >
       <strong>
-        {roles[turn.character]} <span>{turn.analysis.vote}</span>
+        {roles[turn.character]}{" "}
+        <span
+          className={`speech-vote vote-${turn.analysis.vote
+            .toLowerCase()
+            .replaceAll("_", "-")}`}
+        >
+          {turn.analysis.vote} · {turn.analysis.confidence}%
+        </span>
       </strong>
       <span className="speech-text">
         {speechExcerpt(turn.analysis.summary)}
