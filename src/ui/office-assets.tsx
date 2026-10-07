@@ -31,7 +31,7 @@ function Sofa() {
 }
 
 /**
- * Local GLTF furniture used for the medium/high/ultra scene.
+ * Local GLTF furniture used for the detailed High/Ultra scene.
  * Architecture and routing remain deterministic/procedural, while hero
  * furniture is asset-based so the office can keep gaining detail without
  * turning scene.tsx into a collection of one-off meshes.
@@ -44,7 +44,7 @@ export function HybridOfficeAssets() {
           key={`desk-chair-${index}`}
           position={[x, 0, z + 0.72]}
           facing={Math.PI}
-          scale={index >= analystDesks.length ? 1.04 : 1}
+          scale={index === desks.length - 1 ? 1.14 : index >= analystDesks.length ? 1.04 : 1}
         />
       ))}
       {meetingSeats.map(({ position: [x, z], facing }, index) => (
