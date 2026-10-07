@@ -487,8 +487,13 @@ export default function OfficeScene({
         ),
       ) as Partial<Record<CharacterId, OfficeActivityKind>>,
     );
-    return () => onActivityChange({});
   }, [activities, onActivityChange]);
+  useEffect(
+    () => () => {
+      onActivityChange?.({});
+    },
+    [onActivityChange],
+  );
   const antialias = useRef(quality !== "low");
   return (
     <div
