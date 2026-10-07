@@ -487,6 +487,35 @@ p {
   font-size: 10px;
   color: #486459;
 }
+.character-peek-bubble {
+  width: min(230px, calc(100vw - 32px));
+  border-color: #66877d;
+  background: #edf4f0;
+  box-shadow: 0 10px 26px #0004;
+}
+.character-peek-bubble:hover {
+  border-color: #7aa394;
+  background: #f3f8f5;
+}
+.character-peek-bubble .character-peek-status {
+  max-width: 118px;
+  color: #52645e;
+  line-height: 1.2;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.character-peek-bubble .character-peek-group {
+  color: #60756e;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.55px;
+  text-transform: uppercase;
+}
+.character-peek-bubble > .speech-vote {
+  width: fit-content;
+  font-size: 10px;
+  font-weight: 900;
+}
 .meeting-bubble:hover {
   color: #17352d;
   border-color: #75b6a3;
