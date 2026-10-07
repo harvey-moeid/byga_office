@@ -33,10 +33,21 @@ export const rooms: Room[] = [
 ];
 // Local model +Z points forward. Both characters and chairs use the same
 // seating plan, with each row looking across the table instead of away.
-export const meetingSeats = Array.from({ length: characterIds.length }, (_, index) => ({
-  position: [3.7 + (index % 5) * 0.65, Math.floor(index / 5) * 2] as Point,
-  facing: index < 5 ? 0 : Math.PI,
-}));
+// Reserve the visual center of the far side for the Boss so the final decision
+// reads clearly as the focal point of the meeting. The remaining nine seats
+// stay symmetric around the table without sharing an anchor.
+export const meetingSeats: { position: Point; facing: number }[] = [
+  { position: [3.7, 0], facing: 0 },
+  { position: [4.35, 0], facing: 0 },
+  { position: [5, 0], facing: 0 },
+  { position: [5.65, 0], facing: 0 },
+  { position: [6.3, 0], facing: 0 },
+  { position: [3.7, 2], facing: Math.PI },
+  { position: [4.35, 2], facing: Math.PI },
+  { position: [5.65, 2], facing: Math.PI },
+  { position: [6.3, 2], facing: Math.PI },
+  { position: [5, 2], facing: Math.PI }, // Boss: centered on the far side.
+];
 export function isMeeting(state: string) {
   return [
     "TRIGGERED",

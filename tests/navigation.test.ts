@@ -122,6 +122,19 @@ describe("office navigation", () => {
       });
     }
   });
+  it("keeps the Boss centered at the meeting table with unique seats", () => {
+    const bossIndex = characterIds.indexOf("boss");
+    expect(meetingSeats[bossIndex]).toEqual({
+      position: [5, 2],
+      facing: Math.PI,
+    });
+
+    const anchors = meetingSeats.map(({ position }) => position.join(","));
+    expect(new Set(anchors).size).toBe(meetingSeats.length);
+
+    for (const { position } of meetingSeats) expect(walkable(position)).toBe(true);
+  });
+
   it("Boss enters at the final stage and returns through a walkable route", () => {
     const bossIndex = characterIds.indexOf("boss");
     const desk = destination(bossIndex, "AI_ANALYSIS");
