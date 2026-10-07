@@ -3,8 +3,8 @@ import type { MeetingSnapshot } from "../src/core/meeting";
 import type { MeetingPlayback } from "../src/ui/meeting";
 import {
   activityLabels,
-  canOpenSeatedCharacterBubble,
   characterGroupLabels,
+  characterPeekCopy,
   characterPresence,
 } from "../src/ui/character-state";
 
@@ -45,16 +45,22 @@ function playback(
 }
 
 describe("3D character presence", () => {
-  it("opens contextual speech only for a genuinely seated character", () => {
-    expect(
-      canOpenSeatedCharacterBubble({ seated: true, hasActivity: false }),
-    ).toBe(true);
-    expect(
-      canOpenSeatedCharacterBubble({ seated: false, hasActivity: false }),
-    ).toBe(false);
-    expect(
-      canOpenSeatedCharacterBubble({ seated: true, hasActivity: true }),
-    ).toBe(false);
+  it("describes walking and decorative activity from actual motion", () => {
+    expect(characterPeekCopy("WALKING TO MEETING", "walk")).toBe(
+      "Menuju ruang meeting.",
+    );
+    expect(characterPeekCopy("COFFEE BREAK", "walk")).toBe(
+      "Menuju area coffee break.",
+    );
+    expect(characterPeekCopy("COFFEE BREAK", "coffee")).toContain(
+      "Sedang coffee break",
+    );
+    expect(characterPeekCopy("GROUP MARKET REVIEW", "review")).toBe(
+      "Sedang mengecek Market Wall.",
+    );
+    expect(characterPeekCopy("RETURNING", "walk")).toBe(
+      "Kembali ke meja kerja.",
+    );
   });
 
   it("keeps decorative activity explicit without implying an AI call", () => {
