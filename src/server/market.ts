@@ -32,12 +32,17 @@ const duration: Record<Timeframe, number> = {
   M15: 900000,
   M5: 300000,
 };
+export type MarketReadOptions = {
+  /** Runtime defaults to strict. Deploy health checks may inspect stale rows without consuming them for trading. */
+  enforceFreshness?: boolean;
+};
 /** CHART_DB deliberately has no write path. SQL identifiers are allowlisted; values bound. */
 export async function readMarket(
   env: Pick<Env, "CHART_DB" | "CHART_SCHEMA">,
   at = Date.now(),
   count = 260,
   delay = 5000,
+  options: MarketReadOptions = {},
 ): Promise<MarketContext> {
   const s = chartSchema.parse(JSON.parse(env.CHART_SCHEMA));
   const multiplier = s.timestampUnit === "seconds" ? 1000 : 1;
@@ -69,8 +74,9 @@ export async function readMarket(
         if (candles[i].timestamp - candles[i - 1].timestamp !== duration[tf])
           throw new Error(`Missing or duplicate ${tf} candle`);
       if (
+        options.enforceFreshness !== false &&
         at - (candles.at(-1)!.timestamp + duration[tf]) >
-        duration[tf] + delay
+          duration[tf] + delay
       )
         throw new Error(`Stale ${tf} data`);
       return [tf, candles] as const;
