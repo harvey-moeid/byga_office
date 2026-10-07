@@ -595,6 +595,19 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   expect(scene?.y).toBe(0);
   expect(scene?.width).toBe(viewport.width);
   expect(scene?.height).toBe(viewport.height);
+  const menuButton = page.getByRole("button", { name: /^Menu/ });
+  const fullscreenButton = page.getByRole("button", {
+    name: "Buka fullscreen 3D",
+  });
+  await expect(menuButton).toBeVisible();
+  await expect(fullscreenButton).toBeVisible();
+  const menuBox = await menuButton.boundingBox();
+  const fullscreenBox = await fullscreenButton.boundingBox();
+  expect(menuBox).not.toBeNull();
+  expect(fullscreenBox).not.toBeNull();
+  expect(fullscreenBox!.y).toBeGreaterThanOrEqual(
+    menuBox!.y + menuBox!.height + 8,
+  );
   await expect(page.locator(".metrics, .two-columns, footer")).toHaveCount(0);
   await expect(page.getByText("Musolla", { exact: true })).toHaveCount(0);
   await expect(page.getByText("War Room", { exact: true })).toBeVisible();
