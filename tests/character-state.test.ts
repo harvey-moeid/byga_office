@@ -3,6 +3,7 @@ import type { MeetingSnapshot } from "../src/core/meeting";
 import type { MeetingPlayback } from "../src/ui/meeting";
 import {
   activityLabels,
+  canOpenSeatedCharacterBubble,
   characterGroupLabels,
   characterPresence,
 } from "../src/ui/character-state";
@@ -44,6 +45,18 @@ function playback(
 }
 
 describe("3D character presence", () => {
+  it("opens contextual speech only for a genuinely seated character", () => {
+    expect(
+      canOpenSeatedCharacterBubble({ seated: true, hasActivity: false }),
+    ).toBe(true);
+    expect(
+      canOpenSeatedCharacterBubble({ seated: false, hasActivity: false }),
+    ).toBe(false);
+    expect(
+      canOpenSeatedCharacterBubble({ seated: true, hasActivity: true }),
+    ).toBe(false);
+  });
+
   it("keeps decorative activity explicit without implying an AI call", () => {
     expect(
       characterPresence("volume", {
