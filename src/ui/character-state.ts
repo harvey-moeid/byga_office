@@ -40,6 +40,16 @@ export type CharacterPresence =
   | "OUTPUT UNAVAILABLE"
   | (typeof activityLabels)[OfficeActivityKind];
 
+export function canOpenSeatedCharacterBubble({
+  seated,
+  hasActivity,
+}: {
+  seated: boolean;
+  hasActivity: boolean;
+}) {
+  return seated && !hasActivity;
+}
+
 export function characterPresence(
   id: CharacterId,
   {
