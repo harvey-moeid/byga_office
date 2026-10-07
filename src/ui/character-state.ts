@@ -142,7 +142,6 @@ export function characterPresence(
   if (!playback || !snapshot || playback.phase === "done")
     return activity ? activityLabels[activity] : "MONITORING";
 
-  if (snapshot.unavailable.includes(id)) return "OUTPUT UNAVAILABLE";
   if (playback.phase === "returning") return "RETURNING";
 
   const isBoss = id === "boss";
@@ -153,6 +152,8 @@ export function characterPresence(
 
   if (playback.phase === "boss-entering")
     return isBoss ? "WALKING TO MEETING" : "SEATED";
+
+  if (snapshot.unavailable.includes(id)) return "OUTPUT UNAVAILABLE";
 
   if (playback.phase === "speaking") {
     if (playback.speaker === id) return "SPEAKING";
