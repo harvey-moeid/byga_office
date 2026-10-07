@@ -18,11 +18,18 @@ import {
 import {
   BOSS_OFFICE_LAYOUT,
   EAST_OUTER_WALL_X,
-  MEETING_VIEW,
+  GROUND_EXECUTIVE_STATION_LAYOUT,
+  LOWER_MEETING_VIEW,
   STAIR_LAYOUT,
   UPPER_EAST_WALL_X,
-  UPPER_Y,
+  UPPER_FLOOR_Y,
+  UPPER_MEETING_SEATS,
+  UPPER_MEETING_VIEW,
 } from "../src/ui/office-layout";
+import {
+  characterTarget,
+  planWorldRoute,
+} from "../src/ui/multi-floor-navigation";
 import {
   initialQuality,
   adaptQuality,
@@ -277,18 +284,19 @@ describe("office navigation", () => {
   });
 });
 describe("two-floor office layout", () => {
-  it("keeps the external staircase clear of the east wall and flush with its landing", () => {
+  it("keeps the staircase inside the east wall and aligned with the stairwell landing", () => {
     const stairLeftEdge = STAIR_LAYOUT.x - STAIR_LAYOUT.width / 2;
-    expect(stairLeftEdge).toBeGreaterThan(EAST_OUTER_WALL_X + 0.1);
+    const stairRightEdge = STAIR_LAYOUT.x + STAIR_LAYOUT.width / 2;
+    expect(stairLeftEdge).toBeGreaterThan(STAIR_LAYOUT.openingWestX);
+    expect(stairRightEdge).toBeLessThan(UPPER_EAST_WALL_X);
+    expect(stairRightEdge).toBeLessThan(EAST_OUTER_WALL_X);
 
     const lastIndex = STAIR_LAYOUT.stepCount - 1;
     const topStepSurface =
       STAIR_LAYOUT.startY +
       lastIndex * STAIR_LAYOUT.rise +
       STAIR_LAYOUT.stepThickness / 2;
-    const landingSurface =
-      UPPER_Y + 0.02 + STAIR_LAYOUT.landingThickness / 2;
-    expect(Math.abs(topStepSurface - landingSurface)).toBeLessThan(0.05);
+    expect(Math.abs(topStepSurface - UPPER_FLOOR_Y)).toBeLessThan(0.03);
 
     const topStepZ = STAIR_LAYOUT.startZ - lastIndex * STAIR_LAYOUT.run;
     expect(topStepZ).toBeGreaterThan(
@@ -297,31 +305,44 @@ describe("two-floor office layout", () => {
     expect(topStepZ).toBeLessThan(
       STAIR_LAYOUT.landingZ + STAIR_LAYOUT.landingDepth / 2,
     );
-    const stairRightEdge = STAIR_LAYOUT.x + STAIR_LAYOUT.width / 2;
-    const landingRightEdge =
-      STAIR_LAYOUT.landingX + STAIR_LAYOUT.landingWidth / 2;
-    expect(landingRightEdge).toBeGreaterThanOrEqual(stairRightEdge);
-    expect(
-      STAIR_LAYOUT.landingX - STAIR_LAYOUT.landingWidth / 2,
-    ).toBeLessThanOrEqual(UPPER_EAST_WALL_X);
+    expect(topStepZ).toBeGreaterThan(STAIR_LAYOUT.openingMinZ);
+    expect(STAIR_LAYOUT.startZ).toBeLessThan(STAIR_LAYOUT.openingMaxZ);
 
-    expect(STAIR_LAYOUT.doorZ).toBe(STAIR_LAYOUT.landingZ);
-    expect(STAIR_LAYOUT.doorWidth).toBeGreaterThan(STAIR_LAYOUT.width);
+    const landingLeftEdge =
+      STAIR_LAYOUT.landingX - STAIR_LAYOUT.landingWidth / 2;
+    expect(landingLeftEdge).toBeLessThanOrEqual(
+      STAIR_LAYOUT.openingWestX + 0.02,
+    );
   });
 
-  it("keeps the meeting camera below the mezzanine slab", () => {
-    expect(MEETING_VIEW.camera[1]).toBeLessThan(UPPER_Y);
-    expect(MEETING_VIEW.target[1]).toBeLessThan(UPPER_Y);
-    expect(MEETING_VIEW.camera[2]).toBeGreaterThan(MEETING_VIEW.target[2]);
+  it("keeps floor-specific meeting cameras on the correct level", () => {
+    expect(LOWER_MEETING_VIEW.camera[1]).toBeLessThan(UPPER_FLOOR_Y);
+    expect(LOWER_MEETING_VIEW.target[1]).toBeLessThan(UPPER_FLOOR_Y);
+    expect(UPPER_MEETING_VIEW.camera[1]).toBeGreaterThan(UPPER_FLOOR_Y);
+    expect(UPPER_MEETING_VIEW.target[1]).toBeGreaterThan(UPPER_FLOOR_Y);
   });
 
-  it("matches pathfinding to the enlarged Boss desk footprint", () => {
+  it("keeps ten unique seats in the L2 strategy room with the Boss centered", () => {
+    expect(UPPER_MEETING_SEATS).toHaveLength(characterIds.length);
+    const anchors = UPPER_MEETING_SEATS.map(({ position }) =>
+      position.join(","),
+    );
+    expect(new Set(anchors).size).toBe(characterIds.length);
+    expect(UPPER_MEETING_SEATS[characterIds.indexOf("boss")]).toMatchObject({
+      position: [4.65, -1.22],
+      facing: Math.PI,
+    });
+  });
+
+  it("uses the floor-one Executive Station footprint for ground routing", () => {
     const bossObstacle = obstacles.find(
-      ({ x, z }) => x === BOSS_OFFICE_LAYOUT.x && z === BOSS_OFFICE_LAYOUT.z,
+      ({ x, z }) =>
+        x === GROUND_EXECUTIVE_STATION_LAYOUT.x &&
+        z === GROUND_EXECUTIVE_STATION_LAYOUT.z,
     );
     expect(bossObstacle).toMatchObject({
-      w: BOSS_OFFICE_LAYOUT.deskWidth,
-      d: BOSS_OFFICE_LAYOUT.deskDepth,
+      w: GROUND_EXECUTIVE_STATION_LAYOUT.deskWidth,
+      d: GROUND_EXECUTIVE_STATION_LAYOUT.deskDepth,
     });
 
     const bossIndex = characterIds.indexOf("boss");
@@ -330,6 +351,42 @@ describe("two-floor office layout", () => {
     expect(
       planRoute(bossSeat, destination(bossIndex, "BOSS_DECISION")).length,
     ).toBeGreaterThan(0);
+  });
+
+  it("routes the Boss upstairs normally but keeps Low mode on floor one", () => {
+    const bossIndex = characterIds.indexOf("boss");
+    const upper = characterTarget(bossIndex, "MONITORING", 1, true);
+    expect(upper.floor).toBe(2);
+    expect(upper.position).toEqual([
+      BOSS_OFFICE_LAYOUT.seatX,
+      UPPER_FLOOR_Y,
+      BOSS_OFFICE_LAYOUT.seatZ,
+    ]);
+
+    const low = characterTarget(bossIndex, "MONITORING", 2, false);
+    expect(low.floor).toBe(1);
+    expect(low.position[1]).toBe(0);
+  });
+
+  it("routes an L2 meeting through the staircase and back to L1 without teleporting", () => {
+    const analystIndex = 0;
+    const start = characterTarget(analystIndex, "MONITORING", 1, true);
+    const upstairs = characterTarget(analystIndex, "AI_ANALYSIS", 2, true);
+    const upRoute = planWorldRoute(start.position, upstairs);
+    expect(upRoute.length).toBeGreaterThan(STAIR_LAYOUT.stepCount);
+    expect(upRoute.some((point) => point[1] > 1)).toBe(true);
+    expect(upRoute.at(-1)).toEqual(upstairs.position);
+
+    const downstairs = characterTarget(
+      analystIndex,
+      "RETURN_TO_DESK",
+      1,
+      true,
+    );
+    const downRoute = planWorldRoute(upstairs.position, downstairs);
+    expect(downRoute.length).toBeGreaterThan(STAIR_LAYOUT.stepCount);
+    expect(downRoute.some((point) => point[1] > 1)).toBe(true);
+    expect(downRoute.at(-1)).toEqual(downstairs.position);
   });
 });
 
