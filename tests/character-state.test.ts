@@ -61,6 +61,9 @@ describe("3D character presence", () => {
     expect(characterPeekCopy("RETURNING", "walk")).toBe(
       "Kembali ke meja kerja.",
     );
+    expect(characterPeekCopy("MONITORING", "walk")).toBe(
+      "Kembali ke meja kerja.",
+    );
   });
 
   it("keeps decorative activity explicit without implying an AI call", () => {
