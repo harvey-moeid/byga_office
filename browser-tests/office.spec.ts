@@ -611,6 +611,7 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   await expect(page.locator(".metrics, .two-columns, footer")).toHaveCount(0);
   await expect(page.getByText("Musolla", { exact: true })).toHaveCount(0);
   await expect(page.getByText("War Room", { exact: true })).toBeVisible();
+  await expect(page.getByText(/M5 · CLOSED CANDLES/)).toBeVisible();
   await page.getByRole("button", { name: "Area analis", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Area analis", exact: true }),
@@ -650,7 +651,12 @@ async function fixtureMeeting(page: Page, enabled: () => boolean = () => true) {
     turns: (["trend", "risk", "boss"] as const).map((character) => ({
       character,
       analysis: {
-        vote: "BUY",
+        vote:
+          character === "trend"
+            ? "SELL"
+            : character === "risk"
+              ? "NO_TRADE"
+              : "BUY",
         confidence: 74,
         summary: `Fixture ${character}: ringkasan hasil AI tersimpan. Kalimat kedua. Kalimat ketiga hanya di detail.`,
         reasoning: `Fixture ${character}: penjelasan lengkap dari case ini.`,
@@ -687,6 +693,18 @@ test("meeting dialogue rotates actual case results, opens details, admits Boss l
   await expect(trend).toBeVisible();
   await expect(page.locator(".meeting-bubble")).toHaveCount(1);
   await expect(trend).not.toContainText("Kalimat ketiga");
+  await expect(trend.locator(".speech-vote")).toContainText("SELL · 74%");
+  await expect(trend.locator(".speech-vote")).toHaveClass(/vote-sell/);
+  const trendCard = page.locator(".operations-grid button").filter({
+    hasText: "Trend Analyst",
+  });
+  await trendCard.click();
+  const characterModal = page.locator(".modal");
+  await expect(characterModal).toContainText("SPEAKING");
+  await expect(characterModal).toContainText("SMC / ICT");
+  await expect(characterModal).toContainText("SELL");
+  await expect(characterModal).toContainText("Confidence 74%");
+  await page.getByRole("button", { name: "Tutup", exact: true }).click();
   await trend.click();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Kalimat ketiga hanya di detail.");
@@ -700,12 +718,13 @@ test("meeting dialogue rotates actual case results, opens details, admits Boss l
   );
   await page.keyboard.press("Escape");
   await expect(dialog).not.toBeVisible();
-  await expect(
-    page.getByRole("button", {
-      name: "Baca percakapan Risk Manager",
-      exact: true,
-    }),
-  ).toBeVisible();
+  const risk = page.getByRole("button", {
+    name: "Baca percakapan Risk Manager",
+    exact: true,
+  });
+  await expect(risk).toBeVisible();
+  await expect(risk.locator(".speech-vote")).toContainText("NO_TRADE · 74%");
+  await expect(risk.locator(".speech-vote")).toHaveClass(/vote-no-trade/);
   await page.clock.fastForward(7500);
   await expect(
     page.getByText("Bos masuk untuk menutup meeting", { exact: true }),
@@ -717,6 +736,8 @@ test("meeting dialogue rotates actual case results, opens details, admits Boss l
     exact: true,
   });
   await expect(boss).toContainText("Keputusan akhir");
+  await expect(boss.locator(".speech-vote")).toContainText("BUY · 74%");
+  await expect(boss.locator(".speech-vote")).toHaveClass(/vote-buy/);
   await expect(page.locator(".meeting-bubble")).toHaveCount(1);
   await boss.hover();
   await expect(boss).toHaveCSS("color", "rgb(23, 53, 45)");
