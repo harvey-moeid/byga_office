@@ -28,6 +28,7 @@ import {
 import { OfficeEnvironment } from "./office-environment";
 import { HybridOfficeAssets } from "./office-assets";
 import { PremiumOfficeAccents } from "./office-premium";
+import { UpperFloorOffice } from "./office-upper-floor";
 import { OfficeCharacter } from "./office-character";
 import type { CharacterMotion } from "./character-motion";
 import {
@@ -78,7 +79,13 @@ function InteriorReflections() {
   return null;
 }
 
-type View = "overview" | "cinematic" | "floor" | "meeting" | "boss";
+type View =
+  | "overview"
+  | "cinematic"
+  | "floor"
+  | "meeting"
+  | "boss"
+  | "upper";
 const QUALITY_STORAGE_KEY = "byga:3d-quality";
 const views: Record<
   View,
@@ -112,6 +119,11 @@ const views: Record<
     label: "Ruang bos",
     camera: [10.7, 4.5, 9.6],
     target: [6, 0.9, 5.75],
+  },
+  upper: {
+    label: "Lantai 2",
+    camera: [14.8, 9.8, 15.6],
+    target: [4.9, 4.05, 0.7],
   },
 };
 function CameraView({
@@ -378,6 +390,12 @@ export default function OfficeScene({
   }, [deviceQuality, qualityMode]);
   const profile = profiles[quality];
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
+  useEffect(() => {
+    if (!profile.upperFloor && view === "upper") {
+      setView("overview");
+      setReset((value) => value + 1);
+    }
+  }, [profile.upperFloor, view]);
   const [activities, setActivities] = useState<
     Partial<Record<CharacterId, OfficeActivity>>
   >({});
@@ -608,7 +626,7 @@ export default function OfficeScene({
           color="#ffe2b8"
         />
         <OfficeEnvironment detail={profile.decorative} />
-        {quality !== "low" && (
+        {profile.shadows && (
           <ContactShadows
             position={[0, 0.015, 0]}
             opacity={quality === "ultra" ? 0.34 : 0.24}
@@ -619,6 +637,12 @@ export default function OfficeScene({
             frames={quality === "ultra" ? Infinity : 1}
           />
         )}
+        {profile.upperFloor && (
+          <UpperFloorOffice
+            detail={profile.decorative}
+            shadows={profile.shadows}
+          />
+        )}
         {profile.decorative && <HybridOfficeAssets />}
         {profile.decorative && (
           <PremiumOfficeAccents
@@ -626,7 +650,7 @@ export default function OfficeScene({
             cinematic={quality === "ultra"}
           />
         )}
-        {quality !== "low" && <InteriorReflections />}
+        {profile.decorative && <InteriorReflections />}
         <MarketWall
           prices={prices}
           labelHost={labelHost}
@@ -741,7 +765,14 @@ export default function OfficeScene({
               z = Math.max(-5, Math.min(6, c.target.z));
             c.object.position.x += x - c.target.x;
             c.object.position.z += z - c.target.z;
-            c.target.set(x, Math.max(0.2, Math.min(1.5, c.target.y)), z);
+            c.target.set(
+              x,
+              Math.max(
+                0.2,
+                Math.min(profile.upperFloor ? 4.6 : 1.5, c.target.y),
+              ),
+              z,
+            );
           }}
         />
       </Canvas>
@@ -751,7 +782,9 @@ export default function OfficeScene({
           role="group"
           aria-label="Sudut kamera kantor"
         >
-          {(Object.keys(views) as View[]).map((key) => (
+          {(Object.keys(views) as View[])
+            .filter((key) => key !== "upper" || profile.upperFloor)
+            .map((key) => (
             <button
               key={key}
               aria-pressed={view === key}
