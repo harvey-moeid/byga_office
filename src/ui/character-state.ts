@@ -2,6 +2,7 @@ import type { CharacterId } from "../core/contracts";
 import type { MeetingSnapshot } from "../core/meeting";
 import type { OfficeActivityKind } from "./office-activity";
 import type { MeetingPlayback } from "./meeting";
+import type { CharacterMotion } from "./character-motion";
 
 export const characterGroupLabels: Record<CharacterId, string> = {
   trend: "SMC / ICT",
@@ -40,14 +41,88 @@ export type CharacterPresence =
   | "OUTPUT UNAVAILABLE"
   | (typeof activityLabels)[OfficeActivityKind];
 
-export function canOpenSeatedCharacterBubble({
-  seated,
-  hasActivity,
-}: {
-  seated: boolean;
-  hasActivity: boolean;
-}) {
-  return seated && !hasActivity;
+export function characterPeekCopy(
+  presence: CharacterPresence,
+  motion?: CharacterMotion,
+) {
+  if (motion === "walk") {
+    switch (presence) {
+      case "WALKING TO MEETING":
+        return "Menuju ruang meeting.";
+      case "RETURNING":
+        return "Kembali ke meja kerja.";
+      case "COFFEE BREAK":
+        return "Menuju area coffee break.";
+      case "STRETCHING":
+        return "Menuju area stretching.";
+      case "DISCUSSION":
+        return "Menuju rekan kerja untuk berdiskusi.";
+      case "MARKET REVIEW":
+        return "Menuju Market Wall untuk review.";
+      case "ROAMING":
+        return "Sedang berkeliling kantor.";
+      case "DESK BREAK":
+        return "Menuju area desk break.";
+      case "GROUP DISCUSSION":
+        return "Menuju diskusi bersama tim.";
+      case "GROUP MARKET REVIEW":
+        return "Menuju review market bersama tim.";
+      case "BRIEFING":
+        return "Menuju briefing.";
+      default:
+        return "Sedang berjalan menuju aktivitas berikutnya.";
+    }
+  }
+
+  switch (motion) {
+    case "coffee":
+      return "Sedang coffee break. Aktivitas visual ini tidak memanggil AI.";
+    case "stretch":
+      return "Sedang stretching sebentar sebelum kembali bekerja.";
+    case "review":
+      return "Sedang mengecek Market Wall.";
+    case "talk":
+      return presence === "BRIEFING"
+        ? "Sedang mengikuti briefing."
+        : "Sedang berdiskusi dengan tim.";
+  }
+
+  switch (presence) {
+    case "MONITORING":
+      return "Memantau market dari meja kerja.";
+    case "SEATED":
+      return "Duduk di ruang meeting dan menunggu giliran.";
+    case "WAITING IN OFFICE":
+      return "Menunggu tahap meeting berikutnya dari ruang kerja.";
+    case "WAITING FOR OUTPUT":
+      return "Menunggu output AI untuk case meeting aktif.";
+    case "OUTPUT UNAVAILABLE":
+      return "Output untuk case aktif tidak tersedia atau tidak lolos validasi.";
+    case "SPEAKING":
+      return "Sedang menyampaikan hasil analisis.";
+    case "RETURNING":
+      return "Kembali ke meja kerja.";
+    case "COFFEE BREAK":
+      return "Sedang coffee break. Aktivitas visual ini tidak memanggil AI.";
+    case "STRETCHING":
+      return "Sedang stretching sebentar sebelum kembali bekerja.";
+    case "DISCUSSION":
+    case "GROUP DISCUSSION":
+      return "Sedang berdiskusi dengan tim.";
+    case "MARKET REVIEW":
+    case "GROUP MARKET REVIEW":
+      return "Sedang mengecek Market Wall.";
+    case "ROAMING":
+      return "Sedang berkeliling kantor.";
+    case "DESK BREAK":
+      return "Sedang mengambil desk break singkat.";
+    case "BRIEFING":
+      return "Sedang mengikuti briefing.";
+    case "WALKING TO MEETING":
+      return "Menuju ruang meeting.";
+    default:
+      return "Status karakter mengikuti aktivitas kantor yang sedang berlangsung.";
+  }
 }
 
 export function characterPresence(
