@@ -26,6 +26,7 @@ import {
   NEXT_ACTIVITY_DELAY,
   activityDelayMs,
   activityDestinations,
+  advanceRoamActivity,
   createOfficeActivityEvent,
 } from "../src/ui/office-activity";
 describe("office navigation", () => {
@@ -193,6 +194,39 @@ describe("office navigation", () => {
     }
     expect(modes).toEqual(new Set(["individual", "group"]));
   });
+
+  it("keeps solo chat out of individual events", () => {
+    let seed = 0x51a7cafe;
+    const random = () => {
+      seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+      return seed / 2 ** 32;
+    };
+    for (let i = 0; i < 120; i++) {
+      const event = createOfficeActivityEvent(random);
+      if (event.mode !== "individual") continue;
+      for (const activity of Object.values(event.assignments))
+        expect(activity?.kind).not.toBe("chat");
+    }
+  });
+
+  it("advances roam to a different walkable waypoint without changing its lifetime", () => {
+    const roam = {
+      kind: "roam" as const,
+      destination: [-6, 2] as Point,
+      facing: Math.PI,
+      durationMs: 40_000,
+      group: false,
+    };
+    const next = advanceRoamActivity(roam, [[-6.8, -2]], () => 0);
+    expect(next.destination).not.toEqual(roam.destination);
+    expect(next.destination).not.toEqual([-6.8, -2]);
+    expect(next.durationMs).toBe(roam.durationMs);
+    expect(walkable(next.destination)).toBe(true);
+    expect(planRoute(roam.destination, next.destination).length).toBeGreaterThan(
+      0,
+    );
+  });
+
   it("uses the agreed first and recurring activity timing windows", () => {
     expect(activityDelayMs(true, () => 0)).toBe(FIRST_ACTIVITY_DELAY.min);
     expect(activityDelayMs(true, () => 0.999999)).toBeLessThanOrEqual(
