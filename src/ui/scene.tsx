@@ -39,7 +39,14 @@ import {
 } from "./office-activity";
 import type { ComponentRef, RefObject } from "react";
 import type { MeetingTurn } from "../core/meeting";
-import { SpeechBubble } from "./meeting-view";
+import type { CharacterPresence } from "./character-state";
+import { CharacterPeekBubble, SpeechBubble } from "./meeting-view";
+
+type CharacterBubbleContext = {
+  presence: CharacterPresence;
+  group: string;
+  turn?: MeetingTurn;
+};
 
 // Generate reflection lighting locally; no external HDR download is needed.
 function softwareRendering(gl: WebGLRenderer) {
@@ -267,6 +274,7 @@ export default function OfficeScene({
   onSpeechReady,
   onActivityChange,
   marketTimestamp,
+  characterContexts = {},
 }: {
   state: string;
   onSelect: (id: string) => void;
@@ -280,9 +288,11 @@ export default function OfficeScene({
     activities: Partial<Record<CharacterId, OfficeActivityKind>>,
   ) => void;
   marketTimestamp?: number;
+  characterContexts?: Partial<Record<CharacterId, CharacterBubbleContext>>;
 }) {
   const [view, setView] = useState<View>("overview");
   const [reset, setReset] = useState(0);
+  const [peekCharacter, setPeekCharacter] = useState<CharacterId>();
   const sceneRoot = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const beforeMeetingView = useRef<View>("overview");
@@ -322,6 +332,10 @@ export default function OfficeScene({
       await element.requestFullscreen().catch(() => undefined);
     }
   };
+  useEffect(() => {
+    setPeekCharacter(undefined);
+  }, [meetingId, state]);
+
   useEffect(() => {
     if (meetingId) {
       if (!meetingWasActive.current) {
@@ -519,6 +533,7 @@ export default function OfficeScene({
       </button>
       <Canvas
         shadows={profile.shadows}
+        onPointerMissed={() => setPeekCharacter(undefined)}
         dpr={profile.dpr}
         camera={{
           position: views.overview.camera,
@@ -643,27 +658,46 @@ export default function OfficeScene({
               )}
             </group>
           ))}
-        {characterIds.map((id, index) => (
-          <OfficeCharacter
-            key={id}
-            index={index}
-            avatar={avatars[id] ?? "professional"}
-            state={state}
-            activity={activities[id]}
-            decorative={profile.decorative}
-            onSelect={onSelect}
-            labelHost={labelHost}
-            onSpeechReady={onSpeechReady}
-            onActivityArrive={(id, activity) =>
-              activityArrivalHandler.current(id, activity)
-            }
-            speech={
-              speech?.character === id && onSpeechDetails ? (
-                <SpeechBubble turn={speech} onDetails={onSpeechDetails} />
-              ) : undefined
-            }
-          />
-        ))}
+        {characterIds.map((id, index) => {
+          const context = characterContexts[id];
+          return (
+            <OfficeCharacter
+              key={id}
+              index={index}
+              avatar={avatars[id] ?? "professional"}
+              state={state}
+              activity={activities[id]}
+              decorative={profile.decorative}
+              onSelect={onSelect}
+              onPeek={(character) =>
+                setPeekCharacter((current) =>
+                  current === character ? undefined : character,
+                )
+              }
+              labelHost={labelHost}
+              onSpeechReady={onSpeechReady}
+              onActivityArrive={(id, activity) =>
+                activityArrivalHandler.current(id, activity)
+              }
+              speech={
+                speech?.character === id && onSpeechDetails ? (
+                  <SpeechBubble turn={speech} onDetails={onSpeechDetails} />
+                ) : undefined
+              }
+              peek={
+                peekCharacter === id && context ? (
+                  <CharacterPeekBubble
+                    character={id}
+                    presence={context.presence}
+                    group={context.group}
+                    turn={context.turn}
+                    onDetails={() => onSelect(id)}
+                  />
+                ) : undefined
+              }
+            />
+          );
+        })}
         {qualityMode === "auto" && (
           <PerformanceMonitor quality={quality} onQuality={setQuality} />
         )}
