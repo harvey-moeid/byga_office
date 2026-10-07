@@ -69,6 +69,8 @@ export function characterPeekCopy(
         return "Menuju review market bersama tim.";
       case "BRIEFING":
         return "Menuju briefing.";
+      case "MONITORING":
+        return "Kembali ke meja kerja.";
       default:
         return "Sedang berjalan menuju aktivitas berikutnya.";
     }
