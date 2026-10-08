@@ -316,8 +316,28 @@ function buildUpperFloor(detail: boolean): Part[] {
     [0.06, 2.15, 2.55],
     "glass",
   );
-  box([3.55, UPPER_Y + 1.18, BOSS_OFFICE_LAYOUT.roomMinZ], [3.0, 2.15, 0.06], "glass");
-  box([6.62, UPPER_Y + 1.18, BOSS_OFFICE_LAYOUT.roomMinZ], [0.52, 2.15, 0.06], "glass");
+  const leftFrontWidth =
+    BOSS_OFFICE_LAYOUT.doorMinX - BOSS_OFFICE_LAYOUT.roomMinX;
+  const rightFrontWidth =
+    BOSS_OFFICE_LAYOUT.roomMaxX - BOSS_OFFICE_LAYOUT.doorMaxX;
+  box(
+    [
+      BOSS_OFFICE_LAYOUT.roomMinX + leftFrontWidth / 2,
+      UPPER_Y + 1.18,
+      BOSS_OFFICE_LAYOUT.roomMinZ,
+    ],
+    [leftFrontWidth, 2.15, 0.06],
+    "glass",
+  );
+  box(
+    [
+      BOSS_OFFICE_LAYOUT.doorMaxX + rightFrontWidth / 2,
+      UPPER_Y + 1.18,
+      BOSS_OFFICE_LAYOUT.roomMinZ,
+    ],
+    [rightFrontWidth, 2.15, 0.06],
+    "glass",
+  );
 
   box(
     [BOSS_OFFICE_LAYOUT.deskX, UPPER_Y + 0.76, BOSS_OFFICE_LAYOUT.deskZ],
