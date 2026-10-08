@@ -571,6 +571,10 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   await expect(quality).toBeVisible();
   await expect(quality.locator("option")).toHaveCount(5);
   await expect(quality.locator('option[value="ultra"]')).toHaveText("Ultra");
+  // New visitors start in two-floor Medium; an explicit choice remains sticky.
+  await expect(quality).toHaveValue("medium");
+  expect(await page.evaluate(() => localStorage.getItem("byga:3d-quality"))).toBe("medium");
+  await expect(page.locator(".room-label")).toHaveCount(0);
   await quality.selectOption("medium");
   await expect(quality).toHaveValue("medium");
   await expect(
