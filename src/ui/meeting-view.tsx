@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CharacterId } from "../core/contracts";
 import type { MeetingSnapshot, MeetingTurn } from "../core/meeting";
+import { Link } from "react-router-dom";
 import { useData } from "./data";
 import { advanceMeeting, speechExcerpt, type MeetingPlayback } from "./meeting";
 import { roles } from "./shared";
@@ -163,31 +164,76 @@ export function MeetingStatus({
   presentation: ReturnType<typeof useMeetingPresentation>;
 }) {
   const { playback, snapshot, active, current, error, retry } = presentation;
+  const [expanded, setExpanded] = useState(false);
+  const caseId = snapshot?.case_id;
+  const returning = playback?.phase === "returning";
+  useEffect(() => setExpanded(false), [caseId, returning]);
   if (!active && !error) return null;
-  const label =
-    playback?.phase === "returning"
-      ? "Meeting ditutup · kembali ke meja"
-      : playback?.phase === "boss-entering"
-        ? "Bos masuk untuk menutup meeting"
-        : playback?.phase === "gathering"
-          ? "Tim menuju ruang meeting"
-          : current
-            ? `${roles[current.character]} sedang berbicara`
-            : "Menunggu hasil AI";
+
+  const label = returning
+    ? snapshot?.cancelled ? "Meeting dihentikan · kembali ke meja" : "Meeting ditutup · kembali ke meja"
+    : playback?.phase === "boss-entering"
+      ? "Bos masuk untuk menutup meeting"
+      : playback?.phase === "gathering"
+        ? "Tim menuju ruang meeting"
+        : current
+          ? `${roles[current.character]} sedang berbicara`
+          : "Menunggu hasil AI";
+  const missing = snapshot?.unavailable ?? [];
+  const showSummary = returning || snapshot?.finished || snapshot?.cancelled;
   return (
-    <div className="meeting-status" role="status" aria-live="polite">
-      <strong>{error ? "Percakapan belum dapat diperbarui" : label}</strong>
-      {snapshot && <small>Hasil case · {snapshot.case_id}</small>}
-      {snapshot?.cancelled && (
-        <small>Case dihentikan · {snapshot.status}</small>
-      )}
-      {!!snapshot?.unavailable.length && (
-        <small>
-          Hasil tidak tersedia:{" "}
-          {snapshot.unavailable.map((id) => roles[id]).join(", ")}
+    <div
+      className={`meeting-status${showSummary && !expanded ? " meeting-status-compact" : ""}`}
+      role="status"
+      aria-live="polite"
+      data-case-id={caseId}
+    >
+      <div className="meeting-status-heading">
+        <strong>{error ? "Percakapan belum dapat diperbarui" : label}</strong>
+        {missing.length > 0 && (
+          <button
+            type="button"
+            className="meeting-status-toggle"
+            aria-expanded={expanded}
+            aria-controls="meeting-status-details"
+            onClick={() => setExpanded((value) => !value)}
+          >
+            {expanded ? "Tutup" : "Detail"} <span aria-hidden="true">{expanded ? "⌃" : "⌄"}</span>
+          </button>
+        )}
+      </div>
+      {snapshot && (
+        <small className="meeting-status-case">
+          Case · {snapshot.case_id}
+          {snapshot.cancelled ? ` · ${snapshot.status}` : ""}
         </small>
       )}
-      {error && <button onClick={retry}>Coba lagi</button>}
+      {missing.length > 0 && (
+        <>
+          <div className="meeting-status-warning" aria-label={`${missing.length} hasil analis tidak tersedia`}>
+            <span aria-hidden="true">⚠</span> {missing.length} hasil AI tidak tersedia
+          </div>
+          {expanded && (
+            <div id="meeting-status-details" className="meeting-status-details">
+              <p>Output gagal atau tidak lolos validasi. Hasil tersebut tidak dihitung sebagai suara.</p>
+              <ul>
+                {missing.map((id) => (
+                  <li key={id}>
+                    <strong>{roles[id]}</strong>
+                    <span>{snapshot?.failureReasons?.[id] ?? "Periksa detail case dan log provider"}</span>
+                  </li>
+                ))}
+              </ul>
+              {caseId && (
+                <Link to={`/cases/${encodeURIComponent(caseId)}`}>
+                  Lihat detail case ↗
+                </Link>
+              )}
+            </div>
+          )}
+        </>
+      )}
+      {error && <button type="button" onClick={retry}>Coba lagi</button>}
     </div>
   );
 }
