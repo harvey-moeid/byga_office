@@ -617,7 +617,8 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   );
   await expect(page.locator(".metrics, .two-columns, footer")).toHaveCount(0);
   await expect(page.getByText("Musolla", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("War Room", { exact: true })).toBeVisible();
+  // Room names now exist in the WebGL texture/mesh instead of the DOM.
+  await expect(page.getByText("War Room", { exact: true })).toHaveCount(0);
   // Closed-candle metadata is painted into the physical Three.js monitor
   // texture, so no DOM label can float away from the screen while orbiting.
   await expect(page.getByText(/M5 · CLOSED CANDLES/)).toHaveCount(0);
