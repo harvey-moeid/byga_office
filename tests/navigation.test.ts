@@ -8,6 +8,7 @@ import {
   desks,
   meetingSeats,
   obstacles,
+  partitions,
   seatedFacing,
   planMovement,
   planRoute,
