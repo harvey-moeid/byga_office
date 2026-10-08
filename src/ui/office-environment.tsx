@@ -14,7 +14,7 @@ import {
   meetingSeats,
 } from "./navigation";
 import {
-  BOSS_OFFICE_LAYOUT,
+  GROUND_EXECUTIVE_STATION_LAYOUT,
   EAST_OUTER_WALL_X,
 } from "./office-layout";
 
@@ -226,8 +226,8 @@ function buildOffice(detail: boolean): Part[] {
   desks.forEach(([x, z], index) => {
     const executive = index >= analystDesks.length;
     const bossDesk = index === desks.length - 1;
-    const deskWidth = bossDesk ? BOSS_OFFICE_LAYOUT.deskWidth : 1.6;
-    const deskDepth = bossDesk ? BOSS_OFFICE_LAYOUT.deskDepth : 0.85;
+    const deskWidth = bossDesk ? GROUND_EXECUTIVE_STATION_LAYOUT.deskWidth : 1.6;
+    const deskDepth = bossDesk ? GROUND_EXECUTIVE_STATION_LAYOUT.deskDepth : 0.85;
     const legX = bossDesk ? deskWidth / 2 - 0.16 : 0.67;
     box(
       [x, 0.76, z],
@@ -289,41 +289,41 @@ function buildOffice(detail: boolean): Part[] {
     if (!detail) chair(x, z + 0.72);
   });
 
-  // Give the Boss Office a clear executive hierarchy without adding new
+  // Keep a lightweight Executive Station on floor one for Low mode and transitions without adding new
   // materials or remote assets. These parts remain inside the existing
   // instanced batches, so Medium keeps its lightweight render budget.
   box(
-    [BOSS_OFFICE_LAYOUT.x, 0.028, BOSS_OFFICE_LAYOUT.z + 0.08],
-    [BOSS_OFFICE_LAYOUT.rugWidth, 0.018, BOSS_OFFICE_LAYOUT.rugDepth],
+    [GROUND_EXECUTIVE_STATION_LAYOUT.x, 0.028, GROUND_EXECUTIVE_STATION_LAYOUT.z + 0.08],
+    [GROUND_EXECUTIVE_STATION_LAYOUT.rugWidth, 0.018, GROUND_EXECUTIVE_STATION_LAYOUT.rugDepth],
     "rug",
   );
   box(
     [
-      BOSS_OFFICE_LAYOUT.x,
-      BOSS_OFFICE_LAYOUT.featureWallHeight / 2,
-      BOSS_OFFICE_LAYOUT.featureWallZ,
+      GROUND_EXECUTIVE_STATION_LAYOUT.x,
+      GROUND_EXECUTIVE_STATION_LAYOUT.featureWallHeight / 2,
+      GROUND_EXECUTIVE_STATION_LAYOUT.featureWallZ,
     ],
     [
-      BOSS_OFFICE_LAYOUT.featureWallWidth,
-      BOSS_OFFICE_LAYOUT.featureWallHeight,
+      GROUND_EXECUTIVE_STATION_LAYOUT.featureWallWidth,
+      GROUND_EXECUTIVE_STATION_LAYOUT.featureWallHeight,
       0.1,
     ],
     "walnut",
   );
   box(
     [
-      BOSS_OFFICE_LAYOUT.x,
+      GROUND_EXECUTIVE_STATION_LAYOUT.x,
       1.45,
-      BOSS_OFFICE_LAYOUT.featureWallZ - 0.055,
+      GROUND_EXECUTIVE_STATION_LAYOUT.featureWallZ - 0.055,
     ],
     [1.9, 0.7, 0.025],
     "screen",
   );
   box(
     [
-      BOSS_OFFICE_LAYOUT.x,
-      BOSS_OFFICE_LAYOUT.featureWallHeight - 0.16,
-      BOSS_OFFICE_LAYOUT.featureWallZ - 0.07,
+      GROUND_EXECUTIVE_STATION_LAYOUT.x,
+      GROUND_EXECUTIVE_STATION_LAYOUT.featureWallHeight - 0.16,
+      GROUND_EXECUTIVE_STATION_LAYOUT.featureWallZ - 0.07,
     ],
     [2.65, 0.04, 0.025],
     "light",
@@ -331,9 +331,9 @@ function buildOffice(detail: boolean): Part[] {
   for (let i = 0; i < 5; i++)
     box(
       [
-        BOSS_OFFICE_LAYOUT.x - 0.68 + i * 0.34,
+        GROUND_EXECUTIVE_STATION_LAYOUT.x - 0.68 + i * 0.34,
         1.34 + (i % 3) * 0.11,
-        BOSS_OFFICE_LAYOUT.featureWallZ - 0.075,
+        GROUND_EXECUTIVE_STATION_LAYOUT.featureWallZ - 0.075,
       ],
       [0.22, 0.025, 0.01],
       i % 2 ? "led" : "paper",

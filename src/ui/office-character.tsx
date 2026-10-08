@@ -23,13 +23,14 @@ import {
   type AvatarPreset,
   type CharacterId,
 } from "../core/contracts";
+import { desks, isAttendingMeeting } from "./navigation";
 import {
-  desks,
-  destination as actorDestination,
-  planMovement,
-  isAttendingMeeting,
-  seatedFacing,
-} from "./navigation";
+  characterTarget,
+  planWorldRoute,
+  type CharacterTarget,
+  type WorldPoint,
+} from "./multi-floor-navigation";
+import type { MeetingFloor } from "./meeting-venue";
 import { RiggedOfficeCharacter } from "./rigged-character";
 import {
   characterMotion,
@@ -411,6 +412,8 @@ export function OfficeCharacter({
   onSpeechReady,
   onActivityArrive,
   onMotionChange,
+  meetingFloor,
+  upperFloorEnabled,
 }: {
   index: number;
   state: string;
@@ -425,6 +428,8 @@ export function OfficeCharacter({
   onSpeechReady?: (id: CharacterId, visible: boolean) => void;
   onActivityArrive?: (id: CharacterId, activity: OfficeActivity) => void;
   onMotionChange?: (id: CharacterId, motion: CharacterMotion) => void;
+  meetingFloor: MeetingFloor;
+  upperFloorEnabled: boolean;
 }) {
   const appearance = appearances[avatar];
   const outfit = outfits[characterIds[index]];
@@ -453,16 +458,29 @@ export function OfficeCharacter({
   const activeActivity = meeting ? undefined : activity;
   const coffeeActivity =
     activeActivity?.kind === "coffee" || activeActivity?.kind === "coffee-break";
-  const destination = useMemo(() => {
+  const target = useMemo<CharacterTarget>(() => {
     if (activeActivity) {
       const [x, z] = activeActivity.destination;
-      return new Vector3(x, 0, z);
+      return {
+        floor: 1,
+        position: [x, 0, z],
+        facing: activeActivity.facing ?? Math.PI,
+      };
     }
-    const [x, z] = actorDestination(index, state);
-    return new Vector3(x, 0, z);
-  }, [activeActivity, index, state]);
+    return characterTarget(
+      index,
+      state,
+      meetingFloor,
+      upperFloorEnabled,
+    );
+  }, [activeActivity, index, meetingFloor, state, upperFloorEnabled]);
+  const destination = useMemo(
+    () => new Vector3(...target.position),
+    [target.position],
+  );
   const path = useRef<Vector3[]>([]);
   const direction = useRef(new Vector3());
+  const floorTransitioning = useRef(false);
   const [reduced, setReduced] = useState(
     window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
@@ -477,19 +495,13 @@ export function OfficeCharacter({
     activityArrivedRef.current = undefined;
     setArrived(false);
     const current = position.current;
-    const movement = planMovement(
-      [current.x, current.z],
-      [destination.x, destination.z],
-    );
-    path.current =
-      movement.mode === "walk"
-        ? movement.route.map(([x, z]) => new Vector3(x, 0, z))
-        : [];
-    if (movement.mode === "teleport")
-      position.current.set(
-        ...([movement.destination[0], 0, movement.destination[1]] as Triple),
-      );
-  }, [destination]);
+    const start: WorldPoint = [current.x, current.y, current.z];
+    const route = planWorldRoute(start, target);
+    floorTransitioning.current =
+      Math.abs(current.y - destination.y) > 0.45 ||
+      route.some((point) => Math.abs(point[1] - current.y) > 0.45);
+    path.current = route.map(([x, y, z]) => new Vector3(x, y, z));
+  }, [destination, target]);
   const speechVisible = !!speech && arrived && meeting && speechOnScreen;
   const peekVisible = !speech && !!peek && speechOnScreen;
   const speechPosition = useMemo(
@@ -539,9 +551,19 @@ export function OfficeCharacter({
       else {
         walking = true;
         direction.current.copy(point).sub(position.current).normalize();
+        // Cross-floor meetings have a fixed 14s gathering window. Keep long
+        // stair transfers brisk enough to finish before the first speaker,
+        // while preserving normal office walking for decorative activity.
+        const travelSpeed = reduced
+          ? 4
+          : floorTransitioning.current
+            ? 2.7
+            : meeting
+              ? 1.8
+              : 1.25;
         position.current.addScaledVector(
           direction.current,
-          Math.min(distance, movementDelta * (reduced ? 4 : 1.25)),
+          Math.min(distance, movementDelta * travelSpeed),
         );
         const target = Math.atan2(direction.current.x, direction.current.z);
         const difference = Math.atan2(
@@ -566,10 +588,10 @@ export function OfficeCharacter({
       setArrived(sitting);
     }
     if (!walking) {
-      const target = activeActivity?.facing ?? seatedFacing(index, state);
+      const facing = target.facing;
       const difference = Math.atan2(
-        Math.sin(target - root.current.rotation.y),
-        Math.cos(target - root.current.rotation.y),
+        Math.sin(facing - root.current.rotation.y),
+        Math.cos(facing - root.current.rotation.y),
       );
       root.current.rotation.y += difference * Math.min(1, delta * 7);
     }
