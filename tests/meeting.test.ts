@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { characterIds, type Analysis } from "../src/core/contracts";
-import { meetingTurns, type MeetingSnapshot } from "../src/core/meeting";
+import { meetingTurns, meetingFailureReason, type MeetingSnapshot } from "../src/core/meeting";
 import { advanceMeeting, speechExcerpt } from "../src/ui/meeting";
 
 const analysis: Analysis = {
@@ -100,5 +100,26 @@ describe("meeting presentation", () => {
     expect(speechExcerpt("Satu. Dua! Tiga.")).toBe("Satu. Dua!");
     expect(speechExcerpt("a".repeat(500))).toHaveLength(188);
     expect(analysis.reasoning).toContain("nyata");
+  });
+});
+
+describe("meeting failure diagnostics", () => {
+  it("classifies public provider failure categories without exposing raw errors", () => {
+    expect(meetingFailureReason({status:"UNAVAILABLE",validationErrors:["PROVIDER_HTTP_402"]},false)).toContain("402");
+    expect(meetingFailureReason({status:"UNAVAILABLE",validationErrors:["PROVIDER_HTTP_400"]},false)).toContain("400");
+    expect(meetingFailureReason({status:"UNAVAILABLE",validationErrors:["PROVIDER_HTTP_404"]},false)).toContain("404");
+    expect(meetingFailureReason({status:"UNAVAILABLE",validationErrors:["PROVIDER_NOT_CONFIGURED"]},false)).toContain("dikonfigurasi");
+    expect(meetingFailureReason({status:"TIMEOUT",validationErrors:[]},false)).toContain("batas waktu");
+    const raw = "SECRET_ERROR_FROM_PROVIDER";
+    expect(meetingFailureReason({status:"UNAVAILABLE",validationErrors:[raw]},false)).not.toContain(raw);
+  });
+  it("marks invalid saved outputs as unavailable and never invents a vote", () => {
+    const report = meetingTurns([JSON.stringify({
+      id:"momentum", status:"UNAVAILABLE", output:null,
+      validationErrors:["PROVIDER_HTTP_400"],
+    })]);
+    expect(report.turns).toHaveLength(0);
+    expect(report.unavailable).toEqual(["momentum"]);
+    expect(report.failureReasons.momentum).toContain("400");
   });
 });

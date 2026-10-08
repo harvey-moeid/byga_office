@@ -774,6 +774,37 @@ test("meeting dialogue rotates actual case results, opens details, admits Boss l
   await page.clock.fastForward(8500);
   await expect(page.locator(".meeting-status")).toHaveCount(0);
 });
+test("meeting HUD condenses analyst failures and expands diagnostic details on mobile", async ({ page }) => {
+  await page.addInitScript(() => {
+    HTMLCanvasElement.prototype.getContext = (() => null) as typeof HTMLCanvasElement.prototype.getContext;
+  });
+  await page.clock.install();
+  const meeting = await fixtureMeeting(page);
+  meeting.unavailable = ["momentum", "volume", "positioning"];
+  meeting.failureReasons = {
+    momentum: "Permintaan model ditolak (HTTP 400)",
+    volume: "Provider belum dikonfigurasi",
+    positioning: "Model atau endpoint tidak ditemukan (HTTP 404)",
+  };
+  await page.goto("/");
+  const hud = page.locator(".meeting-status");
+  await expect(hud).toContainText("3 hasil AI tidak tersedia");
+  await expect(hud).not.toContainText("Permintaan model ditolak");
+  await hud.getByRole("button", {name:/Detail/}).click();
+  await expect(hud).toContainText("Permintaan model ditolak");
+  await expect(hud.getByRole("link", {name:/Lihat detail case/})).toHaveAttribute("href", "/cases/CASE-meeting-fixture");
+  await hud.getByRole("button", {name:/Tutup/}).click();
+  await expect(hud).not.toContainText("Provider belum dikonfigurasi");
+  for (const elapsed of [15000, 7500, 7500, 8500, 7500]) {
+    await page.clock.fastForward(elapsed);
+  }
+  await expect(hud).toHaveClass(/meeting-status-compact/);
+  const bounds = await hud.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+});
+
 test("3D speech follows the seated character and opens the actual result detail", async ({
   page,
 }, testInfo) => {
