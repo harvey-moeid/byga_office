@@ -35,12 +35,9 @@ import { PremiumOfficeAccents } from "./office-premium";
 import { UpperFloorOffice } from "./office-upper-floor";
 import { RoomSigns, ScannerDisplay } from "./physical-signs";
 import {
-  BOSS_OFFICE_LAYOUT,
   LOWER_BOSS_VIEW,
   LOWER_MEETING_VIEW,
   UPPER_BOSS_VIEW,
-  UPPER_FLOOR_Y,
-  UPPER_MEETING_LAYOUT,
   UPPER_MEETING_VIEW,
 } from "./office-layout";
 import {

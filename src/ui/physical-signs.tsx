@@ -77,6 +77,12 @@ export function PhysicalSign({
           : undefined
       }
     >
+      {sign.mount === "wall" && [-1, 1].map((side) => (
+        <mesh key={side} position={[side * width * 0.29, 0, -0.16]}>
+          <boxGeometry args={[0.035, 0.055, 0.28]} />
+          <meshStandardMaterial color="#5c564c" metalness={0.64} roughness={0.47} />
+        </mesh>
+      ))}
       {sign.mount === "stand" && (
         <>
           <mesh position={[0, -height / 2 - legHeight / 2, -0.005]}>
