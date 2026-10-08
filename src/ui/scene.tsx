@@ -1,5 +1,5 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { ContactShadows, Html, OrbitControls } from "@react-three/drei";
+import { ContactShadows, OrbitControls } from "@react-three/drei";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   TOUCH,
@@ -15,10 +15,11 @@ import {
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import {
   characterIds,
+  type ScannerOutput,
   type AvatarPreset,
   type CharacterId,
 } from "../core/contracts";
-import { isMeeting, rooms } from "./navigation";
+import { isMeeting } from "./navigation";
 import {
   initialQuality,
   adaptQuality,
@@ -32,13 +33,11 @@ import { OfficeEnvironment } from "./office-environment";
 import { HybridOfficeAssets } from "./office-assets";
 import { PremiumOfficeAccents } from "./office-premium";
 import { UpperFloorOffice } from "./office-upper-floor";
+import { RoomSigns, ScannerDisplay } from "./physical-signs";
 import {
-  BOSS_OFFICE_LAYOUT,
   LOWER_BOSS_VIEW,
   LOWER_MEETING_VIEW,
   UPPER_BOSS_VIEW,
-  UPPER_FLOOR_Y,
-  UPPER_MEETING_LAYOUT,
   UPPER_MEETING_VIEW,
 } from "./office-layout";
 import {
@@ -330,6 +329,7 @@ export default function OfficeScene({
   state,
   onSelect,
   prices,
+  scanners = [],
   avatars = {},
   meetingId,
   speech,
@@ -342,6 +342,7 @@ export default function OfficeScene({
   state: string;
   onSelect: (id: string) => void;
   prices: number[];
+  scanners?: ScannerOutput[];
   avatars?: Partial<Record<CharacterId, AvatarPreset>>;
   meetingId?: string;
   speech?: MeetingTurn;
@@ -738,38 +739,9 @@ export default function OfficeScene({
             shadows={profile.shadows}
           />
         )}
-        {profile.upperFloor && (
-          <>
-            <Html
-              portal={labelHost}
-              position={[
-                BOSS_OFFICE_LAYOUT.x,
-                UPPER_FLOOR_Y + 0.18,
-                BOSS_OFFICE_LAYOUT.roomMinZ + 0.25,
-              ]}
-              center
-            >
-              <span className="room-label">BOSS OFFICE · L2</span>
-            </Html>
-            <Html
-              portal={labelHost}
-              position={[
-                UPPER_MEETING_LAYOUT.x,
-                UPPER_FLOOR_Y + 0.18,
-                UPPER_MEETING_LAYOUT.z + 2.05,
-              ]}
-              center
-            >
-              <span className="room-label">STRATEGY ROOM · L2</span>
-            </Html>
-          </>
-        )}
         {profile.decorative && <HybridOfficeAssets />}
         {profile.decorative && (
-          <PremiumOfficeAccents
-            labelHost={labelHost}
-            cinematic={quality === "ultra"}
-          />
+          <PremiumOfficeAccents cinematic={quality === "ultra"} />
         )}
         {profile.decorative && <InteriorReflections />}
         <MarketWall
@@ -777,45 +749,23 @@ export default function OfficeScene({
           timestamp={marketTimestamp}
           onSelect={() => onSelect("market-wall")}
         />
-        {rooms
-          .filter(
-            (room) => !["Market Wall", "Scanner Command"].includes(room.label),
-          )
-          .map((room) => (
-            <group
-              key={room.label}
-              onClick={
-                room.label === "Server / Data"
-                  ? (event) => {
-                      event.stopPropagation();
-                      onSelect("server-room");
-                    }
-                  : undefined
-              }
-            >
-              <Html
-                portal={labelHost}
-                position={[
-                  room.labelPosition?.[0] ?? room.x,
-                  0.1,
-                  room.labelPosition?.[1] ?? room.z + room.d / 2 - 0.15,
-                ]}
-                center
-              >
-                <span className="room-label">{room.label}</span>
-              </Html>
-              {room.label === "Server / Data" && (
-                <mesh position={[-7.65, 1, 0]}>
-                  <boxGeometry args={[0.75, 2, 2.6]} />
-                  <meshBasicMaterial
-                    transparent
-                    opacity={0}
-                    depthWrite={false}
-                  />
-                </mesh>
-              )}
-            </group>
-          ))}
+        <RoomSigns
+          quality={quality}
+          upperFloor={profile.upperFloor}
+          onSelect={onSelect}
+        />
+        <ScannerDisplay scanners={scanners} />
+        <mesh
+          name="server-room-select-zone"
+          position={[-7.65, 1, 0]}
+          onClick={(event) => {
+            event.stopPropagation();
+            onSelect("server-room");
+          }}
+        >
+          <boxGeometry args={[0.75, 2, 2.6]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
         {characterIds.map((id, index) => {
           const context = characterContexts[id];
           return (

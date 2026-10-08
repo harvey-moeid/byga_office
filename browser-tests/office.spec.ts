@@ -571,6 +571,10 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   await expect(quality).toBeVisible();
   await expect(quality.locator("option")).toHaveCount(5);
   await expect(quality.locator('option[value="ultra"]')).toHaveText("Ultra");
+  // New visitors start in two-floor Medium; an explicit choice remains sticky.
+  await expect(quality).toHaveValue("medium");
+  expect(await page.evaluate(() => localStorage.getItem("byga:3d-quality"))).toBe("medium");
+  await expect(page.locator(".room-label")).toHaveCount(0);
   await quality.selectOption("medium");
   await expect(quality).toHaveValue("medium");
   await expect(
@@ -613,7 +617,8 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   );
   await expect(page.locator(".metrics, .two-columns, footer")).toHaveCount(0);
   await expect(page.getByText("Musolla", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("War Room", { exact: true })).toBeVisible();
+  // Room names now exist in the WebGL texture/mesh instead of the DOM.
+  await expect(page.getByText("War Room", { exact: true })).toHaveCount(0);
   // Closed-candle metadata is painted into the physical Three.js monitor
   // texture, so no DOM label can float away from the screen while orbiting.
   await expect(page.getByText(/M5 · CLOSED CANDLES/)).toHaveCount(0);

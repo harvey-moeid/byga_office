@@ -1,5 +1,4 @@
-import { Html } from "@react-three/drei";
-import type { RefObject } from "react";
+import { PhysicalSign } from "./physical-signs";
 
 function Pendant({
   position,
@@ -199,13 +198,7 @@ function ReceptionConsole() {
  * These meshes intentionally stay separate from navigation obstacles: they sit
  * at the perimeter/ceiling and do not change any character route.
  */
-export function PremiumOfficeAccents({
-  labelHost,
-  cinematic,
-}: {
-  labelHost: RefObject<HTMLDivElement>;
-  cinematic: boolean;
-}) {
+export function PremiumOfficeAccents({ cinematic }: { cinematic: boolean }) {
   return (
     <group name="premium-office-accents">
       <WoodSlatWall position={[6.55, 0, 7.46]} width={3.45} />
@@ -250,12 +243,19 @@ export function PremiumOfficeAccents({
           roughness={0.3}
         />
       </mesh>
-      <Html portal={labelHost} position={[4.85, 0.78, 7.89]} center>
-        <div className="brand-sign-3d" aria-label="BYGA OFFICE">
-          <strong>BYGA OFFICE</strong>
-          <span>TRADING · BTC · GOLD · FX</span>
-        </div>
-      </Html>
+      <PhysicalSign
+        quality={cinematic ? "ultra" : "high"}
+        sign={{
+          id: "brand-wall",
+          label: "BYGA OFFICE",
+          subtitle: "TRADING · BTC · GOLD · FX",
+          position: [4.85, 0.78, 7.89],
+          width: 3.15,
+          height: 0.78,
+          mount: "wall",
+          style: "hero",
+        }}
+      />
 
       <GlassDoor x={-0.68} />
       <GlassDoor x={0.68} />
@@ -312,14 +312,20 @@ export function PremiumOfficeAccents({
           clearcoatRoughness={0.45}
         />
       </mesh>
-      <Html portal={labelHost} position={[8.42, 1.62, 5.55]} center>
-        <div className="office-mantra">
-          <span>DISCIPLINE</span>
-          <span>PLAN</span>
-          <span>EXECUTE</span>
-          <b>GROW</b>
-        </div>
-      </Html>
+      <PhysicalSign
+        quality={cinematic ? "ultra" : "high"}
+        sign={{
+          id: "office-mantra",
+          label: "DISCIPLINE",
+          subtitle: "PLAN · EXECUTE · GROW",
+          position: [8.40, 1.62, 5.55],
+          rotationY: -Math.PI / 2,
+          width: 1.85,
+          height: 0.87,
+          mount: "wall",
+          style: "plaque",
+        }}
+      />
     </group>
   );
 }

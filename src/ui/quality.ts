@@ -71,5 +71,5 @@ export function adaptQuality(current: Quality, fps: number): Quality {
 export function parseQualityMode(value: string | null): QualityMode {
   return qualityModes.includes(value as QualityMode)
     ? (value as QualityMode)
-    : "auto";
+    : "medium";
 }

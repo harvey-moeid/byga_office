@@ -454,6 +454,7 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
                 onSelect={setSelected}
                 onActivityChange={setActivityKinds}
                 prices={market.data?.timeframes.M5.map((c) => c.close) ?? []}
+                scanners={state.data?.scanners ?? []}
                 marketTimestamp={market.data?.candle_timestamp}
                 characterContexts={characterContexts}
                 avatars={Object.fromEntries(

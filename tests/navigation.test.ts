@@ -502,7 +502,8 @@ describe("adaptive quality", () => {
   it("accepts only supported persistent quality modes", () => {
     expect(qualityModes).toEqual(["auto", "low", "medium", "high", "ultra"]);
     for (const mode of qualityModes) expect(parseQualityMode(mode)).toBe(mode);
-    expect(parseQualityMode("cinematic")).toBe("auto");
-    expect(parseQualityMode(null)).toBe("auto");
+    // Missing or unsupported preferences use the first-visit Medium profile.
+    expect(parseQualityMode("cinematic")).toBe("medium");
+    expect(parseQualityMode(null)).toBe("medium");
   });
 });
