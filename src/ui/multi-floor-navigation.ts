@@ -53,19 +53,46 @@ function groundRoute(start: WorldPoint, end: WorldPoint): WorldPoint[] {
   return route.map(([x, z]) => [x, 0, z] as WorldPoint);
 }
 
+const UPPER_CORRIDOR_X = 6.68;
+
+function insideBossOffice(point: WorldPoint) {
+  return (
+    point[0] >= BOSS_OFFICE_LAYOUT.roomMinX &&
+    point[0] <= BOSS_OFFICE_LAYOUT.roomMaxX &&
+    point[2] >= BOSS_OFFICE_LAYOUT.roomMinZ &&
+    point[2] <= BOSS_OFFICE_LAYOUT.roomMaxZ
+  );
+}
+
+function bossOfficeEntry(end: WorldPoint): WorldPoint[] {
+  return [
+    [UPPER_CORRIDOR_X, UPPER_FLOOR_Y, 1.0],
+    [UPPER_CORRIDOR_X, UPPER_FLOOR_Y, 2.9],
+    [BOSS_OFFICE_LAYOUT.doorX, UPPER_FLOOR_Y, 3.05],
+    [BOSS_OFFICE_LAYOUT.doorX, UPPER_FLOOR_Y, 3.72],
+    [
+      BOSS_OFFICE_LAYOUT.deskBypassX,
+      UPPER_FLOOR_Y,
+      BOSS_OFFICE_LAYOUT.deskBypassZ,
+    ],
+    end,
+  ];
+}
+
 function upperRouteFromLanding(end: WorldPoint): WorldPoint[] {
-  const corridorX = 6.68;
-  const route: WorldPoint[] = [[corridorX, UPPER_FLOOR_Y, 1.0]];
+  if (insideBossOffice(end)) return bossOfficeEntry(end);
+
+  const route: WorldPoint[] = [[UPPER_CORRIDOR_X, UPPER_FLOOR_Y, 1.0]];
 
   if (end[2] > 3.1) {
     route.push(
-      [corridorX, UPPER_FLOOR_Y, 3.02],
-      [corridorX, UPPER_FLOOR_Y, Math.min(5.45, end[2])],
+      [UPPER_CORRIDOR_X, UPPER_FLOOR_Y, 3.02],
+      [UPPER_CORRIDOR_X, UPPER_FLOOR_Y, Math.min(5.45, end[2])],
     );
   } else if (end[2] < -2.3) {
-    route.push([corridorX, UPPER_FLOOR_Y, -3.72]);
+    route.push([UPPER_CORRIDOR_X, UPPER_FLOOR_Y, -3.72]);
   } else if (end[2] < 0) {
-    route.push([corridorX, UPPER_FLOOR_Y, -0.72]);
+    route.push([UPPER_CORRIDOR_X, UPPER_FLOOR_Y, -0.72]);
   }
 
   route.push(end);
@@ -73,11 +100,22 @@ function upperRouteFromLanding(end: WorldPoint): WorldPoint[] {
 }
 
 function upperRouteToLanding(start: WorldPoint): WorldPoint[] {
+  if (insideBossOffice(start))
+    return [
+      [
+        BOSS_OFFICE_LAYOUT.deskBypassX,
+        UPPER_FLOOR_Y,
+        BOSS_OFFICE_LAYOUT.deskBypassZ,
+      ],
+      [BOSS_OFFICE_LAYOUT.doorX, UPPER_FLOOR_Y, 3.72],
+      [BOSS_OFFICE_LAYOUT.doorX, UPPER_FLOOR_Y, 3.05],
+      [UPPER_CORRIDOR_X, UPPER_FLOOR_Y, 2.9],
+      [UPPER_CORRIDOR_X, UPPER_FLOOR_Y, 1.0],
+      UPPER_LANDING,
+    ];
+
   const route = upperRouteFromLanding(start);
-  return [
-    ...route.slice(0, -1).reverse(),
-    UPPER_LANDING,
-  ];
+  return [...route.slice(0, -1).reverse(), UPPER_LANDING];
 }
 
 function nearestStairIndex(start: WorldPoint) {
@@ -153,6 +191,15 @@ export function planWorldRoute(
   target: CharacterTarget,
 ): WorldPoint[] {
   const targetPoint = target.position;
+  if (
+    Math.hypot(
+      targetPoint[0] - start[0],
+      targetPoint[1] - start[1],
+      targetPoint[2] - start[2],
+    ) < 0.08
+  )
+    return [];
+
   const stairIndex = nearestStairIndex(start);
 
   if (onStair(start)) {
@@ -173,17 +220,15 @@ export function planWorldRoute(
   const currentFloor: OfficeFloor =
     start[1] > UPPER_FLOOR_Y * 0.55 ? 2 : 1;
 
-  if (currentFloor === target.floor)
-    return currentFloor === 1
-      ? groundRoute(start, targetPoint)
-      : upperRouteFromLanding(targetPoint).length
-        ? targetPoint[2] > 2.8 || start[2] > 2.8
-          ? [
-              ...upperRouteToLanding(start).slice(0, -1),
-              ...upperRouteFromLanding(targetPoint),
-            ]
-          : [targetPoint]
-        : [targetPoint];
+  if (currentFloor === target.floor) {
+    if (currentFloor === 1) return groundRoute(start, targetPoint);
+    if (targetPoint[2] > 2.8 || start[2] > 2.8)
+      return [
+        ...upperRouteToLanding(start).slice(0, -1),
+        ...upperRouteFromLanding(targetPoint),
+      ];
+    return [targetPoint];
+  }
 
   if (target.floor === 2)
     return [
