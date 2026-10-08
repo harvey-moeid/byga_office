@@ -180,7 +180,9 @@ export function MeetingStatus({
           ? `${roles[current.character]} sedang berbicara`
           : "Menunggu hasil AI";
   const missing = snapshot?.unavailable ?? [];
-  const showSummary = returning || snapshot?.finished || snapshot?.cancelled;
+  // A completed backend case may still be playing its visual discussion.
+  // Compact only when the visual team is actually returning to their desks.
+  const showSummary = returning || !!snapshot?.cancelled;
   return (
     <div
       className={`meeting-status${showSummary && !expanded ? " meeting-status-compact" : ""}`}
