@@ -381,6 +381,45 @@ describe("two-floor office layout", () => {
     expect(low.position[1]).toBe(0);
   });
 
+  it("routes the L2 Boss through the glass doorway and keeps an unchanged target stationary", () => {
+    const bossIndex = characterIds.indexOf("boss");
+    const office = characterTarget(bossIndex, "MONITORING", 1, true);
+    expect(planWorldRoute(office.position, office)).toEqual([]);
+
+    const meeting = characterTarget(bossIndex, "BOSS_DECISION", 2, true);
+    const route = planWorldRoute(office.position, meeting);
+    const path = [office.position, ...route];
+    const crossings: number[] = [];
+    for (let index = 1; index < path.length; index++) {
+      const from = path[index - 1];
+      const to = path[index];
+      const wallZ = BOSS_OFFICE_LAYOUT.roomMinZ;
+      if (
+        (from[2] - wallZ) * (to[2] - wallZ) <= 0 &&
+        Math.abs(to[2] - from[2]) > 0.001
+      ) {
+        const t = (wallZ - from[2]) / (to[2] - from[2]);
+        crossings.push(from[0] + (to[0] - from[0]) * t);
+      }
+    }
+    expect(crossings.length).toBeGreaterThan(0);
+    expect(
+      crossings.every(
+        (x) =>
+          x > BOSS_OFFICE_LAYOUT.doorMinX &&
+          x < BOSS_OFFICE_LAYOUT.doorMaxX,
+      ),
+    ).toBe(true);
+
+    const deskRight =
+      BOSS_OFFICE_LAYOUT.deskX + BOSS_OFFICE_LAYOUT.deskWidth / 2;
+    const deskBack =
+      BOSS_OFFICE_LAYOUT.deskZ + BOSS_OFFICE_LAYOUT.deskDepth / 2;
+    expect(BOSS_OFFICE_LAYOUT.doorX).toBeGreaterThan(deskRight + 0.2);
+    expect(BOSS_OFFICE_LAYOUT.deskBypassX).toBeGreaterThan(deskRight + 0.2);
+    expect(BOSS_OFFICE_LAYOUT.deskBypassZ).toBeGreaterThan(deskBack + 0.2);
+  });
+
   it("keeps L2 gathering and Boss entry routes inside their presentation windows", () => {
     const routeLength = (
       start: readonly [number, number, number],
