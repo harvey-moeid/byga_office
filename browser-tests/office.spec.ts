@@ -795,7 +795,7 @@ test("meeting HUD condenses analyst failures and expands diagnostic details on m
   await expect(hud.getByRole("link", {name:/Lihat detail case/})).toHaveAttribute("href", "/cases/CASE-meeting-fixture");
   await hud.getByRole("button", {name:/Tutup/}).click();
   await expect(hud).not.toContainText("Provider belum dikonfigurasi");
-  await page.clock.fastForward(70000);
+  await page.clock.fastForward(45000);
   await expect(hud).toHaveClass(/meeting-status-compact/);
   const bounds = await hud.boundingBox();
   expect(bounds).not.toBeNull();
