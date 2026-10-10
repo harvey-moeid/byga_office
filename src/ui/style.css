@@ -767,6 +767,31 @@ p {
 .scene-view-buttons {
   display: flex;
   gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #527c7e transparent;
+  padding: 3px;
+}
+.scene-view-buttons button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.scene-camera-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.scene-camera-actions button,
+.scene-reset {
+  min-width: 40px;
+  flex-shrink: 0;
+}
+.scene-quality small {
+  display: block;
+  color: #d4e9e1;
+  margin-top: 4px;
+  font-size: 9px;
 }
 .scene-controls button[aria-pressed="true"] {
   background: #245849;

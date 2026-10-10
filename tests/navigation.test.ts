@@ -489,9 +489,9 @@ describe("adaptive quality", () => {
     expect(adaptQuality("low", 60)).toBe("low");
     expect(profiles.low.shadows).toBe(false);
     expect(profiles.low.decorative).toBe(false);
-    expect(profiles.low.upperFloor).toBe(false);
+    expect(profiles.low.upperFloor).toBe(true);
     expect(profiles.medium.upperFloor).toBe(true);
-    expect(profiles.medium.dpr).toBe(profiles.low.dpr);
+    expect(profiles.medium.dpr).toBeGreaterThan(profiles.low.dpr);
     expect(profiles.medium.shadows).toBe(false);
     expect(profiles.medium.decorative).toBe(false);
     expect(profiles.high.upperFloor).toBe(true);

@@ -184,7 +184,7 @@ function buildOffice(detail: boolean): Part[] {
   // An open architectural cutaway: the front and roof stay out of the view.
   box([0, 0.48, -7.55], [17.7, 0.96, 0.18], "plaster");
   box([0, 3.18, -7.55], [17.7, 0.34, 0.18], "plaster");
-  box([EAST_OUTER_WALL_X, 1.55, 0], [0.18, 3.1, 15.3], "plaster");
+  box([EAST_OUTER_WALL_X, 0.4, 0], [0.18, 0.8, 15.3], "plaster");
   box([-8.7, 0.35, 0], [0.18, 0.7, 15.3], "plaster");
   for (let i = 0; i < 8; i++) {
     const x = -7.65 + i * 2.18;
