@@ -11,7 +11,9 @@ import {
   PMREMGenerator,
   SRGBColorSpace,
   type WebGLRenderer,
+  type PerspectiveCamera,
 } from "three";
+import { fitOfficeCamera, type CameraBounds } from "./office-camera";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import {
   characterIds,
@@ -95,13 +97,7 @@ function InteriorReflections() {
   return null;
 }
 
-type View =
-  | "overview"
-  | "cinematic"
-  | "floor"
-  | "meeting"
-  | "boss"
-  | "upper";
+type View = "overview" | "cinematic" | "floor" | "meeting" | "boss" | "upper";
 const QUALITY_STORAGE_KEY = "byga:3d-quality";
 const MEETING_VENUE_STORAGE_KEY = "byga:meeting-venue";
 const views: Record<
@@ -114,18 +110,18 @@ const views: Record<
 > = {
   overview: {
     label: "Seluruh kantor",
-    camera: [15.2, 14.6, 19.4],
-    target: [0, 0.55, 0.15],
+    camera: [-18, 18, 24],
+    target: [0, 2.1, 0],
   },
   cinematic: {
     label: "Cinematic",
-    camera: [17.8, 8.9, 15.8],
-    target: [0.9, 0.78, 0.9],
+    camera: [-20, 12, 23],
+    target: [0, 2.1, 0],
   },
   floor: {
     label: "Area analis",
-    camera: [-6.2, 4.6, 0.2],
-    target: [-2.8, 0.9, 0.5],
+    camera: [-11, 8, 10],
+    target: [-3, 0.9, 0],
   },
   meeting: {
     label: "Ruang meeting",
@@ -139,8 +135,8 @@ const views: Record<
   },
   upper: {
     label: "Lantai 2",
-    camera: [14.8, 9.8, 15.6],
-    target: [4.9, 4.05, 0.7],
+    camera: [-7, 12, 13],
+    target: [4.8, 4.8, 0.45],
   },
 };
 function CameraView({
@@ -164,17 +160,30 @@ function CameraView({
         : view === "boss" && upperFloorEnabled
           ? { ...views.boss, ...UPPER_BOSS_VIEW }
           : views[view];
-    const aspect = size.width / size.height;
-    const factor =
-      view === "overview"
-        ? Math.max(1, 1.3 / aspect)
-        : view === "meeting"
-          ? Math.min(2.1, Math.max(1, 1.05 / aspect))
-          : 1;
-    camera.position.set(
-      ...(setting.camera.map(
-        (n, i) => setting.target[i] + (n - setting.target[i]) * factor,
-      ) as [number, number, number]),
+    const upperMeeting =
+      view === "meeting" && meetingFloor === 2 && upperFloorEnabled;
+    const bounds: CameraBounds =
+      view === "overview" || view === "cinematic"
+        ? { min: [-9, -0.55, -8], max: [9, 6.6, 8] }
+        : view === "floor"
+          ? { min: [-7.5, 0, -3.5], max: [1.5, 2.3, 3.5] }
+          : view === "upper"
+            ? { min: [1.7, 3.55, -6.25], max: [8.4, 6.6, 7] }
+            : view === "boss"
+              ? upperFloorEnabled
+                ? { min: [2.05, 3.68, 3.35], max: [6.88, 6.1, 6.82] }
+                : { min: [4, 0, 4], max: [8, 2.5, 7.5] }
+              : upperMeeting
+                ? { min: [2.1, 3.68, -4.5], max: [7.2, 5.8, 0.1] }
+                : { min: [2.6, 0, -1.5], max: [7.4, 2.2, 3.5] };
+    camera.position.copy(
+      fitOfficeCamera(
+        setting.camera,
+        setting.target,
+        bounds,
+        size.width / size.height,
+        (camera as PerspectiveCamera).fov,
+      ),
     );
     controls.current?.target.set(...setting.target);
     // A portrait overview needs more camera distance than a landscape scene.
@@ -373,7 +382,8 @@ export default function OfficeScene({
         setFullscreen(false);
     };
     document.addEventListener("fullscreenchange", syncFullscreen);
-    return () => document.removeEventListener("fullscreenchange", syncFullscreen);
+    return () =>
+      document.removeEventListener("fullscreenchange", syncFullscreen);
   }, []);
   useEffect(() => {
     if (!fullscreen) return;
@@ -634,7 +644,17 @@ export default function OfficeScene({
     },
     [onActivityChange],
   );
-  const antialias = useRef(quality !== "low");
+  const zoomCamera = (factor: number) => {
+    const c = controls.current;
+    if (!c) return;
+    const offset = c.object.position.clone().sub(c.target);
+    const distance = Math.max(
+      c.minDistance,
+      Math.min(c.maxDistance, offset.length() * factor),
+    );
+    c.object.position.copy(c.target).add(offset.setLength(distance));
+    c.update();
+  };
   return (
     <div
       ref={sceneRoot}
@@ -642,6 +662,7 @@ export default function OfficeScene({
       aria-label="Kantor trading 3D interaktif"
       data-meeting-floor={meetingActive ? meetingFloor : undefined}
       data-boss-floor={profile.upperFloor ? 2 : 1}
+      data-camera-view={view}
     >
       <div ref={labelHost} className="scene-label-layer" />
       <div className="scene-title">
@@ -653,7 +674,9 @@ export default function OfficeScene({
         className="scene-fullscreen"
         onClick={toggleFullscreen}
         aria-pressed={fullscreen}
-        aria-label={fullscreen ? "Keluar dari fullscreen 3D" : "Buka fullscreen 3D"}
+        aria-label={
+          fullscreen ? "Keluar dari fullscreen 3D" : "Buka fullscreen 3D"
+        }
         title={fullscreen ? "Keluar fullscreen" : "Fullscreen 3D"}
       >
         <span aria-hidden="true">{fullscreen ? "✕" : "⛶"}</span>
@@ -665,31 +688,32 @@ export default function OfficeScene({
         dpr={profile.dpr}
         camera={{
           position: views.overview.camera,
-          fov: 37,
+          fov: 40,
           near: 0.1,
-          far: 150,
+          far: 300,
         }}
         gl={{
-          antialias: antialias.current,
+          antialias: true,
           toneMapping: ACESFilmicToneMapping,
-          toneMappingExposure: quality === "ultra" ? 1.16 : 1.08,
+          toneMappingExposure: 1.15,
         }}
         onCreated={({ gl }) => {
-          if (qualityMode === "auto" && softwareRendering(gl)) setQuality("low");
+          if (qualityMode === "auto" && softwareRendering(gl))
+            setQuality("low");
           gl.domElement.addEventListener("webglcontextlost", (event) => {
             event.preventDefault();
             window.dispatchEvent(new Event("byga:webgl-lost"));
           });
         }}
       >
-        <color attach="background" args={["#0b1518"]} />
-        <fog attach="fog" args={["#0b1518", 90, 190]} />
-        <hemisphereLight args={["#dfeaf0", "#7d6950", 1.35]} />
-        <ambientLight intensity={0.2} />
+        <color attach="background" args={["#101f26"]} />
+        <fog attach="fog" args={["#101f26", 180, 300]} />
+        <hemisphereLight args={["#e4f2ff", "#bcae96", 1.65]} />
+        <ambientLight intensity={0.35} />
         <directionalLight
           position={[-6, 13, -7]}
-          intensity={2.75}
-          color="#ffe8c7"
+          intensity={2.5}
+          color="#fff0dd"
           castShadow={profile.shadows}
           shadow-mapSize={[profile.shadowSize, profile.shadowSize]}
           shadow-camera-left={-12}
@@ -704,7 +728,7 @@ export default function OfficeScene({
         />
         <directionalLight
           position={[5, 8, 13]}
-          intensity={1.05}
+          intensity={1.5}
           color="#dce8ef"
         />
         <pointLight
@@ -834,7 +858,7 @@ export default function OfficeScene({
           minDistance={4}
           maxDistance={48}
           minPolarAngle={0.3}
-          maxPolarAngle={1.34}
+          maxPolarAngle={1.48}
           enableDamping
           onChange={() => {
             const c = controls.current;
@@ -847,7 +871,7 @@ export default function OfficeScene({
               x,
               Math.max(
                 0.2,
-                Math.min(profile.upperFloor ? 4.6 : 1.5, c.target.y),
+                Math.min(profile.upperFloor ? 5.4 : 1.5, c.target.y),
               ),
               z,
             );
@@ -863,17 +887,29 @@ export default function OfficeScene({
           {(Object.keys(views) as View[])
             .filter((key) => key !== "upper" || profile.upperFloor)
             .map((key) => (
-            <button
-              key={key}
-              aria-pressed={view === key}
-              onClick={() => {
-                setView(key);
-                setReset((v) => v + 1);
-              }}
-            >
-              {views[key].label}
-            </button>
-          ))}
+              <button
+                key={key}
+                aria-pressed={view === key}
+                onClick={() => {
+                  setView(key);
+                  setReset((v) => v + 1);
+                }}
+              >
+                {views[key].label}
+              </button>
+            ))}
+        </div>
+        <div
+          className="scene-camera-actions"
+          role="group"
+          aria-label="Zoom kamera"
+        >
+          <button aria-label="Perbesar kantor" onClick={() => zoomCamera(0.8)}>
+            +
+          </button>
+          <button aria-label="Perkecil kantor" onClick={() => zoomCamera(1.25)}>
+            −
+          </button>
         </div>
         <button
           className="scene-reset"
@@ -887,7 +923,9 @@ export default function OfficeScene({
         </button>
       </div>
       <label className="scene-quality">
-        <span>Kualitas 3D</span>
+        <span>
+          Kualitas 3D <small>2 lantai</small>
+        </span>
         <select
           aria-label="Kualitas 3D"
           value={qualityMode}

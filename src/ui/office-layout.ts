@@ -85,12 +85,12 @@ export const UPPER_MEETING_SEATS = [
 ] as const;
 
 export const LOWER_MEETING_VIEW = {
-  camera: [5, 3.25, 11] as [number, number, number],
+  camera: [-4, 3.25, 8.5] as [number, number, number],
   target: [5, 0.95, 1] as [number, number, number],
 } as const;
 
 export const UPPER_MEETING_VIEW = {
-  camera: [11.4, 7.15, 4.6] as [number, number, number],
+  camera: [-2.5, 9.1, 4.8] as [number, number, number],
   target: [4.65, UPPER_FLOOR_Y + 0.9, -2.2] as [number, number, number],
 } as const;
 
@@ -100,7 +100,7 @@ export const LOWER_BOSS_VIEW = {
 } as const;
 
 export const UPPER_BOSS_VIEW = {
-  camera: [10.4, 7.25, 10.8] as [number, number, number],
+  camera: [-1.5, 8.6, 1.8] as [number, number, number],
   target: [BOSS_OFFICE_LAYOUT.x, UPPER_FLOOR_Y + 0.92, BOSS_OFFICE_LAYOUT.z] as [
     number,
     number,

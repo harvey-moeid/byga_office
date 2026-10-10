@@ -586,9 +586,9 @@ test("Admin reviews ambiguous deliveries with explicit confirmation and no resen
 test("3D renderer mounts rooms and reset controls when WebGL is available", async ({
   page,
 }, testInfo) => {
-  // Software WebGL on CI also renders three camera views, captures the scene,
+  // Software WebGL on CI also renders both floors and camera views, captures the scene,
   // and verifies native context-loss recovery within this single test.
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
@@ -622,9 +622,15 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   const rig = await page.request.get("/models/byga/rigged-office-humanoid.gltf");
   expect(rig.status()).toBe(200);
   await quality.selectOption("low");
-  await expect(
-    page.getByRole("button", { name: "Lantai 2", exact: true }),
-  ).toHaveCount(0);
+  const upstairs = page.getByRole("button", { name: "Lantai 2", exact: true });
+  await expect(upstairs).toBeVisible();
+  await expect(page.locator(".office-scene")).toHaveAttribute("data-boss-floor", "2");
+  await upstairs.click();
+  await expect(upstairs).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Ruang bos", exact: true }).click();
+  await expect(page.locator(".office-scene")).toHaveAttribute("data-camera-view", "boss");
+  await page.getByRole("button", { name: "Perbesar kantor", exact: true }).click();
+  await page.getByRole("button", { name: "Perkecil kantor", exact: true }).click();
   expect(
     await page.evaluate(() => localStorage.getItem("byga:3d-quality")),
   ).toBe("low");
@@ -861,9 +867,19 @@ test("3D speech follows the seated character and opens the actual result detail"
   );
   let meetingEnabled = false;
   await fixtureMeeting(page, () => meetingEnabled);
+  // Low must preserve upstairs routing, camera framing and speech, not just
+  // expose the second-floor navigation button. Alternate from a prior L1 case.
+  await page.addInitScript(() => {
+    localStorage.setItem("byga:3d-quality", "low");
+    localStorage.setItem("byga:meeting-venue", JSON.stringify({
+      caseId: "CASE-previous-meeting", floor: 1,
+    }));
+  });
   await page.goto("/");
   await expect(page.getByRole("button", { name: /Reset View/ })).toBeVisible();
+  await expect(page.getByLabel("Kualitas 3D", { exact: true })).toHaveValue("low");
   meetingEnabled = true;
+  await expect(page.locator(".office-scene")).toHaveAttribute("data-meeting-floor", "2");
   // Poll visibility, capture geometry and click in one browser task. A separate
   // locator assertion followed by a click can miss the seven-second speech
   // window when software WebGL and trace capture delay protocol round-trips.
@@ -948,6 +964,8 @@ test("3D speech follows the seated character and opens the actual result detail"
   await page
     .getByRole("button", { name: "Tutup percakapan", exact: true })
     .click();
+  await page.getByLabel("Kualitas 3D", { exact: true }).selectOption("medium");
+  await expect(page.locator(".office-scene")).toHaveAttribute("data-meeting-floor", "2");
   await openSpeech("Baca percakapan Head Trader");
   await expect(page.getByRole("dialog")).toContainText(
     "Fixture boss: penjelasan lengkap",

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { rooms } from "../src/ui/navigation";
 import { missingRoomSigns, roomSignDefinitions } from "../src/ui/room-sign-layout";
 import { parseQualityMode, profiles } from "../src/ui/quality";
+import { chooseMeetingVenue } from "../src/ui/meeting-venue";
 
 describe("physical signage", () => {
   it("provides one physical marker for every ground-floor room and two upstairs", () => {
@@ -23,11 +24,20 @@ describe("physical signage", () => {
     expect(roomSignDefinitions.filter((sign) => sign.interactive).map((sign) => sign.id))
       .toEqual(["Server / Data"]);
   });
-  it("preserves the low single-floor and medium two-floor profiles", () => {
-    expect(profiles.low.upperFloor).toBe(false);
+  it("retains both floors while Low limits effects and pixel density", () => {
+    expect(profiles.low.upperFloor).toBe(true);
     expect(profiles.medium.upperFloor).toBe(true);
     expect(profiles.medium.shadows).toBe(false);
-    expect(profiles.medium.dpr).toBe(1);
+    expect(profiles.low.dpr).toBe(1);
+    expect(profiles.low.shadows).toBe(false);
+    expect(profiles.low.decorative).toBe(false);
+  });
+  it("keeps an active upstairs meeting on the same floor across quality changes", () => {
+    for (const profile of Object.values(profiles)) {
+      expect(chooseMeetingVenue("CASE-upstairs", profile.upperFloor, {
+        caseId: "CASE-upstairs", floor: 2,
+      })).toEqual({ caseId: "CASE-upstairs", floor: 2 });
+    }
   });
 });
 
