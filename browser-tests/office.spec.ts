@@ -864,37 +864,60 @@ test("3D speech follows the seated character and opens the actual result detail"
   await page.goto("/");
   await expect(page.getByRole("button", { name: /Reset View/ })).toBeVisible();
   meetingEnabled = true;
-  const bubble = page.locator(".meeting-bubble").filter({ hasText: "Trend Analyst" });
-  await expect(bubble).toBeVisible({ timeout: 60000 });
-  // Capture geometry and open the finite-lived bubble in the same browser
-  // task. Software WebGL can make separate Playwright round-trips slow enough
-  // for the seven-second speech turn to advance before the click is sent.
-  const geometry = await bubble.evaluate((element) => {
-    const rect = (node: Element) => {
-      const value = node.getBoundingClientRect();
-      return {
-        x: value.x,
-        y: value.y,
-        width: value.width,
-        height: value.height,
-      };
-    };
-    const overlays = [
-      ".meeting-status",
-      ".home-hud > div",
-      ".home-hud .segmented",
-      ".scene-controls",
-      ".scene-quality",
-    ]
-      .map((selector) => document.querySelector(selector))
-      .filter((node): node is Element => !!node)
-      .map(rect);
-    const bubbleBounds = rect(element);
-    element.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true }),
+  // Poll visibility, capture geometry and click in one browser task. A separate
+  // locator assertion followed by a click can miss the seven-second speech
+  // window when software WebGL and trace capture delay protocol round-trips.
+  const openSpeech = async (label: string) => {
+    const handle = await page.waitForFunction(
+      (label) => {
+        const element = Array.from(
+          document.querySelectorAll<HTMLButtonElement>(".meeting-bubble"),
+        ).find((node) => node.getAttribute("aria-label") === label);
+        if (
+          !element?.checkVisibility({
+            checkOpacity: true,
+            checkVisibilityCSS: true,
+          })
+        )
+          return;
+        const rect = (node: Element) => {
+          const value = node.getBoundingClientRect();
+          return {
+            x: value.x,
+            y: value.y,
+            width: value.width,
+            height: value.height,
+          };
+        };
+        const overlays = [
+          ".meeting-status",
+          ".home-hud > div",
+          ".home-hud .segmented",
+          ".scene-controls",
+          ".scene-quality",
+        ]
+          .map((selector) => document.querySelector(selector))
+          .filter((node): node is Element => !!node)
+          .map(rect);
+        const bubbleBounds = rect(element);
+        if (bubbleBounds.width === 0 || bubbleBounds.height === 0) return;
+        element.dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+        return { bubbleBounds, overlays };
+      },
+      label,
+      { timeout: 60000, polling: 100 },
     );
-    return { bubbleBounds, overlays };
-  });
+    try {
+      const geometry = await handle.jsonValue();
+      if (!geometry) throw new Error("Visible speech did not yield geometry");
+      return geometry;
+    } finally {
+      await handle.dispose();
+    }
+  };
+  const geometry = await openSpeech("Baca percakapan Trend Analyst");
   const viewport = page.viewportSize()!;
   const { bubbleBounds } = geometry;
   expect(bubbleBounds.x).toBeGreaterThanOrEqual(8);
@@ -925,11 +948,7 @@ test("3D speech follows the seated character and opens the actual result detail"
   await page
     .getByRole("button", { name: "Tutup percakapan", exact: true })
     .click();
-  const boss = page.locator(".meeting-bubble").filter({ hasText: "Head Trader" });
-  await expect(boss).toBeVisible({ timeout: 60000 });
-  // Speech bubbles remain screen-clamped while following animated characters.
-  // dispatchEvent avoids waiting for a perfectly stable transform on software WebGL.
-  await boss.dispatchEvent("click");
+  await openSpeech("Baca percakapan Head Trader");
   await expect(page.getByRole("dialog")).toContainText(
     "Fixture boss: penjelasan lengkap",
   );

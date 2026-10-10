@@ -2,6 +2,8 @@
 
 Perbaikan ini menutup sembilan temuan backend (B1–B9) dan sembilan temuan frontend (F1–F9) dari audit workspace. Kode trading yang diperbaiki sebelumnya tetap dipertahankan. Pengujian menggunakan Worker/workerd dan D1 lokal terisolasi; perubahan belum diterapkan ke produksi.
 
+Run GitHub PR #36 berikutnya menemukan race pada klik bubble Head Trader 3D desktop (86/87 lulus). Diagnosis, perbaikan harness dan batas validasi versi Chromium dicatat pada [regresi browser CI](CI_BROWSER_REGRESSION.md). Tabel validasi awal di bawah tetap mencatat hasil lokal sebelum follow-up tersebut.
+
 ## Kontrak dan alur UI
 
 Frontend memakai URL relatif `/api/v1`, cookie `same-origin`, dan JSON untuk POST. Produksi menyajikan UI/API pada origin yang sama. Vite meneruskan `/api` ke `http://127.0.0.1:8787` secara default; `BYGA_API_URL` dapat mengganti target proxy di lingkungan pengembangan/pengujian. Variabel ini digunakan oleh konfigurasi Vite di server, bukan kredensial dalam bundle browser.
