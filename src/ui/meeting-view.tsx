@@ -2,13 +2,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { CharacterId } from "../core/contracts";
 import type { MeetingSnapshot, MeetingTurn } from "../core/meeting";
 import { Link } from "react-router-dom";
-import { useData } from "./data";
+import { authExpiredEvent, useData } from "./data";
 import { advanceMeeting, speechExcerpt, type MeetingPlayback } from "./meeting";
 import { roles } from "./shared";
-import {
-  characterPeekCopy,
-  type CharacterPresence,
-} from "./character-state";
+import { characterPeekCopy, type CharacterPresence } from "./character-state";
 import type { CharacterMotion } from "./character-motion";
 
 export function useMeetingPresentation(render3D: boolean) {
@@ -19,6 +16,12 @@ export function useMeetingPresentation(render3D: boolean) {
   const snapshot = data.data?.meeting ?? null;
   const [playback, setPlayback] = useState<MeetingPlayback>();
   const [detail, setDetail] = useState<MeetingTurn>();
+  useEffect(() => {
+    const clearPrivateDetail = () => setDetail(undefined);
+    window.addEventListener(authExpiredEvent, clearPrivateDetail);
+    return () =>
+      window.removeEventListener(authExpiredEvent, clearPrivateDetail);
+  }, []);
   const visibleSpeakers = useRef(new Set<CharacterId>());
   const onSpeechReady = useCallback((id: CharacterId, visible: boolean) => {
     const wasVisible = visibleSpeakers.current.has(id);
@@ -37,6 +40,7 @@ export function useMeetingPresentation(render3D: boolean) {
       if (document.hidden || (detail && !snapshot?.cancelled)) return;
       setPlayback((previous) =>
         render3D &&
+        !snapshot?.cancelled &&
         previous?.phase === "speaking" &&
         previous.speaker &&
         !visibleSpeakers.current.has(previous.speaker)
@@ -101,7 +105,9 @@ export function CharacterPeekBubble({
     >
       <strong>
         {roles[character]}
-        <span className="character-peek-status">{presence.replaceAll("_", " ")}</span>
+        <span className="character-peek-status">
+          {presence.replaceAll("_", " ")}
+        </span>
       </strong>
       <span className="character-peek-group">{group}</span>
       {turn ? (
@@ -109,10 +115,14 @@ export function CharacterPeekBubble({
           <span className={`speech-vote ${voteClass}`}>
             {turn.analysis.vote} · {turn.analysis.confidence}%
           </span>
-          <span className="speech-text">{speechExcerpt(turn.analysis.summary)}</span>
+          <span className="speech-text">
+            {speechExcerpt(turn.analysis.summary)}
+          </span>
         </>
       ) : (
-        <span className="speech-text">{characterPeekCopy(presence, motion)}</span>
+        <span className="speech-text">
+          {characterPeekCopy(presence, motion)}
+        </span>
       )}
       <small>Ketuk untuk info karakter</small>
     </button>
@@ -171,7 +181,9 @@ export function MeetingStatus({
   if (!active && !error) return null;
 
   const label = returning
-    ? snapshot?.cancelled ? "Meeting dihentikan · kembali ke meja" : "Meeting ditutup · kembali ke meja"
+    ? snapshot?.cancelled
+      ? "Meeting dihentikan · kembali ke meja"
+      : "Meeting ditutup · kembali ke meja"
     : playback?.phase === "boss-entering"
       ? "Bos masuk untuk menutup meeting"
       : playback?.phase === "gathering"
@@ -200,7 +212,8 @@ export function MeetingStatus({
             aria-controls="meeting-status-details"
             onClick={() => setExpanded((value) => !value)}
           >
-            {expanded ? "Tutup" : "Detail"} <span aria-hidden="true">{expanded ? "⌃" : "⌄"}</span>
+            {expanded ? "Tutup" : "Detail"}{" "}
+            <span aria-hidden="true">{expanded ? "⌃" : "⌄"}</span>
           </button>
         )}
       </div>
@@ -212,17 +225,27 @@ export function MeetingStatus({
       )}
       {missing.length > 0 && (
         <>
-          <div className="meeting-status-warning" aria-label={`${missing.length} hasil analis tidak tersedia`}>
-            <span aria-hidden="true">⚠</span> {missing.length} hasil AI tidak tersedia
+          <div
+            className="meeting-status-warning"
+            aria-label={`${missing.length} hasil analis tidak tersedia`}
+          >
+            <span aria-hidden="true">⚠</span> {missing.length} hasil AI tidak
+            tersedia
           </div>
           {expanded && (
             <div id="meeting-status-details" className="meeting-status-details">
-              <p>Output gagal atau tidak lolos validasi. Hasil tersebut tidak dihitung sebagai suara.</p>
+              <p>
+                Output gagal atau tidak lolos validasi. Hasil tersebut tidak
+                dihitung sebagai suara.
+              </p>
               <ul>
                 {missing.map((id) => (
                   <li key={id}>
                     <strong>{roles[id]}</strong>
-                    <span>{snapshot?.failureReasons?.[id] ?? "Periksa detail case dan log provider"}</span>
+                    <span>
+                      {snapshot?.failureReasons?.[id] ??
+                        "Periksa detail case dan log provider"}
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -235,7 +258,11 @@ export function MeetingStatus({
           )}
         </>
       )}
-      {error && <button type="button" onClick={retry}>Coba lagi</button>}
+      {error && (
+        <button type="button" onClick={retry}>
+          Coba lagi
+        </button>
+      )}
     </div>
   );
 }

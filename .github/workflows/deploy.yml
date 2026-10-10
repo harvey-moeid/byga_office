@@ -39,7 +39,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 30
     environment: ${{ inputs.environment || 'production' }}
     env:
       CI: "true"
@@ -94,6 +94,8 @@ jobs:
         run: |
           npx playwright install --with-deps chromium
           npm run test:browser -- --workers=1
+      - name: Browser to Worker and D1 integration
+        run: npm run test:browser:integration
       - name: Generate verified environment configuration
         run: |
           node scripts/configure.mjs

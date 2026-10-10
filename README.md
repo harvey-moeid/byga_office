@@ -12,10 +12,10 @@ Use the existing checkout; cloud tasks are already isolated, so no Git worktree 
 npm ci --cache /tmp/byga-npm-cache
 npm run db:migrate
 npm run build
-npm run dev:api
+npm run dev:api -- --local
 ```
 
-The Worker serves the built frontend and versioned API together on port 8787. For frontend hot reload, run `npm run dev` in another terminal (port 5173, API proxy to 8787). Local development origins are explicitly allowlisted; staging/production mutations require the exact configured `PUBLIC_ORIGIN`.
+The Worker serves the built frontend and versioned API together on port 8787. `--local` disables remote bindings so read-only development does not require a Cloudflare token; real Workers AI inference requires the authenticated remote binding workflow. For frontend hot reload, run `npm run dev` in another terminal (port 5173, API proxy to 8787). Local development origins are explicitly allowlisted; staging/production mutations require the exact configured `PUBLIC_ORIGIN`.
 
 The default Wrangler IDs are **local-only placeholders**. Local `chart_db` is empty until populated. To explore with clearly labelled synthetic candles:
 
@@ -29,12 +29,16 @@ For Admin access, copy `.env.example` to the ignored `.dev.vars`. Generate a pas
 
 ## Verification
 
+Perbaikan sinkronisasi frontend/API dan penutupan temuan audit didokumentasikan pada [kontrak UI–API](docs/API_UI_CONTRACT.md). Migration `0006_admin_operations.sql` diperlukan untuk jurnal idempotensi config. Pengujian browser ke Worker/D1 lokal sebenarnya tersedia melalui `npm run test:browser:integration`.
+
 ```sh
 npm run check
 npm run deploy:check
 ```
 
 `check` runs strict TypeScript, ESLint, unit/integration tests, and the frontend build. Integration tests execute real workerd/D1/Durable Objects in isolated Miniflare storage, intercept outbound providers, and never use real AI keys/webhooks. No browser or production integration is implied by passing these tests.
+
+See [trading safety corrections](docs/TRADING_SAFETY.md) for queue ownership, cooldown, snapshot validity, Emergency authority, delayed cron scans, tick-normalized risk and configuration invariants.
 
 ```sh
 PLAYWRIGHT_BROWSERS_PATH=/tmp/byga-browsers npx playwright install chromium

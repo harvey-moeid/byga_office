@@ -1,12 +1,13 @@
 import { Suspense, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { formatWib } from "../core/contracts";
-import { api, useData } from "./data";
+import { useData, useOperationIntent } from "./data";
 import {
   Badge,
   Empty,
   Heading,
   Notice,
+  PendingOperation,
   OfficeScene,
   SceneBoundary,
   roles,
@@ -14,32 +15,48 @@ import {
 } from "./shared";
 export default function Simulation() {
   const navigate = useNavigate();
-  const [date, setDate] = useState(""),
-    [configMode, setConfigMode] = useState("CURRENT"),
-    [version, setVersion] = useState(""),
-    [replay, setReplay] = useState("COMPATIBLE"),
-    [historical, setHistorical] = useState(""),
-    [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
-  const start = async () => {
-    setBusy(true);
+  const operation = useOperationIntent("simulation");
+  const saved = operation.pending?.payload;
+  const savedTimestamp =
+    typeof saved?.timestamp === "number" && Number.isFinite(saved.timestamp)
+      ? saved.timestamp
+      : undefined;
+  const [date, setDate] = useState(
+      savedTimestamp
+        ? new Date(savedTimestamp + 7 * 3600000).toISOString().slice(0, 16)
+        : "",
+    ),
+    [configMode, setConfigMode] = useState(
+      saved?.configMode === "HISTORICAL" ? "HISTORICAL" : "CURRENT",
+    ),
+    [version, setVersion] = useState(
+      typeof saved?.configVersion === "string" ? saved.configVersion : "",
+    ),
+    [replay, setReplay] = useState(
+      saved?.replayMode === "STRICT" ? "STRICT" : "COMPATIBLE",
+    ),
+    [historical, setHistorical] = useState(
+      typeof saved?.historicalCaseId === "string" ? saved.historicalCaseId : "",
+    ),
+    [error, setError] = useState("");
+  const start = async (retry = false) => {
     setError("");
     try {
-      const row = await api<{ id: string }>("/admin/simulation", {
+      const payload = {
         timestamp: Date.parse(
           `${date}${date.length === 16 ? ":00" : ""}+07:00`,
         ),
         configMode,
-        configVersion: version || undefined,
+        ...(version ? { configVersion: version } : {}),
         replayMode: replay,
-        historicalCaseId: historical || undefined,
-        idempotencyKey: crypto.randomUUID(),
-      });
+        ...(historical ? { historicalCaseId: historical } : {}),
+      };
+      const row = retry
+        ? await operation.retry<{ id: string }>("/admin/simulation")
+        : await operation.send<{ id: string }>("/admin/simulation", payload);
       navigate(`/simulation/${row.id}`);
     } catch (e) {
       setError((e as Error).message);
-    } finally {
-      setBusy(false);
     }
   };
   return (
@@ -55,53 +72,72 @@ export default function Simulation() {
         }
       />
       <section className="panel form">
-        <label>
-          Historical cutoff (WIB / Asia/Jakarta)
-          <input
-            type="datetime-local"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-        </label>
-        <label>
-          Trading config
-          <select
-            value={configMode}
-            onChange={(e) => setConfigMode(e.target.value)}
-          >
-            <option>CURRENT</option>
-            <option>HISTORICAL</option>
-          </select>
-        </label>
-        {configMode === "HISTORICAL" && (
+        <fieldset
+          className="editor-fields"
+          disabled={operation.busy || !!operation.pending}
+        >
           <label>
-            Version
+            Historical cutoff (WIB / Asia/Jakarta)
             <input
-              value={version}
-              onChange={(e) => setVersion(e.target.value)}
-              placeholder="TRADING-CONFIG-v1"
+              type="datetime-local"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
             />
           </label>
-        )}
-        <label>
-          Replay mode
-          <select value={replay} onChange={(e) => setReplay(e.target.value)}>
-            <option>COMPATIBLE</option>
-            <option>STRICT</option>
-          </select>
-        </label>
-        {replay === "STRICT" && (
           <label>
-            Historical Case ID
-            <input
-              value={historical}
-              onChange={(e) => setHistorical(e.target.value)}
-            />
+            Trading config
+            <select
+              value={configMode}
+              onChange={(e) => setConfigMode(e.target.value)}
+            >
+              <option>CURRENT</option>
+              <option>HISTORICAL</option>
+            </select>
           </label>
-        )}
+          {configMode === "HISTORICAL" && (
+            <label>
+              Version
+              <input
+                value={version}
+                onChange={(e) => setVersion(e.target.value)}
+                placeholder="TRADING-CONFIG-v1"
+              />
+            </label>
+          )}
+          <label>
+            Replay mode
+            <select value={replay} onChange={(e) => setReplay(e.target.value)}>
+              <option>COMPATIBLE</option>
+              <option>STRICT</option>
+            </select>
+          </label>
+          {replay === "STRICT" && (
+            <label>
+              Historical Case ID
+              <input
+                value={historical}
+                onChange={(e) => setHistorical(e.target.value)}
+              />
+            </label>
+          )}
+        </fieldset>
         <Notice error={error} />
-        <button className="primary" disabled={!date || busy} onClick={start}>
-          {busy ? "Memulai…" : "Run simulation"}
+        <PendingOperation
+          operation={operation}
+          retry={() => void start(true)}
+        />
+        <button
+          className="primary"
+          disabled={
+            !date ||
+            operation.busy ||
+            !!operation.pending ||
+            (configMode === "HISTORICAL" && !version) ||
+            (replay === "STRICT" && !historical)
+          }
+          onClick={() => void start()}
+        >
+          {operation.busy ? "Memulai…" : "Run simulation"}
         </button>
       </section>
     </>

@@ -1,10 +1,75 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { api } from "../src/ui/data";
+import { api, ApiError, authExpiredEvent } from "../src/ui/data";
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 describe("API client resilience", () => {
+  it("preserves HTTP error identity and expires auth before decoding a gateway response", async () => {
+    vi.stubGlobal("navigator", { onLine: true });
+    const events = new EventTarget(),
+      expired = vi.fn();
+    events.addEventListener(authExpiredEvent, expired);
+    vi.stubGlobal("window", events);
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          new Response("unauthorized gateway", { status: 401 }),
+        ),
+    );
+    await expect(api("/admin/cases")).rejects.toMatchObject({
+      status: 401,
+      ambiguous: false,
+    });
+    expect(expired).toHaveBeenCalledOnce();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json({ error: "Wrong password" }, { status: 401 }),
+        ),
+    );
+    await expect(
+      api("/auth/login", { password: "wrong" }),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(expired).toHaveBeenCalledOnce();
+  });
+  it("classifies uncertain outcomes and rejects malformed successful envelopes", async () => {
+    vi.stubGlobal("navigator", { onLine: true });
+    expect(new ApiError("offline", 0).ambiguous).toBe(true);
+    expect(new ApiError("failed", 503).ambiguous).toBe(true);
+    expect(new ApiError("quota", 400).ambiguous).toBe(false);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json(null)));
+    await expect(api("/admin/config", {})).rejects.toMatchObject({
+      status: 502,
+      code: "INVALID_RESPONSE",
+      ambiguous: true,
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          Response.json(
+            {
+              error: "Input validation failed",
+              code: "VALIDATION_FAILED",
+              details: { fieldErrors: { config: ["Must total 100"] } },
+            },
+            { status: 400 },
+          ),
+        ),
+    );
+    await expect(api("/admin/config", {})).rejects.toMatchObject({
+      status: 400,
+      code: "VALIDATION_FAILED",
+      message: "Must total 100",
+      ambiguous: false,
+    });
+  });
   it("preserves POST bodies and credentials without exposing network errors", async () => {
     vi.stubGlobal("navigator", { onLine: true });
     const fetcher = vi.fn().mockResolvedValue(Response.json({ ok: true }));

@@ -1,4 +1,5 @@
-import React, { Component, lazy } from "react";
+import React, { Component, lazy, useEffect, useRef } from "react";
+import type { useOperationIntent } from "./data";
 export const OfficeScene = lazy(() => import("./scene"));
 export const roles: Record<string, string> = {
   trend: "Trend Analyst",
@@ -37,6 +38,77 @@ export function Notice({
 }
 export function Empty({ children }: { children: React.ReactNode }) {
   return <div className="empty">{children}</div>;
+}
+export function PendingOperation({
+  operation,
+  retry,
+}: {
+  operation: ReturnType<typeof useOperationIntent>;
+  retry: () => void;
+}) {
+  if (!operation.pending || operation.busy) return null;
+  return (
+    <div className="notice" role="status">
+      <span>
+        Hasil permintaan sebelumnya belum pasti. Ulangi permintaan yang sama
+        untuk memeriksa hasil tanpa membuat pekerjaan ganda.
+      </span>
+      <button onClick={retry}>Coba ulang permintaan</button>
+      <button onClick={operation.startNew}>Buat permintaan baru</button>
+    </div>
+  );
+}
+export function InfoDialog({
+  children,
+  onClose,
+  titleId,
+}: {
+  children: React.ReactNode;
+  onClose: () => void;
+  titleId: string;
+}) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const opener = useRef<HTMLElement | null>(
+    document.activeElement as HTMLElement | null,
+  );
+  useEffect(() => {
+    opener.current ??= document.activeElement as HTMLElement | null;
+    if (dialog.current && !dialog.current.open) dialog.current.showModal();
+    return () => {
+      queueMicrotask(() => opener.current?.focus());
+    };
+  }, []);
+  return (
+    <dialog
+      ref={dialog}
+      className="modal"
+      aria-labelledby={titleId}
+      onCancel={onClose}
+      onClose={onClose}
+      onKeyDown={(event) => {
+        if (event.key !== "Tab") return;
+        const focusable = Array.from(
+          event.currentTarget.querySelectorAll<HTMLElement>(
+            'button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]',
+          ),
+        ).filter((element) => element.getClientRects().length > 0);
+        const first = focusable[0],
+          last = focusable.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div onClick={(event) => event.stopPropagation()}>{children}</div>
+    </dialog>
+  );
 }
 export function Heading({
   eyebrow,

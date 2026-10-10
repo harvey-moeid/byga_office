@@ -1,10 +1,46 @@
 import { test, expect, type Page } from "@playwright/test";
 import type { MeetingSnapshot } from "../src/core/meeting";
 import {
+  caseStopMessage,
   defaultConfig,
   defaultCharacters,
   workersAIModel,
 } from "../src/core/contracts";
+test("stopped cases explain why no signal was published", async ({ page }) => {
+  await page.route("**/api/v1/auth/session", route => route.fulfill({ json: { admin: false } }));
+  await page.route("**/api/v1/cases/CASE-stale/public", route => route.fulfill({ json: {
+    id: "CASE-stale", status: "STALE", direction: "BUY", source: "AUTO",
+    created_at: Date.now(), updated_at: Date.now(), signal: null, analysts: [],
+    stop_reason: caseStopMessage("MARKET_CHANGED_DURING_ANALYSIS"),
+  } }));
+  await page.goto("/cases/CASE-stale");
+  await expect(page.getByRole("status")).toContainText("Data candle berubah selama analisis. Sinyal tidak diterbitkan.");
+  await expect(page.getByText("Preferred Entry", { exact: true })).toHaveCount(0);
+});
+test("stale cases close meetings even when the 3D speaker has not become visible", async ({ page }) => {
+  // Keep the actual meeting hook and UI, while simulating a renderer that has
+  // not reported a visible speaker yet. No GPU timing is involved in this case.
+  await page.addInitScript(() => {
+    HTMLCanvasElement.prototype.getContext = (() => ({ getExtension: () => null })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+  });
+  await page.route("**/src/ui/scene.tsx*", (route) => route.fulfill({
+    contentType: "application/javascript",
+    body: "export default function OfficeScene() { return null; }",
+  }));
+  await page.clock.install();
+  const snapshot = await fixtureMeeting(page);
+  await page.goto("/");
+  await expect(page.getByText("Tim menuju ruang meeting", { exact: true })).toBeVisible();
+  await page.clock.fastForward(15000);
+  await expect(page.getByText("Trend Analyst sedang berbicara", { exact: true })).toBeVisible();
+  await expect(page.locator(".meeting-bubble")).toHaveCount(0);
+  snapshot.status = "STALE";
+  snapshot.cancelled = true;
+  await page.clock.fastForward(5500);
+  await expect(page.getByText("Meeting dihentikan · kembali ke meja", { exact: true })).toBeVisible();
+  await page.clock.fastForward(8500);
+  await expect(page.locator(".meeting-status")).toHaveCount(0);
+});
 test("Admin and Simulation modules load only when their routes are opened", async ({
   page,
 }) => {

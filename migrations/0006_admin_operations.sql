@@ -1,0 +1,1 @@
+CREATE TABLE admin_operations (key TEXT PRIMARY KEY,payload_hash TEXT NOT NULL,response TEXT NOT NULL CHECK(json_valid(response)),created_at INTEGER NOT NULL,guard INTEGER NOT NULL DEFAULT 1 CHECK(guard=1));

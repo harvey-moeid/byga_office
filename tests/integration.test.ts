@@ -77,7 +77,7 @@ async function done(id: string) {
       };
       context: unknown;
     };
-    if (["COMPLETED", "NO_CONSENSUS", "FAILED"].includes(c.status)) return c;
+    if (["COMPLETED", "NO_CONSENSUS", "FAILED", "STALE"].includes(c.status)) return c;
     await new Promise((r) => setTimeout(r, 30));
   }
   throw new Error(`Case did not finish: ${id}`);
@@ -209,8 +209,10 @@ beforeAll(async () => {
     ["M15", 900000],
     ["M5", 300000],
   ] as const) {
-    const latest =
-      Math.floor((now - duration - 5000) / duration) * duration + 2 * duration;
+    // Keep a stable closed snapshot for this workflow suite even if wall time
+    // crosses a five-minute boundary. Candle-change rejection is exercised by
+    // trading-safety.test.ts; these cancellation assertions require no change.
+    const latest = now - duration - 5000 + 2 * duration;
     const statements = Array.from({ length: 320 }, (_, i) => {
       const close = 100 + Math.sin(i / 8) * 8 + i * 0.02;
       return market
@@ -1230,9 +1232,12 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     const db = await mf.getD1Database("DB");
     const original = (await db
       .prepare(
-        "SELECT c.* FROM cases c WHERE c.status='COMPLETED' AND c.mode='LIVE' ORDER BY (SELECT COUNT(*) FROM ai_character_outputs a WHERE a.case_uuid=c.uuid) DESC LIMIT 1",
+        "SELECT c.* FROM cases c WHERE c.status='COMPLETED' AND c.mode='LIVE' ORDER BY (SELECT COUNT(*) FROM ai_character_outputs a WHERE a.case_uuid=c.uuid) DESC, c.created_at DESC LIMIT 1",
       )
       .first())!;
+    // Recover a still-current snapshot; earlier fixtures deliberately replaced
+    // the market. Old market snapshots now correctly terminate as STALE.
+    scenario = JSON.parse(original.result as string).signal.direction;
     const uuid = crypto.randomUUID();
     const id = "CASE-RECOVERY-FIXTURE";
     await db

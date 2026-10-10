@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { z } from "zod";
 import {
   analysisGroups,
+  analysisSchema,
   characterIds,
   characterSchema,
   configSchema,
@@ -37,11 +38,19 @@ import {
   scan,
   voting,
 } from "../core/engine";
-import { json } from "./auth";
+import { digest, json } from "./auth";
+import { configWriteSchema, type ConfigWriteResult } from "../core/api";
+import {
+  errorResponse,
+  HttpError,
+  methodNotAllowed,
+  readJsonObject,
+} from "./http";
 import type { Env } from "./env";
 import { chartSchema, readDerivatives, readMarket } from "./market";
 import {
   circuitResult,
+  characterSemanticErrors,
   circuitState,
   defaultPolicy,
   discoverModels,
@@ -64,7 +73,9 @@ interface CaseContext {
   focus: Direction;
   context_compressed: boolean;
   tick_size: number;
+  market_read_at?: number;
   strict_replay?: boolean;
+  request?: unknown;
 }
 export interface CaseRow {
   uuid: string;
@@ -96,8 +107,15 @@ const simulationSchema = z.object({
 });
 export class Office extends DurableObject<Env> {
   private queue: Promise<unknown> = Promise.resolve();
+  private alarmTask?: Promise<void>;
+  private readonly mode: CaseRow["mode"];
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    // Durable Object identity, not mutable storage, owns the queue partition.
+    if (ctx.id.equals(env.OFFICE.idFromName(`${MARKET}:simulation`)))
+      this.mode = "SIMULATION";
+    else if (ctx.id.equals(env.OFFICE.idFromName(MARKET))) this.mode = "LIVE";
+    else throw new Error("Unknown office actor identity");
     ctx.blockConcurrencyWhile(async () => {
       if (!(await ctx.storage.get("initialized"))) {
         await env.DB.prepare(
@@ -125,6 +143,13 @@ export class Office extends DurableObject<Env> {
           ).bind(c.prompt_version, c.id, JSON.stringify(c), Date.now()),
         ]);
       }
+      const queued = await env.DB.prepare(
+        "SELECT uuid FROM cases WHERE mode=? AND status='QUEUED' LIMIT 1",
+      )
+        .bind(this.mode)
+        .first();
+      if (queued && !(await ctx.storage.getAlarm()))
+        await ctx.storage.setAlarm(Date.now() + 1000);
     });
   }
   private async config(version?: string) {
@@ -183,41 +208,91 @@ export class Office extends DurableObject<Env> {
     return `${prefix}-${day}-${String(sequence).padStart(4, "0")}`;
   }
   async fetch(request: Request): Promise<Response> {
-    const action = () => this.route(request);
+    try {
+      const path = new URL(request.url).pathname;
+      // External diagnostics must never own the business mutation queue while
+      // awaiting a provider. Snapshot reads remain available during all writes.
+      if (
+        (request.method === "GET" &&
+          [
+            "/state",
+            "/config",
+            "/characters",
+            "/providers",
+            "/prompts",
+            "/diagnostics",
+          ].includes(path)) ||
+        ["/models", "/test-provider"].includes(path)
+      )
+        return await this.route(request);
+      return await this.serial(() => this.route(request));
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === "Daily AI case budget reached"
+      )
+        return json({ error: error.message, code: "CASE_BUDGET_REACHED" }, 400);
+      return errorResponse(error);
+    }
+  }
+  private serial<T>(action: () => Promise<T>): Promise<T> {
     const next = this.queue.then(action, action);
     this.queue = next.catch(() => {});
-    try {
-      return await next;
-    } catch (error) {
-      return json(
-        {
-          error:
-            error instanceof z.ZodError
-              ? error.flatten()
-              : error instanceof Error
-                ? error.message
-                : "Operation failed",
-        },
-        400,
-      );
-    }
+    return next;
   }
   private async route(request: Request): Promise<Response> {
     const path = new URL(request.url).pathname;
+    if (
+      (path === "/simulation" && this.mode !== "SIMULATION") ||
+      ([
+        "/tick",
+        "/schedule",
+        "/emergency",
+        "/config",
+        "/characters",
+        "/rollback",
+      ].includes(path) &&
+        (request.method !== "GET" ||
+          ["/tick", "/schedule", "/emergency"].includes(path)) &&
+        this.mode !== "LIVE")
+    )
+      return json({ error: "Operation belongs to another office actor" }, 409);
     if (path === "/wake") {
-      await this.ctx.storage.setAlarm(Date.now() + 1000);
+      await this.scheduleAlarm(Date.now() + 1000);
       return json({ ok: true });
     }
     if (path === "/tick") {
+      if (request.method !== "POST") return methodNotAllowed(["POST"]);
       await this.tick();
       return json({ ok: true });
     }
+    if (path === "/schedule") {
+      const { scheduledTime } = z
+        .object({ scheduledTime: z.number().int().nonnegative() })
+        .parse(await request.json());
+      const { config } = await this.config();
+      const due = Math.max(
+        Date.now() + 1,
+        scheduledTime + config.processingDelaySeconds * 1000,
+      );
+      const pending = await this.ctx.storage.get<number>("pending_tick");
+      // Retain the earliest unconsumed event when cron delivery is repeated.
+      await this.ctx.storage.put(
+        "pending_tick",
+        Math.min(pending ?? Infinity, due),
+      );
+      const currentAlarm = await this.ctx.storage.getAlarm();
+      await this.scheduleAlarm(Math.min(currentAlarm ?? Infinity, due));
+      return json({ ok: true, scan_after: due });
+    }
     if (path === "/state") {
+      const observed_at = Date.now();
       const { config } = await this.config();
       const active = await this.env.DB.prepare(
         "SELECT id,status FROM cases WHERE mode='LIVE' AND status IN ('REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED') ORDER BY created_at LIMIT 1",
       ).first();
       return json({
+        observed_at,
         scanner_consensus_min: config.scannerConsensusMin,
         group_names: analysisGroups,
         group_consensus_min: config.scannerConsensusMin,
@@ -228,9 +303,15 @@ export class Office extends DurableObject<Env> {
         last_processed_candle: await this.ctx.storage.get(
           "last_processed_candle",
         ),
-        error: (await this.ctx.storage.get("market_error")) ?? null,
+        error: (await this.ctx.storage.get("market_error"))
+          ? "MARKET_UNAVAILABLE"
+          : null,
       });
     }
+    if (path === "/diagnostics" && request.method === "GET")
+      return json({
+        market_error: (await this.ctx.storage.get("market_error")) ?? null,
+      });
     if (path === "/config" && request.method === "GET") {
       const active = await this.config();
       const versions = await this.env.DB.prepare(
@@ -239,34 +320,45 @@ export class Office extends DurableObject<Env> {
       return json({ ...active, versions: versions.results });
     }
     if (path === "/config") {
-      const body = z
-        .object({
-          config: configSchema,
-          activation: z.enum(["NEXT CASE", "APPLY NOW"]),
-          confirmed: z.boolean().optional(),
-        })
-        .parse(await request.json());
+      const body = configWriteSchema.parse(await readJsonObject(request));
       if (body.activation === "APPLY NOW" && !body.confirmed)
         return json({ error: "APPLY NOW requires confirmation" }, 409);
+      const key = `config:${body.idempotencyKey ?? crypto.randomUUID()}`;
+      const payloadHash = await digest(JSON.stringify(body));
+      const receipt = await this.env.DB.prepare(
+        "SELECT payload_hash,response FROM admin_operations WHERE key=?",
+      )
+        .bind(key)
+        .first<{ payload_hash: string; response: string }>();
+      if (receipt) {
+        if (receipt.payload_hash !== payloadHash)
+          throw new HttpError(
+            409,
+            "Idempotency key belongs to a different request",
+            "IDEMPOTENCY_CONFLICT",
+          );
+        await this.wakeCommitted();
+        return json(JSON.parse(receipt.response));
+      }
+      const current = await this.config();
+      if (body.expectedVersion && body.expectedVersion !== current.id)
+        throw new HttpError(
+          409,
+          "Configuration changed. Review the latest version before saving.",
+          "CONFIG_CONFLICT",
+        );
       const v =
         (await this.env.DB.prepare(
           "SELECT MAX(version) AS version FROM trading_config_versions",
         ).first<{ version: number }>())!.version + 1;
       const id = `TRADING-CONFIG-v${v}`;
-      await this.env.DB.batch([
-        this.env.DB.prepare(
-          "INSERT INTO trading_config_versions VALUES (?,?,?,?)",
-        ).bind(id, v, JSON.stringify(body.config), Date.now()),
-        this.env.DB.prepare(
-          "UPDATE system_state SET value=? WHERE key='active_config'",
-        ).bind(id),
-      ]);
+      let old: CaseRow | null = null,
+        replacement: CaseRow | undefined;
       if (body.activation === "APPLY NOW") {
-        const old = await this.env.DB.prepare(
+        old = await this.env.DB.prepare(
           "SELECT * FROM cases WHERE mode='LIVE' AND status IN ('QUEUED','REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW') ORDER BY created_at LIMIT 1",
         ).first<CaseRow>();
         if (old) {
-          await this.status(old, "CONFIG_CHANGED");
           const { market, derivatives } = await this.marketData(body.config);
           const scanners = scan(market, body.config, id);
           const groups = analyzeGroups(
@@ -277,7 +369,7 @@ export class Office extends DurableObject<Env> {
             Date.now(),
             derivatives,
           );
-          await this.createCase(
+          replacement = await this.prepareCase(
             market,
             scanners,
             groups,
@@ -285,19 +377,95 @@ export class Office extends DurableObject<Env> {
             id,
             old.mode,
             old.source,
-            old.direction,
+            groupTrigger(groups, body.config.scannerConsensusMin),
             `config:${old.uuid}:${id}`,
             false,
             "NONE",
           );
+          if (!(await this.budgetAvailable(replacement, body.config)))
+            throw new HttpError(
+              400,
+              "Daily AI case budget reached",
+              "CASE_BUDGET_REACHED",
+            );
         }
       }
-      return json({ id });
+      const now = Date.now();
+      const result: ConfigWriteResult = {
+        id,
+        replacement_case_id: replacement?.id ?? null,
+      };
+      const quota = replacement
+        ? this.quota(replacement, body.config)
+        : { liveLimit: 0, sourceLimit: 0, dayStart: 0 };
+      const batch = [
+        this.env.DB.prepare(
+          "INSERT INTO trading_config_versions VALUES (?,?,?,?)",
+        ).bind(id, v, JSON.stringify(body.config), now),
+        this.env.DB.prepare(
+          `INSERT INTO admin_operations(key,payload_hash,response,created_at,guard)
+          SELECT ?,?,?,?,CASE WHEN
+            (SELECT value FROM system_state WHERE key='active_config')=?
+            AND (? IS NULL OR EXISTS (SELECT 1 FROM cases WHERE uuid=? AND status IN ('QUEUED','REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW')))
+            AND (?=0 OR (SELECT COUNT(*) FROM cases WHERE mode='LIVE' AND created_at>=?)<?)
+            AND (?=0 OR (SELECT COUNT(*) FROM cases WHERE source=? AND created_at>=?)<?)
+          THEN 1 ELSE 0 END`,
+        ).bind(
+          key,
+          payloadHash,
+          JSON.stringify(result),
+          now,
+          current.id,
+          old?.uuid ?? null,
+          old?.uuid ?? null,
+          quota.liveLimit,
+          quota.dayStart,
+          quota.liveLimit,
+          quota.sourceLimit,
+          replacement?.source ?? "AUTO",
+          quota.dayStart,
+          quota.sourceLimit,
+        ),
+        this.env.DB.prepare(
+          "UPDATE system_state SET value=? WHERE key='active_config'",
+        ).bind(id),
+      ];
+      if (replacement && old)
+        batch.push(
+          this.env.DB.prepare(
+            "INSERT INTO cases VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+          ).bind(...Object.values(replacement)),
+          this.env.DB.prepare(
+            "INSERT INTO case_events(case_uuid,status,created_at) VALUES (?,?,?)",
+          ).bind(replacement.uuid, "QUEUED", now),
+          this.env.DB.prepare(
+            "UPDATE cases SET status='CONFIG_CHANGED',updated_at=? WHERE uuid=?",
+          ).bind(now, old.uuid),
+          this.env.DB.prepare(
+            "INSERT INTO case_events(case_uuid,status,created_at) VALUES (?,?,?)",
+          ).bind(old.uuid, "CONFIG_CHANGED", now),
+        );
+      try {
+        await this.env.DB.batch(batch);
+      } catch (error) {
+        if (
+          error instanceof Error &&
+          /CHECK constraint failed.*guard/.test(error.message)
+        )
+          throw new HttpError(
+            409,
+            "Configuration, case or quota changed. Refresh and review before saving.",
+            "CONFIG_CONFLICT",
+          );
+        throw error;
+      }
+      if (replacement) await this.wakeCommitted();
+      return json(result);
     }
     if (path === "/characters" && request.method === "GET")
       return json(await this.characters());
     if (path === "/characters") {
-      const c = characterSchema.parse(await request.json());
+      const c = characterSchema.parse(await readJsonObject(request));
       const version = `${c.id}-${crypto.randomUUID()}`;
       c.prompt_version = version;
       await this.env.DB.batch([
@@ -317,7 +485,9 @@ export class Office extends DurableObject<Env> {
       return json(rows.results);
     }
     if (path === "/rollback") {
-      const { id } = z.object({ id: z.string() }).parse(await request.json());
+      const { id } = z
+        .object({ id: z.string() })
+        .parse(await readJsonObject(request));
       const row = await this.env.DB.prepare(
         "SELECT character_id,snapshot FROM prompt_versions WHERE id=?",
       )
@@ -342,7 +512,7 @@ export class Office extends DurableObject<Env> {
             cooldownMs: z.number().int().min(1000).max(3600000),
           }),
         })
-        .parse(await request.json());
+        .parse(await readJsonObject(request));
       await this.env.DB.prepare(
         "INSERT OR REPLACE INTO provider_configs VALUES (?,?)",
       )
@@ -371,7 +541,7 @@ export class Office extends DurableObject<Env> {
     if (path === "/models" || path === "/test-provider") {
       const { id } = z
         .object({ id: z.enum(providers) })
-        .parse(await request.json());
+        .parse(await readJsonObject(request));
       try {
         const cache = await this.ctx.storage.get<{
           at: number;
@@ -383,7 +553,6 @@ export class Office extends DurableObject<Env> {
             : path === "/models" && cache && Date.now() - cache.at < 3600000
               ? cache.models
               : await discoverModels(this.env, id);
-        await this.ctx.storage.put(`models:${id}`, { at: Date.now(), models });
         let inference: "PASS" | undefined;
         if (path === "/test-provider" && id === "workers-ai") {
           const response = await requestAI(
@@ -406,11 +575,17 @@ export class Office extends DurableObject<Env> {
             throw new Error("WORKERS_AI_PROBE_INVALID");
           inference = "PASS";
         }
-        if (path === "/test-provider")
-          await this.ctx.storage.put(`circuit:${id}`, {
-            failures: 0,
-            openedAt: 0,
+        await this.serial(async () => {
+          await this.ctx.storage.put(`models:${id}`, {
+            at: Date.now(),
+            models,
           });
+          if (path === "/test-provider")
+            await this.ctx.storage.put(`circuit:${id}`, {
+              failures: 0,
+              openedAt: 0,
+            });
+        });
         return json({
           models,
           ok: true,
@@ -427,8 +602,13 @@ export class Office extends DurableObject<Env> {
       }
     }
     if (path === "/emergency") {
-      const body = emergencySchema.parse(await request.json()),
-        { id, config } = await this.config();
+      const body = emergencySchema.parse(await readJsonObject(request));
+      const repeated = await this.repeatCase(
+        `emergency:${body.idempotencyKey}`,
+        body,
+      );
+      if (repeated) return json(repeated, 202);
+      const { id, config } = await this.config();
       const { market, derivatives } = await this.marketData(config);
       const scanners = scan(market, config, id);
       const groups = analyzeGroups(
@@ -451,11 +631,19 @@ export class Office extends DurableObject<Env> {
         `emergency:${body.idempotencyKey}`,
         body.sendDiscord,
         body.focus,
+        undefined,
+        false,
+        body,
       );
       return json(item, 202);
     }
     if (path === "/simulation") {
-      const body = simulationSchema.parse(await request.json());
+      const body = simulationSchema.parse(await readJsonObject(request));
+      const repeated = await this.repeatCase(
+        `simulation:${body.idempotencyKey}`,
+        body,
+      );
+      if (repeated) return json(repeated, 202);
       if (body.timestamp > Date.now())
         return json(
           { error: "Simulation requires a historical timestamp" },
@@ -466,7 +654,10 @@ export class Office extends DurableObject<Env> {
       );
       if (body.configMode === "HISTORICAL" && !body.configVersion)
         return json({ error: "Historical config version required" }, 400);
-      const { market, derivatives } = await this.marketData(config, body.timestamp);
+      const { market, derivatives } = await this.marketData(
+        config,
+        body.timestamp,
+      );
       const scanners = scan(market, config, id, body.timestamp);
       const groups = analyzeGroups(
         market,
@@ -526,18 +717,8 @@ export class Office extends DurableObject<Env> {
         "NONE",
         historical,
         body.replayMode === "STRICT",
+        body,
       );
-      await this.env.DB.prepare(
-        "INSERT OR IGNORE INTO simulation_runs VALUES (?,?,?,?,?)",
-      )
-        .bind(
-          crypto.randomUUID(),
-          item.uuid,
-          body.replayMode,
-          body.configMode,
-          Date.now(),
-        )
-        .run();
       return json(item, 202);
     }
     return json({ error: "Unknown action" }, 404);
@@ -545,7 +726,7 @@ export class Office extends DurableObject<Env> {
   private async tick() {
     // An idle office still needs scheduled retention and outbox maintenance.
     if ((await this.ctx.storage.getAlarm()) === null)
-      await this.ctx.storage.setAlarm(Date.now() + 1000);
+      await this.scheduleAlarm(Date.now() + 1000);
     await retryDeliveries(this.env);
     const { id, config } = await this.config();
     try {
@@ -578,10 +759,9 @@ export class Office extends DurableObject<Env> {
       ]);
       const direction = groupTrigger(groups, config.scannerConsensusMin);
       if (direction) {
-        const last =
-          (await this.ctx.storage.get<number>(`cooldown:${direction}`)) ?? 0;
+        const { time: last } = await this.cooldownAnchor(config, direction);
         if (Date.now() - last >= config.cooldownMinutes * 60000) {
-          const item = await this.createCase(
+          await this.createCase(
             market,
             scanners,
             groups,
@@ -594,11 +774,6 @@ export class Office extends DurableObject<Env> {
             true,
             "NONE",
           );
-          if (config.cooldownAnchor === "FROM_TRIGGER")
-            await this.ctx.storage.put(
-              `cooldown:${direction}`,
-              item.created_at,
-            );
           if (!(await this.ctx.storage.get("active")))
             await this.ctx.storage.put("office", "TRIGGERED");
         }
@@ -610,7 +785,7 @@ export class Office extends DurableObject<Env> {
             : "MONITORING",
         );
       await this.ctx.storage.put("last_processed_candle", candle);
-      await this.ctx.storage.setAlarm(Date.now() + 1000);
+      await this.scheduleAlarm(Date.now() + 1000);
     } catch (error) {
       await this.ctx.storage.put(
         "market_error",
@@ -618,7 +793,71 @@ export class Office extends DurableObject<Env> {
       );
     }
   }
-  private async createCase(
+  private async repeatCase(key: string, request: unknown) {
+    const existing = await this.env.DB.prepare(
+      "SELECT * FROM cases WHERE idempotency_key=?",
+    )
+      .bind(key)
+      .first<CaseRow>();
+    if (!existing) return null;
+    const saved = JSON.parse(existing.context) as CaseContext;
+    if (
+      saved.request &&
+      JSON.stringify(saved.request) !== JSON.stringify(request)
+    )
+      throw new HttpError(
+        409,
+        "Idempotency key belongs to a different request",
+        "IDEMPOTENCY_CONFLICT",
+      );
+    await this.wakeCommitted();
+    return existing;
+  }
+  private async wakeCommitted() {
+    try {
+      await this.scheduleAlarm(Date.now() + 1000);
+    } catch (error) {
+      // D1 already committed. Report the accepted operation; a retry, the next
+      // cron tick or actor reconstruction restores the queue wake-up.
+      console.error(
+        "office_wake_failed",
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  }
+  private quota(row: CaseRow, config: TradingConfig) {
+    const day = wibDate(row.created_at);
+    return {
+      dayStart: Date.parse(
+        `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6, 8)}T00:00:00+07:00`,
+      ),
+      liveLimit: row.mode === "LIVE" ? config.budgets.casesPerDay : 0,
+      sourceLimit:
+        row.source === "EMERGENCY"
+          ? config.budgets.emergenciesPerDay
+          : row.source === "SIMULATION"
+            ? config.budgets.simulationsPerDay
+            : 0,
+    };
+  }
+  private async budgetAvailable(row: CaseRow, config: TradingConfig) {
+    const { liveLimit, sourceLimit, dayStart } = this.quota(row, config);
+    const available = await this.env.DB.prepare(
+      "SELECT (?=0 OR (SELECT COUNT(*) FROM cases WHERE mode='LIVE' AND created_at>=?)<?) AND (?=0 OR (SELECT COUNT(*) FROM cases WHERE source=? AND created_at>=?)<?) AS available",
+    )
+      .bind(
+        liveLimit,
+        dayStart,
+        liveLimit,
+        sourceLimit,
+        row.source,
+        dayStart,
+        sourceLimit,
+      )
+      .first<{ available: number }>();
+    return !!available?.available;
+  }
+  private async prepareCase(
     market: MarketContext,
     scanners: ScannerOutput[],
     groups: GroupSnapshot[],
@@ -632,13 +871,8 @@ export class Office extends DurableObject<Env> {
     focus: Direction,
     characters?: CharacterConfig[],
     strictReplay = false,
+    request?: unknown,
   ) {
-    const existing = await this.env.DB.prepare(
-      "SELECT * FROM cases WHERE idempotency_key=?",
-    )
-      .bind(key)
-      .first<CaseRow>();
-    if (existing) return existing;
     const context: CaseContext = {
       market,
       scanners,
@@ -648,6 +882,8 @@ export class Office extends DurableObject<Env> {
       sendDiscord,
       focus,
       strict_replay: strictReplay,
+      request,
+      market_read_at: Date.now(),
       tick_size:
         chartSchema.parse(JSON.parse(this.env.CHART_SCHEMA)).tickSize ?? 0.01,
       context_compressed: buildContext(market, scanners, config)
@@ -669,21 +905,22 @@ export class Office extends DurableObject<Env> {
       updated_at: now,
       idempotency_key: key,
     };
-    const day = wibDate(now);
-    const dayStart = Date.parse(
-      `${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6, 8)}T00:00:00+07:00`,
-    );
-    const liveLimit = mode === "LIVE" ? config.budgets.casesPerDay : 0;
-    const sourceLimit =
-      source === "EMERGENCY"
-        ? config.budgets.emergenciesPerDay
-        : source === "SIMULATION"
-          ? config.budgets.simulationsPerDay
-          : 0;
-    const inserted = await this.env.DB.prepare(
-      "INSERT OR IGNORE INTO cases SELECT ?,?,?,?,?,?,?,?,?,?,?,?,? WHERE (?=0 OR (SELECT COUNT(*) FROM cases WHERE mode='LIVE' AND created_at>=?)<?) AND (?=0 OR (SELECT COUNT(*) FROM cases WHERE source=? AND created_at>=?)<?)",
+    return row;
+  }
+  private async createCase(...args: Parameters<Office["prepareCase"]>) {
+    const [, , , config, , mode, source, direction, key] = args;
+    const existing = await this.env.DB.prepare(
+      "SELECT * FROM cases WHERE idempotency_key=?",
     )
-      .bind(
+      .bind(key)
+      .first<CaseRow>();
+    if (existing) return existing;
+    const row = await this.prepareCase(...args);
+    const { dayStart, liveLimit, sourceLimit } = this.quota(row, config);
+    const batch = [
+      this.env.DB.prepare(
+        "INSERT OR IGNORE INTO cases SELECT ?,?,?,?,?,?,?,?,?,?,?,?,? WHERE (?=0 OR (SELECT COUNT(*) FROM cases WHERE mode='LIVE' AND created_at>=?)<?) AND (?=0 OR (SELECT COUNT(*) FROM cases WHERE source=? AND created_at>=?)<?)",
+      ).bind(
         ...Object.values(row),
         liveLimit,
         dayStart,
@@ -692,8 +929,27 @@ export class Office extends DurableObject<Env> {
         source,
         dayStart,
         sourceLimit,
-      )
-      .run();
+      ),
+      this.env.DB.prepare(
+        "INSERT INTO case_events(case_uuid,status,created_at) SELECT ?,?,? WHERE EXISTS (SELECT 1 FROM cases WHERE uuid=?)",
+      ).bind(row.uuid, "QUEUED", row.created_at, row.uuid),
+    ];
+    if (row.mode === "SIMULATION" && args[13]) {
+      const request = simulationSchema.parse(args[13]);
+      batch.push(
+        this.env.DB.prepare(
+          "INSERT INTO simulation_runs SELECT ?,?,?,?,? WHERE EXISTS (SELECT 1 FROM cases WHERE uuid=?)",
+        ).bind(
+          crypto.randomUUID(),
+          row.uuid,
+          request.replayMode,
+          request.configMode,
+          row.created_at,
+          row.uuid,
+        ),
+      );
+    }
+    const [inserted] = await this.env.DB.batch(batch);
     if (!inserted.meta.changes) {
       const duplicate = await this.env.DB.prepare(
         "SELECT * FROM cases WHERE idempotency_key=?",
@@ -703,12 +959,14 @@ export class Office extends DurableObject<Env> {
       if (duplicate) return duplicate;
       throw new Error("Daily AI case budget reached");
     }
-    await this.env.DB.prepare(
-      "INSERT INTO case_events(case_uuid,status,created_at) VALUES (?,?,?)",
+    if (
+      mode === "LIVE" &&
+      source === "AUTO" &&
+      direction &&
+      config.cooldownAnchor === "FROM_TRIGGER"
     )
-      .bind(row.uuid, "QUEUED", now)
-      .run();
-    await this.ctx.storage.setAlarm(Date.now() + 1000);
+      await this.ctx.storage.put(`cooldown:${direction}`, row.created_at);
+    await this.wakeCommitted();
     return row;
   }
   private async status(row: CaseRow, status: string, result?: unknown) {
@@ -738,32 +996,163 @@ export class Office extends DurableObject<Env> {
       );
   }
   async alarm() {
+    // Automatic alarms and a concurrent wake-up must share one in-flight job.
+    if (this.alarmTask) return this.alarmTask;
+    const task = this.processAlarm();
+    this.alarmTask = task;
+    try {
+      await task;
+    } finally {
+      if (this.alarmTask === task) this.alarmTask = undefined;
+    }
+  }
+  private async scheduleAlarm(time: number) {
+    // A watchdog, idle cleanup or queue wake-up must not postpone a pending scan.
+    const pending = await this.ctx.storage.get<number>("pending_tick");
+    await this.ctx.storage.setAlarm(
+      Math.max(Date.now() + 1, Math.min(time, pending ?? Infinity)),
+    );
+  }
+  private async cooldownAnchor(
+    config: TradingConfig,
+    direction: TradeDirection,
+  ) {
+    // D1 is authoritative across a crash between case/signal commit and the
+    // storage update. The storage anchor alone cannot cover that write gap.
+    const anchor =
+      config.cooldownAnchor === "FROM_TRIGGER"
+        ? await this.env.DB.prepare(
+            "SELECT uuid,created_at AS time FROM cases WHERE mode='LIVE' AND source='AUTO' AND direction=? ORDER BY created_at DESC,id DESC LIMIT 1",
+          )
+            .bind(direction)
+            .first<{ uuid: string; time: number }>()
+        : await this.env.DB.prepare(
+            "SELECT MAX(time) AS time FROM (SELECT created_at AS time FROM signals WHERE direction=? UNION ALL SELECT updated_at AS time FROM cases WHERE mode='LIVE' AND source='AUTO' AND direction=? AND status='NO_CONSENSUS')",
+          )
+            .bind(direction, direction)
+            .first<{ time: number | null }>();
+    const time = Math.max(
+      anchor?.time ?? 0,
+      (await this.ctx.storage.get<number>(`cooldown:${direction}`)) ?? 0,
+    );
+    return {
+      time,
+      triggerCase: anchor && "uuid" in anchor ? anchor.uuid : null,
+    };
+  }
+  private async automaticBlockReason(
+    row: CaseRow,
+    config: TradingConfig,
+    direction: TradeDirection,
+    candle: number,
+  ): Promise<string | null> {
+    const { time: last, triggerCase } = await this.cooldownAnchor(
+      config,
+      direction,
+    );
+    const ownTrigger =
+      config.cooldownAnchor === "FROM_TRIGGER" &&
+      triggerCase === row.uuid &&
+      last === row.created_at;
+    if (!ownTrigger && Date.now() - last < config.cooldownMinutes * 60000)
+      return "AUTO_COOLDOWN_ACTIVE";
+    const duplicate = await this.env.DB.prepare(
+      "SELECT c.uuid FROM cases c WHERE c.mode='LIVE' AND c.source='AUTO' AND c.config_version=? AND c.candle_timestamp=? AND c.uuid!=? AND ((c.direction=? AND c.status IN ('AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED','COMPLETED','NO_CONSENSUS')) OR EXISTS (SELECT 1 FROM signals s WHERE s.case_uuid=c.uuid AND s.direction=?)) LIMIT 1",
+    )
+      .bind(row.config_version, candle, row.uuid, direction, direction)
+      .first();
+    return duplicate ? "AUTO_SNAPSHOT_ALREADY_PROCESSED" : null;
+  }
+  private async snapshotProblem(
+    row: CaseRow,
+    snapshot: CaseContext,
+  ): Promise<string | null> {
+    if (row.mode === "SIMULATION") return null;
+    const now = Date.now();
+    const age = now - (snapshot.market_read_at ?? row.created_at);
+    if (age < 0 || age >= 300000) return "DECISION_SNAPSHOT_EXPIRED";
+    let latest: Awaited<ReturnType<Office["marketData"]>>;
+    try {
+      latest = await this.marketData(snapshot.config, now);
+    } catch (error) {
+      // Let recognized transient D1 faults use the existing bounded recovery.
+      if (
+        error instanceof Error &&
+        /SQLITE_BUSY|temporarily unavailable|database is locked|D1.*(?:overload|internal error|timeout)/i.test(
+          error.message,
+        )
+      )
+        throw error;
+      return "MARKET_UNAVAILABLE_BEFORE_PUBLICATION";
+    }
+    if (JSON.stringify(latest.market) !== JSON.stringify(snapshot.market))
+      return "MARKET_CHANGED_DURING_ANALYSIS";
+    if (snapshot.groups?.length) {
+      const scanners = scan(
+        latest.market,
+        snapshot.config,
+        row.config_version,
+        now,
+      );
+      const groups = analyzeGroups(
+        latest.market,
+        scanners,
+        snapshot.config,
+        row.config_version,
+        now,
+        latest.derivatives,
+      );
+      const decisions = (items: GroupSnapshot[]) =>
+        items.map(({ group, direction, strength, payload }) => ({
+          group,
+          direction,
+          strength,
+          payload,
+        }));
+      if (
+        JSON.stringify(decisions(groups)) !==
+        JSON.stringify(decisions(snapshot.groups))
+      )
+        return "ANALYSIS_GROUPS_CHANGED_DURING_ANALYSIS";
+    }
+    return null;
+  }
+  private async processAlarm() {
     // Persist a watchdog before any external work: abrupt termination must leave
     // a wake-up behind even when the normal finally block never executes.
-    await this.ctx.storage.setAlarm(Date.now() + 30000);
+    await this.scheduleAlarm(Date.now() + 30000);
+    const pending = await this.ctx.storage.get<number>("pending_tick");
+    if (
+      this.mode === "LIVE" &&
+      pending !== undefined &&
+      pending <= Date.now()
+    ) {
+      await this.tick();
+      // Keep the event until the scan returns, so a restart can retry it.
+      if ((await this.ctx.storage.get<number>("pending_tick")) === pending)
+        await this.ctx.storage.delete("pending_tick");
+    }
     await retryDeliveries(this.env);
-    // Never select work from a single persisted "mode" flag: a simulation
-    // must not strand live trading work. Resume LIVE first, then SIMULATION;
-    // within the same mode, resume in-flight work before queued work.
+    // Each canonical actor owns one mode; resume its in-flight work first.
     const row = await this.env.DB.prepare(
-      "SELECT * FROM cases WHERE status IN ('QUEUED','REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED') ORDER BY CASE WHEN mode='LIVE' THEN 0 ELSE 1 END, CASE WHEN status='QUEUED' THEN 1 ELSE 0 END, created_at LIMIT 1",
-    ).first<CaseRow>();
+      "SELECT * FROM cases WHERE mode=? AND status IN ('QUEUED','REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED') ORDER BY CASE WHEN status='QUEUED' THEN 1 ELSE 0 END, created_at, id LIMIT 1",
+    )
+      .bind(this.mode)
+      .first<CaseRow>();
     if (!row) {
       await this.ctx.storage.delete("active");
       const returning =
         (await this.ctx.storage.get<number>("return_until")) ?? 0;
       if (Date.now() < returning) {
         await this.ctx.storage.put("office", "RETURN_TO_DESK");
-        await this.ctx.storage.setAlarm(returning);
+        await this.scheduleAlarm(returning);
         return;
       }
       const latest =
         (await this.ctx.storage.get<ScannerOutput[]>("scanners")) ?? [];
       await this.ctx.storage.put(
         "office",
-        latest.some((s) => s.direction !== "NONE")
-          ? "WATCHING"
-          : "MONITORING",
+        latest.some((s) => s.direction !== "NONE") ? "WATCHING" : "MONITORING",
       );
       await this.cleanup();
       const due = await this.env.DB.prepare(
@@ -774,7 +1163,7 @@ export class Office extends DurableObject<Env> {
           this.env.DISCORD_MEETING_WEBHOOK ? 1 : 0,
         )
         .first<{ time: number | null }>();
-      await this.ctx.storage.setAlarm(
+      await this.scheduleAlarm(
         Math.max(
           Date.now() + 1000,
           Math.min(Date.now() + 86400000, due?.time ?? Infinity),
@@ -784,8 +1173,6 @@ export class Office extends DurableObject<Env> {
     }
     await this.ctx.storage.put("active", row.uuid);
     const snapshot = JSON.parse(row.context) as CaseContext;
-    // Historical and in-flight snapshots created before this setting keep the default.
-    snapshot.config = configSchema.parse(snapshot.config);
     let nextAlarm = Date.now() + 1000;
     try {
       if (row.status === "SIGNAL_CREATED" && row.result) {
@@ -814,12 +1201,17 @@ export class Office extends DurableObject<Env> {
         }
         return;
       }
+      // Validate unfinished legacy snapshots inside recovery handling. Invalid
+      // settings terminate the case rather than poisoning the actor's queue.
+      snapshot.config = configSchema.parse(snapshot.config);
       if (
         (row.status === "QUEUED" || row.status === "REVALIDATING") &&
         row.source === "AUTO"
       ) {
         await this.status(row, "REVALIDATING");
-        const { market: latest, derivatives } = await this.marketData(snapshot.config);
+        const { market: latest, derivatives } = await this.marketData(
+          snapshot.config,
+        );
         const rescanned = scan(latest, snapshot.config, row.config_version);
         const regrouped = analyzeGroups(
           latest,
@@ -834,7 +1226,17 @@ export class Office extends DurableObject<Env> {
           snapshot.config.scannerConsensusMin,
         );
         if (!fresh) {
-          await this.status(row, "STALE");
+          await this.status(row, "STALE", { reason: "GROUP_CONSENSUS_LOST" });
+          return;
+        }
+        const blocked = await this.automaticBlockReason(
+          row,
+          snapshot.config,
+          fresh,
+          latest.M5.at(-1)!.timestamp,
+        );
+        if (blocked) {
+          await this.status(row, "STALE", { reason: blocked });
           return;
         }
         if (fresh !== row.direction) {
@@ -857,11 +1259,13 @@ export class Office extends DurableObject<Env> {
         snapshot.market = latest;
         snapshot.scanners = rescanned;
         snapshot.groups = regrouped;
+        snapshot.market_read_at = Date.now();
+        row.candle_timestamp = latest.M5.at(-1)!.timestamp;
         row.context = JSON.stringify(snapshot);
         await this.env.DB.prepare(
-          "UPDATE cases SET context=?,candle_timestamp=? WHERE uuid=?",
+          "UPDATE cases SET context=?,candle_timestamp=? WHERE uuid=? AND status='REVALIDATING'",
         )
-          .bind(row.context, latest.M5.at(-1)!.timestamp, row.uuid)
+          .bind(row.context, row.candle_timestamp, row.uuid)
           .run();
       }
       await this.status(row, "AI_ANALYSIS");
@@ -906,7 +1310,7 @@ export class Office extends DurableObject<Env> {
         row.source === "AUTO" &&
         row.direction &&
         snapshot.config.cooldownAnchor === "FROM_FINAL_DECISION" &&
-        ["COMPLETED", "NO_CONSENSUS"].includes(row.status)
+        row.status === "NO_CONSENSUS"
       )
         await this.ctx.storage.put(`cooldown:${row.direction}`, Date.now());
       await this.ctx.storage.delete("active");
@@ -920,7 +1324,7 @@ export class Office extends DurableObject<Env> {
         ].includes(row.status)
       )
         await this.ctx.storage.delete(`recovery:${row.uuid}`);
-      await this.ctx.storage.setAlarm(nextAlarm);
+      await this.scheduleAlarm(nextAlarm);
     }
   }
   private runtime(
@@ -1043,7 +1447,30 @@ export class Office extends DurableObject<Env> {
     )
       .bind(row.uuid, c.id)
       .first<{ snapshot: string }>();
-    if (saved) return JSON.parse(saved.snapshot) as AnalystResult;
+    if (saved) {
+      const output = JSON.parse(saved.snapshot) as AnalystResult;
+      if (output.status !== "SUCCESS") return output;
+      const parsed = analysisSchema.safeParse(output.output);
+      const errors = parsed.success
+        ? characterSemanticErrors(c, parsed.data, context)
+        : ["Saved AI output violates the structured schema"];
+      if (!errors.length) return output;
+      // Recovery must enforce current authority contracts without paying to
+      // replace a completed response. The original raw audit remains in ai_runs.
+      const invalid: AnalystResult = {
+        ...output,
+        status: "UNAVAILABLE",
+        output: undefined,
+        flags: [...new Set([...output.flags, "SEMANTIC_VALIDATION_FAILED"])],
+        validationErrors: [...output.validationErrors, ...errors],
+      };
+      await this.env.DB.prepare(
+        "UPDATE ai_character_outputs SET snapshot=? WHERE case_uuid=? AND character_id=?",
+      )
+        .bind(JSON.stringify(invalid), row.uuid, c.id)
+        .run();
+      return invalid;
+    }
     const output = await runCharacter(
       this.env,
       c,
@@ -1058,11 +1485,16 @@ export class Office extends DurableObject<Env> {
     return output;
   }
   private async pipeline(row: CaseRow, s: CaseContext) {
+    // Do not pay for new inference or reuse old votes against a changed market.
+    const beforeAnalysis = await this.snapshotProblem(row, s);
+    if (beforeAnalysis) {
+      await this.status(row, "STALE", { reason: beforeAnalysis });
+      return;
+    }
     const context = buildContext(s.market, s.scanners, s.config);
-    const groups =
-      s.groups?.length
-        ? s.groups
-        : analyzeGroups(s.market, s.scanners, s.config, row.config_version);
+    const groups = s.groups?.length
+      ? s.groups
+      : analyzeGroups(s.market, s.scanners, s.config, row.config_version);
     const settled = await Promise.allSettled(
       s.characters
         .filter((c) => c.id !== "risk" && c.id !== "boss")
@@ -1093,27 +1525,26 @@ export class Office extends DurableObject<Env> {
       return r.value;
     });
     const consensus = groupTrigger(groups, s.config.scannerConsensusMin);
+    // An Emergency investigation is context, never voting authority. Without
+    // group consensus it needs valid AI participation or a valid Boss tie-break.
     const fallback =
-      consensus ??
-      (s.focus !== "NONE" ? s.focus : fallbackDirection(groups, s.market));
+      row.source === "EMERGENCY"
+        ? consensus
+        : (consensus ?? fallbackDirection(groups, s.market));
     if (s.strict_replay && analysts.some((a) => a.status !== "SUCCESS"))
       throw new Error(
         "STRICT replay failed: historical Analyst provider/model is unavailable",
       );
     let vote = voting(analysts, fallback);
-    if (!consensus && vote.direction === fallback)
-      vote.flags.push(
-        s.focus !== "NONE"
-          ? "MANUAL_FOCUS_FALLBACK"
-          : "DETERMINISTIC_DIRECTION_FALLBACK",
-      );
+    if (!consensus && fallback && vote.direction === fallback)
+      vote.flags.push("DETERMINISTIC_DIRECTION_FALLBACK");
     if (vote.degraded) await this.status(row, "AI_DEGRADED");
     await this.status(row, "RISK_REVIEW");
     const proposals: Partial<Record<TradeDirection, ReturnType<typeof risk>>> =
       {};
     for (const d of ["BUY", "SELL"] as const)
       try {
-        proposals[d] = risk(d, s.market, s.config);
+        proposals[d] = risk(d, s.market, s.config, s.tick_size ?? 0.01);
       } catch {
         /* Missing structural target is a no-trade condition, never synthetic TP. */
       }
@@ -1174,9 +1605,7 @@ export class Office extends DurableObject<Env> {
         vote,
         riskReview,
         boss,
-        reason: d
-          ? "No valid structural risk proposal"
-          : "No directional consensus",
+        reason: d ? "INVALID_RISK_PROPOSAL" : "No directional consensus",
       });
       await notify(
         this.env,
@@ -1184,6 +1613,26 @@ export class Office extends DurableObject<Env> {
         "NO_CONSENSUS",
         s.sendDiscord && s.config.notifyNoConsensus,
       );
+      return;
+    }
+    const problem =
+      (await this.snapshotProblem(row, s)) ??
+      (row.source === "AUTO"
+        ? await this.automaticBlockReason(
+            row,
+            s.config,
+            d,
+            s.market.M5.at(-1)!.timestamp,
+          )
+        : null);
+    if (problem) {
+      await this.status(row, "STALE", {
+        analysts,
+        vote,
+        riskReview,
+        boss,
+        reason: problem,
+      });
       return;
     }
     const r = proposals[d]!;
@@ -1262,10 +1711,11 @@ export class Office extends DurableObject<Env> {
       if (!saved) throw new Error("Case cancelled before signal publication");
       result.signal = JSON.parse(saved.snapshot);
       await this.status(row, "SIGNAL_CREATED", result);
+      // Persist cooldown before external delivery can fail or be interrupted.
+      if (s.config.cooldownAnchor === "FROM_FINAL_DECISION")
+        await this.ctx.storage.put(`cooldown:${d}`, result.signal.created_at);
       await this.ctx.storage.put("office", "DISCORD");
       await notify(this.env, row, "SIGNAL", s.sendDiscord, result.signal);
-      if (s.config.cooldownAnchor === "FROM_FINAL_DECISION")
-        await this.ctx.storage.put(`cooldown:${d}`, Date.now());
     }
     await this.status(row, "COMPLETED", result);
     if (row.mode === "LIVE") {

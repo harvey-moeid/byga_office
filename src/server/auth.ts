@@ -1,13 +1,6 @@
 import type { Env } from "./env";
-export const json = (value: unknown, status = 200) =>
-  new Response(JSON.stringify(value), {
-    status,
-    headers: {
-      "Content-Type": "application/json",
-      "Cache-Control": "no-store",
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
+import { json, readJsonObject } from "./http";
+export { json } from "./http";
 export async function digest(s: string) {
   return Array.from(
     new Uint8Array(
@@ -93,7 +86,7 @@ export async function login(request: Request, env: Env) {
     .first<{ attempts: number; reset_at: number }>();
   if (row && row.attempts > 5)
     return json({ error: "Too many attempts. Try again in 15 minutes." }, 429);
-  const body = (await request.json()) as { password?: unknown };
+  const body = await readJsonObject(request);
   if (
     typeof body.password !== "string" ||
     body.password.length > 1024 ||

@@ -57,7 +57,7 @@ function response(provider: Provider, text = JSON.stringify(output)) {
 }
 function runtime() {
   const circuits: Partial<Record<Provider, Circuit>> = {};
-  const audit = vi.fn(async () => {});
+  const audit = vi.fn<AIRuntime["audit"]>(async () => {});
   const r: AIRuntime = {
     getCircuit: async (p) => circuits[p] ?? { failures: 0, openedAt: 0 },
     setCircuit: async (p, c) => {
@@ -173,9 +173,9 @@ describe("Provider adapters", () => {
       { name: workersAIModel, task: { name: "Text Generation" } },
       { name: "@cf/image/model", task: { name: "Text-to-Image" } },
     ]);
-    expect(
-      await discoverModels(binding({ models }), "workers-ai"),
-    ).toEqual([workersAIModel]);
+    expect(await discoverModels(binding({ models }), "workers-ai")).toEqual([
+      workersAIModel,
+    ]);
     expect(models).toHaveBeenCalledWith({
       page: 1,
       per_page: 100,
@@ -377,12 +377,156 @@ describe("Provider adapters", () => {
       );
     }
     expect(
-      renderPrompt(defaultCharacters().find((c) => c.id === "risk")!, {}),
+      renderPrompt(
+        defaultCharacters().find((c) => c.id === "risk")!,
+        {},
+      ),
     ).toContain("Risk Manager authority contract:");
     expect(
-      renderPrompt(defaultCharacters().find((c) => c.id === "boss")!, {}),
+      renderPrompt(
+        defaultCharacters().find((c) => c.id === "boss")!,
+        {},
+      ),
     ).toContain("Boss authority contract:");
   });
+  it.each([
+    {
+      role: "risk",
+      vote: "SELL",
+      direction: "BUY",
+      proposal: true,
+      levels: null,
+      valid: false,
+    },
+    {
+      role: "risk",
+      vote: "BUY",
+      direction: null,
+      proposal: true,
+      levels: null,
+      valid: false,
+    },
+    {
+      role: "risk",
+      vote: "BUY",
+      direction: "BUY",
+      proposal: false,
+      levels: null,
+      valid: false,
+    },
+    {
+      role: "risk",
+      vote: "BUY",
+      direction: "BUY",
+      proposal: true,
+      levels: { entry: 100, stop_loss: 90, take_profit: 110 },
+      valid: true,
+    },
+    {
+      role: "risk",
+      vote: "BUY",
+      direction: "BUY",
+      proposal: true,
+      levels: { entry: 101, stop_loss: 90, take_profit: 110 },
+      valid: false,
+    },
+    {
+      role: "risk",
+      vote: "NO_TRADE",
+      direction: "BUY",
+      proposal: true,
+      levels: { entry: 100, stop_loss: 90, take_profit: 110 },
+      valid: true,
+    },
+    {
+      role: "risk",
+      vote: "NO_TRADE",
+      direction: null,
+      proposal: false,
+      levels: null,
+      valid: true,
+    },
+    {
+      role: "boss",
+      vote: "BUY",
+      direction: "BUY",
+      proposal: true,
+      levels: { entry: 100, stop_loss: 91, take_profit: 110 },
+      valid: false,
+    },
+    {
+      role: "boss",
+      vote: "BUY",
+      direction: "BUY",
+      proposal: true,
+      levels: { entry: 100, stop_loss: 90, take_profit: 110 },
+      valid: true,
+    },
+    {
+      role: "trend",
+      vote: "BUY",
+      direction: null,
+      proposal: false,
+      levels: { entry: 100, stop_loss: 90, take_profit: 110 },
+      valid: false,
+    },
+  ])(
+    "enforces $role authority for vote=$vote direction=$direction proposal=$proposal levels=$levels",
+    async (fixture) => {
+      const { r, audit } = runtime();
+      const resultOutput = {
+        ...output,
+        vote: fixture.vote,
+        price_levels: fixture.levels,
+        evidence:
+          fixture.vote === "NO_TRADE"
+            ? []
+            : [
+                {
+                  code: "DIRECTIONAL_BIAS",
+                  direction: fixture.vote,
+                  detail: "Fixture",
+                },
+              ],
+      };
+      const fetcher = vi.fn(
+        async (input: RequestInfo | URL) =>
+          new Response(
+            JSON.stringify(
+              response(
+                String(input).includes("googleapis") ? "gemini" : "openrouter",
+                JSON.stringify(resultOutput),
+              ),
+            ),
+          ),
+      ) as typeof fetch;
+      const result = await runCharacter(
+        env,
+        defaultCharacters().find((c) => c.id === fixture.role)!,
+        {
+          voting: { direction: fixture.direction, tie: false, degraded: false },
+          risk_proposals: fixture.proposal
+            ? { BUY: { preferred_entry: 100, stop_loss: 90, take_profit: 110 } }
+            : {},
+        },
+        r,
+        fetcher,
+        async () => {},
+      );
+      expect(result.status).toBe(fixture.valid ? "SUCCESS" : "UNAVAILABLE");
+      if (fixture.valid) expect(result.output?.vote).toBe(fixture.vote);
+      else {
+        expect(result.output).toBeUndefined();
+        expect(result.flags).toContain("SEMANTIC_VALIDATION_FAILED");
+        expect(
+          audit.mock.calls.every(
+            ([entry]) =>
+              (entry as { status: string }).status === "SEMANTIC_INVALID",
+          ),
+        ).toBe(true);
+      }
+    },
+  );
   it("skips open primary and uses fallback", async () => {
     const { r, circuits } = runtime();
     circuits.openrouter = { failures: 3, openedAt: Date.now() };
