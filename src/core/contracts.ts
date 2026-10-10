@@ -50,22 +50,31 @@ const weights = z
 export const configSchema = z.object({
   scannerConsensusMin: z.number().int().min(1).max(4).default(2),
   scanner: z.object({
-    ema: z.tuple([
-      z.number().int().min(2).max(500),
-      z.number().int().min(2).max(500),
-      z.number().int().min(2).max(500),
-    ]),
+    ema: z
+      .tuple([
+        z.number().int().min(2).max(500),
+        z.number().int().min(2).max(500),
+        z.number().int().min(2).max(500),
+      ])
+      .refine(
+        ([fast, middle, slow]) => fast < middle && middle < slow,
+        "EMA periods must satisfy fast < middle < slow",
+      ),
     period: z.number().int().min(2).max(100),
     adxMin: z.number().min(0).max(100),
     volumeRatio: z.number().positive().max(10),
-    momentumRsi: z.tuple([
-      z.number().min(0).max(100),
-      z.number().min(0).max(100),
-    ]),
-    reversionRsi: z.tuple([
-      z.number().min(0).max(100),
-      z.number().min(0).max(100),
-    ]),
+    momentumRsi: z
+      .tuple([z.number().min(0).max(100), z.number().min(0).max(100)])
+      .refine(
+        ([buy, sell]) => buy > sell,
+        "Momentum RSI BUY threshold must exceed SELL threshold",
+      ),
+    reversionRsi: z
+      .tuple([z.number().min(0).max(100), z.number().min(0).max(100)])
+      .refine(
+        ([buy, sell]) => buy < sell,
+        "Reversion RSI oversold threshold must be below overbought threshold",
+      ),
     bbDeviation: z.number().positive().max(5),
     structureWindow: z.number().int().min(5).max(200),
     displacementAtr: z.number().positive().max(10),
@@ -326,6 +335,30 @@ export interface Signal extends Risk {
   boss_summary: string;
   minimum_risk_reward: number;
   tick_size: number;
+}
+const caseStopMessages: Record<string, string> = {
+  AUTO_COOLDOWN_ACTIVE:
+    "Analisis dihentikan karena cooldown arah ini masih berlaku.",
+  AUTO_SNAPSHOT_ALREADY_PROCESSED:
+    "Candle ini sudah dianalisis untuk arah dan konfigurasi yang sama.",
+  GROUP_CONSENSUS_LOST:
+    "Konsensus grup tidak lagi memenuhi syarat analisis otomatis.",
+  DECISION_SNAPSHOT_EXPIRED:
+    "Analisis melewati batas waktu lima menit. Sinyal tidak diterbitkan.",
+  MARKET_UNAVAILABLE_BEFORE_PUBLICATION:
+    "Data pasar tidak dapat divalidasi. Sinyal tidak diterbitkan.",
+  MARKET_CHANGED_DURING_ANALYSIS:
+    "Data candle berubah selama analisis. Sinyal tidak diterbitkan.",
+  ANALYSIS_GROUPS_CHANGED_DURING_ANALYSIS:
+    "Bukti grup analisis berubah. Sinyal tidak diterbitkan.",
+  INVALID_RISK_PROPOSAL:
+    "Level risiko tidak memenuhi validasi harga. Sinyal tidak diterbitkan.",
+};
+/** Only bounded, known outcome categories may be shown outside the audit log. */
+export function caseStopMessage(reason: unknown): string | null {
+  return typeof reason === "string" && Object.hasOwn(caseStopMessages, reason)
+    ? caseStopMessages[reason]
+    : null;
 }
 export function wibDate(t = Date.now()) {
   return new Intl.DateTimeFormat("en-CA", {

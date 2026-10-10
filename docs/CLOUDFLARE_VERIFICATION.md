@@ -1,5 +1,7 @@
 # Pemeriksaan Cloudflare BYGA — 4 Oktober 2026 (UTC)
 
+Laporan historis: pengamatan di bawah berasal dari 4 Oktober. Jadwal lima menit berikutnya tercatat di [Deployment](DEPLOYMENT.md). Perbaikan trading serta UI/API pada 10 Oktober hanya diverifikasi lokal, belum diterapkan ke produksi; lihat [kontrak dan hasil validasi UI/API](API_UI_CONTRACT.md). Migration `0006_admin_operations.sql` belum diterapkan remote dalam pekerjaan ini.
+
 Account ID: `07086b4d368d0a37ebcbbf186e51eecf`.
 
 ## Hasil produksi setelah pergantian provider

@@ -3,6 +3,7 @@ import {
   analysisGroups,
   analysisSchema,
   candleSchema,
+  caseStopMessage,
   configSchema,
   defaultConfig,
   defaultCharacters,
@@ -422,11 +423,124 @@ describe("Consensus and confidence", () => {
   });
 });
 describe("Risk and context", () => {
+  it.each(
+    [0.01, 0.1, 0.5, 5].flatMap((tick) =>
+      (["BUY", "SELL"] as const).map((direction) => ({ tick, direction })),
+    ),
+  )(
+    "publishes ordered $direction prices on the $tick tick grid with honest R:R",
+    ({ tick, direction }) => {
+      const pricedMarket = tick > 1 ? Object.fromEntries(
+        Object.entries(market).map(([tf, candles]) => [tf, candles.map((c) => ({
+          ...c, open: c.open * 100, high: c.high * 100,
+          low: c.low * 100, close: c.close * 100,
+        }))]),
+      ) as MarketContext : market;
+      const r = risk(direction, pricedMarket, defaultConfig, tick);
+      for (const level of [
+        r.entry_low,
+        r.entry_high,
+        r.preferred_entry,
+        r.stop_loss,
+        r.take_profit,
+      ]) {
+        expect(level).toBeGreaterThan(0);
+        expect(level / tick).toBeCloseTo(Math.round(level / tick), 8);
+      }
+      expect(r.preferred_entry).toBeGreaterThanOrEqual(r.entry_low);
+      expect(r.preferred_entry).toBeLessThanOrEqual(r.entry_high);
+      if (direction === "BUY") {
+        expect(r.stop_loss).toBeLessThan(r.entry_low);
+        expect(r.take_profit).toBeGreaterThan(r.entry_high);
+      } else {
+        expect(r.take_profit).toBeLessThan(r.entry_low);
+        expect(r.stop_loss).toBeGreaterThan(r.entry_high);
+      }
+      expect(r.risk_reward).toBe(
+        Math.abs(r.take_profit - r.preferred_entry) /
+          Math.abs(r.preferred_entry - r.stop_loss),
+      );
+      expect(r.flags.includes("LOW_RR")).toBe(
+        r.risk_reward < defaultConfig.minRR,
+      );
+    },
+  );
+  it("rejects negative levels from otherwise valid candles and configuration", () => {
+    const crash = Array.from({ length: 300 }, (_, i) =>
+      candleSchema.parse({
+        timestamp: i * 300000,
+        open: i < 298 ? 100 : 1,
+        high: i < 298 ? 101 : 2,
+        low: i < 298 ? 99 : 0.5,
+        close: i < 298 ? 100 : 1,
+        volume: 100,
+      }),
+    );
+    const extreme = configSchema.parse({
+      ...defaultConfig,
+      entryAtr: 3,
+      slAtr: 5,
+    });
+    expect(() =>
+      risk("BUY", { H1: crash, M15: crash, M5: crash }, extreme),
+    ).toThrow("Invalid positive");
+  });
+  it.each([5, 100])("rejects tick %s rounding that collapses the structural target into the entry band", (tick) => {
+    expect(() => risk("BUY", market, defaultConfig, tick)).toThrow(
+      "Invalid positive",
+    );
+  });
+  it.each([0, -1, Infinity, NaN])("rejects invalid tick size %s", (tick) => {
+    expect(() => risk("BUY", market, defaultConfig, tick)).toThrow(
+      "Invalid price or tick",
+    );
+  });
+  it("validates strategy parameter relationships and allows ordered non-default periods", () => {
+    for (const change of [
+      { ema: [200, 50, 20] },
+      { ema: [20, 20, 200] },
+      { momentumRsi: [40, 60] },
+      { momentumRsi: [50, 50] },
+      { reversionRsi: [80, 20] },
+      { reversionRsi: [50, 50] },
+    ])
+      expect(
+        configSchema.safeParse({
+          ...defaultConfig,
+          scanner: { ...defaultConfig.scanner, ...change },
+        }).success,
+      ).toBe(false);
+    expect(
+      configSchema.safeParse({
+        ...defaultConfig,
+        scanner: {
+          ...defaultConfig.scanner,
+          ema: [10, 40, 100],
+          momentumRsi: [60, 40],
+          reversionRsi: [25, 75],
+        },
+      }).success,
+    ).toBe(true);
+  });
+  it("exposes only known stop messages, never raw errors or prototype properties", () => {
+    expect(caseStopMessage("INVALID_RISK_PROPOSAL")).toContain("Level risiko");
+    for (const value of [
+      "__proto__",
+      "constructor",
+      "SQLITE_BUSY secret",
+      null,
+      {},
+      42,
+    ])
+      expect(caseStopMessage(value)).toBeNull();
+  });
   it.each(["BUY", "SELL"] as const)(
     "structural %s risk uses midpoint and honest RR",
     (d) => {
       const r = risk(d, market, defaultConfig);
-      expect(r.preferred_entry).toBe((r.entry_low + r.entry_high) / 2);
+      expect(
+        Math.abs(r.preferred_entry - (r.entry_low + r.entry_high) / 2),
+      ).toBeLessThanOrEqual(0.010000001);
       expect(r.risk_reward).toBe(
         Math.abs(r.take_profit - r.preferred_entry) /
           Math.abs(r.preferred_entry - r.stop_loss),

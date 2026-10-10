@@ -1,6 +1,7 @@
 import {
   analysisGroups,
   characterIds,
+  caseStopMessage,
   configSchema,
   MARKET,
   providers,
@@ -16,12 +17,39 @@ import { isProviderConfigured } from "./providers";
 import { chartSchema, readMarket } from "./market";
 import type { CaseRow } from "./office";
 import { meetingTurns } from "../core/meeting";
+import {
+  boundedBody,
+  errorResponse,
+  HttpError,
+  methodNotAllowed,
+  readJsonObject,
+} from "./http";
+import type { OfficeState } from "../core/api";
+import { privateText, redactPrivateAnalysis } from "./publication";
 export { Office } from "./office";
+const adminMethods: Record<string, string[]> = {
+  "/config": ["GET", "POST"],
+  "/characters": ["GET", "POST"],
+  "/providers": ["GET", "POST"],
+  "/prompts": ["GET"],
+  "/rollback": ["POST"],
+  "/models": ["POST"],
+  "/test-provider": ["POST"],
+  "/scan": ["POST"],
+  "/emergency": ["POST"],
+  "/simulation": ["POST"],
+  "/usage": ["GET"],
+  "/deliveries": ["GET"],
+  "/deliveries/review": ["POST"],
+  "/cases": ["GET"],
+  "/simulation/history": ["GET"],
+  "/health": ["GET"],
+};
 async function office(
   env: Env,
   path: string,
   body?: unknown,
-  method = body ? "POST" : "GET",
+  method = body !== undefined ? "POST" : "GET",
 ) {
   return env.OFFICE.get(
     env.OFFICE.idFromName(
@@ -30,10 +58,19 @@ async function office(
   ).fetch(
     new Request(`https://office.internal${path}`, {
       method,
-      body: body ? JSON.stringify(body) : undefined,
+      body: body !== undefined ? JSON.stringify(body) : undefined,
       headers: { "Content-Type": "application/json" },
     }),
   );
+}
+async function officeState(env: Env) {
+  const response = await office(env, "/state");
+  if (!response.ok)
+    throw new HttpError(503, "Office state unavailable", "OFFICE_UNAVAILABLE");
+  return {
+    ...((await response.json()) as OfficeState),
+    group_names: analysisGroups,
+  };
 }
 async function marketProcessingDelay(env: Env) {
   const response = await office(env, "/config");
@@ -62,17 +99,18 @@ function officeEvents(request: Request, env: Env) {
       const emit = async () => {
         if (stopped) return;
         try {
-          const state = await office(env, "/state");
-          if (!state.ok) throw new Error("Office state unavailable");
+          const state = await officeState(env);
+          if (stopped) return;
           controller.enqueue(
-            encoder.encode(`event: office\ndata: ${await state.text()}\n\n`),
+            encoder.encode(`event: office\ndata: ${JSON.stringify(state)}\n\n`),
           );
         } catch {
+          if (stopped) return;
           controller.enqueue(
             encoder.encode("event: unavailable\ndata: {}\n\n"),
           );
         }
-        timer = setTimeout(emit, 5000);
+        if (!stopped) timer = setTimeout(emit, 5000);
       };
       await emit();
     },
@@ -107,6 +145,7 @@ export function publicSignal(signal: Signal) {
 function publicCase(row: CaseRow) {
   const result = row.result
     ? (JSON.parse(row.result) as {
+        reason?: unknown;
         signal?: Signal;
         analysts?: {
           id: string;
@@ -123,6 +162,7 @@ function publicCase(row: CaseRow) {
     created_at: row.created_at,
     updated_at: row.updated_at,
     source: row.source,
+    stop_reason: caseStopMessage(result?.reason),
     signal: result?.signal ? publicSignal(result.signal) : null,
     analysts:
       result?.analysts?.map((a) => ({
@@ -142,6 +182,16 @@ async function route(request: Request, env: Env): Promise<Response> {
     path = url.pathname.replace(/\/$/, "");
   if (!path.startsWith("/api/")) return env.ASSETS.fetch(request);
   if (request.method === "OPTIONS") return new Response(null, { status: 204 });
+  if (
+    [
+      "/api/v1/auth/login",
+      "/api/v1/auth/logout",
+      "/api/v1/auth/session",
+    ].includes(path)
+  ) {
+    const methods = [path.endsWith("/session") ? "GET" : "POST"];
+    if (!methods.includes(request.method)) return methodNotAllowed(methods);
+  }
   if (path === "/api/v1/auth/login" && request.method === "POST")
     return login(request, env);
   const admin = await isAdmin(request, env);
@@ -153,11 +203,16 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (path.startsWith("/api/v1/admin")) {
     if (!admin) return json({ error: "Admin authentication required" }, 401);
+    const action = path.slice("/api/v1/admin".length);
+    const methods =
+      adminMethods[action] ??
+      (/^\/(?:cases|simulation)\/[^/]+$/.test(action) ? ["GET"] : undefined);
+    if (!methods) return json({ error: "Not found" }, 404);
+    if (!methods.includes(request.method)) return methodNotAllowed(methods);
     if (request.method !== "GET" && !sameOrigin(request, env))
       return json({ error: "Origin rejected" }, 403);
-    const action = path.slice("/api/v1/admin".length);
     if (action === "/deliveries/review" && request.method === "POST") {
-      const body = (await request.json()) as {
+      const body = (await readJsonObject(request)) as {
         key?: unknown;
         action?: unknown;
         confirmed?: unknown;
@@ -204,8 +259,8 @@ async function route(request: Request, env: Env): Promise<Response> {
       return office(
         env,
         action === "/scan" ? "/tick" : action,
-        request.method === "GET" ? undefined : await request.json(),
-        request.method === "GET" ? "GET" : "POST",
+        request.method === "GET" ? undefined : await readJsonObject(request),
+        request.method,
       );
     if (action === "/usage")
       return json(
@@ -265,6 +320,7 @@ async function route(request: Request, env: Env): Promise<Response> {
         providers: await (await office(env, "/providers")).json(),
         discordMeeting: !!env.DISCORD_MEETING_WEBHOOK,
         discordSignal: !!env.DISCORD_SIGNAL_WEBHOOK,
+        office: await (await office(env, "/diagnostics")).json(),
         configured: providers.map((id) => ({
           id,
           configured: isProviderConfigured(env, id),
@@ -272,8 +328,7 @@ async function route(request: Request, env: Env): Promise<Response> {
       });
     return json({ error: "Not found" }, 404);
   }
-  if (request.method !== "GET")
-    return json({ error: "Method not allowed" }, 405);
+  if (request.method !== "GET") return methodNotAllowed(["GET"]);
   if (path === "/api/v1/health") {
     let chart = "DOWN";
     try {
@@ -313,10 +368,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (path === "/api/v1/office/events") return officeEvents(request, env);
   if (path === "/api/v1/office/state") {
-    const response = await office(env, "/state");
-    if (!response.ok) return response;
-    const state = (await response.json()) as Record<string, unknown>;
-    return json({ ...state, group_names: analysisGroups });
+    return json(await officeState(env));
   }
   if (path === "/api/v1/office/meeting") {
     const activeStatuses =
@@ -327,7 +379,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     // Keep a just-finished meeting available long enough for the visual dialogue
     // to finish, even when the actual AI pipeline completes between UI polls.
     current ??= await env.DB.prepare(
-      "SELECT uuid,id,status FROM cases WHERE mode='LIVE' AND status IN ('COMPLETED','NO_CONSENSUS','FAILED','CONFIG_CHANGED') AND updated_at>=? ORDER BY created_at DESC LIMIT 1",
+      "SELECT uuid,id,status FROM cases WHERE mode='LIVE' AND status IN ('COMPLETED','NO_CONSENSUS','FAILED','CONFIG_CHANGED','STALE') AND updated_at>=? ORDER BY updated_at DESC,created_at DESC LIMIT 1",
     )
       .bind(Date.now() - 180000)
       .first<{ uuid: string; id: string; status: string }>();
@@ -337,6 +389,11 @@ async function route(request: Request, env: Env): Promise<Response> {
     )
       .bind(current.uuid)
       .all<{ snapshot: string }>();
+    const { config } = (await (await office(env, "/config")).json()) as {
+      config: { publicSignals: boolean };
+    };
+    const visible = admin || config.publicSignals;
+    const turns = meetingTurns(outputs.results.map((row) => row.snapshot));
     return json({
       meeting: {
         case_id: current.id,
@@ -346,9 +403,19 @@ async function route(request: Request, env: Env): Promise<Response> {
           "NO_CONSENSUS",
           "FAILED",
           "CONFIG_CHANGED",
+          "STALE",
         ].includes(current.status),
-        cancelled: ["FAILED", "CONFIG_CHANGED"].includes(current.status),
-        ...meetingTurns(outputs.results.map((row) => row.snapshot)),
+        cancelled: ["FAILED", "CONFIG_CHANGED", "STALE"].includes(
+          current.status,
+        ),
+        ...turns,
+        prices_private: !visible,
+        turns: turns.turns.map((turn) => ({
+          ...turn,
+          analysis: visible
+            ? turn.analysis
+            : redactPrivateAnalysis(turn.analysis),
+        })),
       },
     });
   }
@@ -363,7 +430,9 @@ async function route(request: Request, env: Env): Promise<Response> {
       id: string;
       avatar: string;
     }[];
-    const byId = new Map(characters.map((character) => [character.id, character]));
+    const byId = new Map(
+      characters.map((character) => [character.id, character]),
+    );
     return json(
       characterIds.map((id) => {
         const character = byId.get(id);
@@ -383,6 +452,9 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (path.startsWith("/api/v1/characters/")) {
     const id = path.split("/").at(-1);
+    const { config } = (await (await office(env, "/config")).json()) as {
+      config: { publicSignals: boolean };
+    };
     const rows = await env.DB.prepare(
       "SELECT a.snapshot,c.id AS case_id,c.updated_at FROM ai_character_outputs a JOIN cases c ON c.uuid=a.case_uuid WHERE a.character_id=? AND c.mode='LIVE' ORDER BY c.created_at DESC LIMIT 20",
     )
@@ -398,7 +470,12 @@ async function route(request: Request, env: Env): Promise<Response> {
           status: a.status,
           vote: a.output?.vote,
           confidence: a.output?.confidence,
-          summary: a.output?.summary,
+          summary:
+            admin || config.publicSignals
+              ? a.output?.summary
+              : a.output?.summary
+                ? privateText(a.output.summary)
+                : undefined,
           ...(admin
             ? {
                 provider: a.provider,
@@ -473,11 +550,22 @@ async function route(request: Request, env: Env): Promise<Response> {
     }
     if (!config.publicHistory && !admin)
       return json({ items: [], total: 0, page: 1 });
-    const page = Math.max(
-        1,
-        Math.min(10000, Number(url.searchParams.get("page")) || 1),
-      ),
+    const rawPage = url.searchParams.get("page");
+    const page = rawPage === null ? 1 : Number(rawPage),
       size = 20;
+    if (
+      (!rawPage && rawPage !== null) ||
+      !Number.isInteger(page) ||
+      page < 1 ||
+      page > 10000
+    )
+      return json(
+        {
+          error: "Page must be an integer between 1 and 10000",
+          code: "INVALID_PAGE",
+        },
+        400,
+      );
     const conditions = ["1=1"],
       values: (string | number)[] = [];
     const direction = url.searchParams.get("direction");
@@ -496,6 +584,7 @@ async function route(request: Request, env: Env): Promise<Response> {
         values.push(v);
       }
     }
+    const times: Partial<Record<"from" | "to", number>> = {};
     for (const [p, operator] of [
       ["minConfidence", ">="],
       ["maxConfidence", "<="],
@@ -511,14 +600,40 @@ async function route(request: Request, env: Env): Promise<Response> {
       ["to", "<="],
     ] as const) {
       const v = url.searchParams.get(p);
-      if (v && Number.isFinite(Date.parse(v))) {
-        conditions.push(`created_at ${operator} ?`);
-        const timestamp = /^\d{4}-\d{2}-\d{2}$/.test(v)
+      if (v) {
+        const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(v);
+        const timestamp = dateOnly
           ? Date.parse(`${v}T00:00:00+07:00`)
           : Date.parse(v);
-        values.push(timestamp + (p === "to" ? 86400000 - 1 : 0));
+        if (
+          !Number.isFinite(timestamp) ||
+          (dateOnly &&
+            new Date(timestamp + 7 * 3600000).toISOString().slice(0, 10) !==
+              v) ||
+          (!dateOnly && !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/i.test(v))
+        )
+          return json(
+            {
+              error:
+                "Date filters require YYYY-MM-DD or a timestamp with timezone",
+              code: "INVALID_DATE_RANGE",
+            },
+            400,
+          );
+        conditions.push(`created_at ${operator} ?`);
+        times[p] = timestamp + (p === "to" && dateOnly ? 86400000 - 1 : 0);
+        values.push(times[p]!);
       }
     }
+    if (
+      times.from !== undefined &&
+      times.to !== undefined &&
+      times.from > times.to
+    )
+      return json(
+        { error: "From must not be after To", code: "INVALID_DATE_RANGE" },
+        400,
+      );
     const flag = url.searchParams.get("flag");
     if (flag && ["LOW_RR", "COUNTER_TREND", "AI_DEGRADED"].includes(flag)) {
       conditions.push(
@@ -588,47 +703,57 @@ async function route(request: Request, env: Env): Promise<Response> {
       });
     }
     if (!config.publicSignals && !admin) safe.signal = null;
+    if (!config.publicSignals && !admin)
+      safe.analysts = safe.analysts.map((a) => ({
+        ...a,
+        summary: a.summary ? privateText(a.summary) : undefined,
+      }));
     return json(safe);
   }
   return json({ error: "Not found" }, 404);
 }
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
+    let limit: Awaited<ReturnType<typeof consumeApiLimit>> = null;
+    let routed: Response;
     try {
-      if (Number(request.headers.get("Content-Length")) > 200000)
-        return json({ error: "Request too large" }, 413);
-      let limit;
       try {
         limit = await consumeApiLimit(request, env);
       } catch {
-        return json({ error: "API temporarily unavailable" }, 503);
+        throw new HttpError(
+          503,
+          "API temporarily unavailable",
+          "API_UNAVAILABLE",
+        );
       }
-      const routed = limit?.blocked
-        ? limitedResponse(limit)
-        : await route(request, env);
-      const response = new Response(routed.body, routed);
-      limitHeaders(response, limit);
-      response.headers.set("Referrer-Policy", "same-origin");
-      response.headers.set("X-Frame-Options", "DENY");
-      response.headers.set(
-        "Content-Security-Policy",
-        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; worker-src 'self' blob:",
-      );
-      return response;
-    } catch {
-      return json(
-        { error: "Request failed. Check server configuration." },
-        500,
-      );
+      if (limit?.blocked) routed = limitedResponse(limit);
+      else {
+        if (new URL(request.url).pathname.startsWith("/api/"))
+          await boundedBody(request);
+        routed = await route(request, env);
+      }
+    } catch (error) {
+      routed = errorResponse(error);
     }
+    const response = new Response(routed.body, routed);
+    limitHeaders(response, limit);
+    response.headers.set("Referrer-Policy", "same-origin");
+    response.headers.set("X-Frame-Options", "DENY");
+    response.headers.set(
+      "Content-Security-Policy",
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; worker-src 'self' blob:",
+    );
+    return response;
   },
   async scheduled(
-    _controller: ScheduledController,
+    controller: ScheduledController,
     env: Env,
     ctx: ExecutionContext,
   ) {
     ctx.waitUntil(
-      office(env, "/tick", {}).then(async (response) => {
+      office(env, "/schedule", {
+        scheduledTime: controller.scheduledTime,
+      }).then(async (response) => {
         await response.arrayBuffer();
         if (!response.ok) throw new Error("Scheduled scanner request failed");
       }),

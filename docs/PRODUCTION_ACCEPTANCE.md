@@ -1,5 +1,7 @@
 # Production acceptance — 4 October 2026 (UTC)
 
+Historical production report: the observations below were recorded on 4 October, including that day's one-minute schedule. The subsequent five-minute schedule is recorded in [Deployment](DEPLOYMENT.md). The 10 October trading and UI/API fixes have passed local validation only; see [UI/API contract and validation](API_UI_CONTRACT.md). They do not update this production acceptance record, and migration `0006_admin_operations.sql` has not been applied remotely in this task.
+
 ## Current production state
 
 Worker: `byga-office`  

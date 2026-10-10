@@ -14,6 +14,7 @@ export interface MeetingSnapshot {
   status: string;
   finished: boolean;
   cancelled: boolean;
+  prices_private?: boolean;
   turns: MeetingTurn[];
   unavailable: CharacterId[];
   failureReasons?: Partial<Record<CharacterId, string>>;
@@ -53,7 +54,9 @@ export function meetingFailureReason(
   schemaValid: boolean,
 ): string {
   const errors = Array.isArray(saved.validationErrors)
-    ? saved.validationErrors.filter((value): value is string => typeof value === "string")
+    ? saved.validationErrors.filter(
+        (value): value is string => typeof value === "string",
+      )
     : [];
   if (errors.some((value) => /PROVIDER_HTTP_402/.test(value)))
     return "Provider meminta pembayaran atau kredit (HTTP 402)";
@@ -67,7 +70,10 @@ export function meetingFailureReason(
     return "Provider belum dikonfigurasi";
   if (errors.some((value) => /SEMANTIC_INVALID|validation|schema/i.test(value)))
     return "Output AI tidak memenuhi aturan validasi";
-  if (saved.status === "TIMEOUT" || errors.some((value) => /timeout|aborted/i.test(value)))
+  if (
+    saved.status === "TIMEOUT" ||
+    errors.some((value) => /timeout|aborted/i.test(value))
+  )
     return "Provider tidak merespons sebelum batas waktu";
   if (!schemaValid && saved.status === "SUCCESS")
     return "Output AI tidak sesuai format";

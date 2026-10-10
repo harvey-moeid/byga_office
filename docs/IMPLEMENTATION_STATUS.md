@@ -1,5 +1,7 @@
 # Implementation status — 6 October 2026 (WIB)
 
+Workspace update — 10 October 2026: the trading safety fixes and 18 UI/API audit fixes are documented in [Trading safety](TRADING_SAFETY.md) and [UI/API contract and validation](API_UI_CONTRACT.md). These changes have been verified locally and have not been deployed. Migration `0006_admin_operations.sql` is local only. Production observations below describe their recorded dates; use [Deployment](DEPLOYMENT.md) for the current release procedure.
+
 ## Current production hardening — 6 October 2026
 
 - Worker `byga-office` is published and Cloudflare currently reports cron **`*/5 * * * *`**.

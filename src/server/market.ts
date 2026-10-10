@@ -25,7 +25,7 @@ export const chartSchema = z.object({
   timeframeValues: z
     .object({ H1: z.string(), M15: z.string(), M5: z.string() })
     .optional(),
-  tickSize: z.number().positive().optional(),
+  tickSize: z.number().finite().positive().optional(),
 });
 const duration: Record<Timeframe, number> = {
   H1: 3600000,

@@ -14,10 +14,10 @@ import {
   MARKET,
   analysisGroups,
   characterIds,
+  caseStopMessage,
   defaultConfig,
   type AvatarPreset,
   type CharacterId,
-  type GroupSnapshot,
   formatPrice,
   formatWib,
   scannerNames,
@@ -26,6 +26,8 @@ import {
 } from "../core/contracts";
 import "./style.css";
 import { useData, useOfficeState, useOnline } from "./data";
+import { SessionProvider, useSession } from "./session";
+import type { OfficeState } from "../core/api";
 import type { OfficeActivityKind } from "./office-activity";
 import { characterGroupLabels, characterPresence } from "./character-state";
 import {
@@ -38,6 +40,7 @@ import {
   Badge,
   Empty,
   Heading,
+  InfoDialog,
   Notice,
   OfficeScene,
   SceneBoundary,
@@ -52,16 +55,6 @@ const SimulationHistory = lazy(() =>
 const SimulationPlayback = lazy(() =>
   import("./simulation").then((m) => ({ default: m.SimulationPlayback })),
 );
-interface OfficeState {
-  scanner_consensus_min?: number;
-  group_consensus_min?: number;
-  groups?: GroupSnapshot[];
-  office: string;
-  active: { id: string; status: string } | null;
-  scanners: ScannerOutput[];
-  last_processed_candle?: number;
-  error?: string;
-}
 interface Market {
   development?: boolean;
   price: number;
@@ -76,6 +69,7 @@ interface PublicCase {
   created_at: number;
   updated_at: number;
   source: string;
+  stop_reason?: string | null;
   signal?: Signal;
   analysts: {
     id: string;
@@ -93,12 +87,14 @@ interface PublicCase {
 function App() {
   return (
     <BrowserRouter>
-      <AppLayout />
+      <SessionProvider>
+        <AppLayout />
+      </SessionProvider>
     </BrowserRouter>
   );
 }
 function AppLayout() {
-  const session = useData<{ admin: boolean }>("/auth/session");
+  const session = useSession();
   const online = useOnline();
   const location = useLocation();
   const home = location.pathname === "/" || location.pathname === "/office";
@@ -168,16 +164,22 @@ function AppLayout() {
                   (path !== "/cases" && path !== "/simulation"),
               )
               .map(([path, icon, title]) => (
-              <NavLink
-                key={path}
-                to={path}
-                end={path === "/"}
-                onClick={() => setMenuOpen(false)}
-              >
-                <span aria-hidden="true">{icon}</span>
-                {title}
-              </NavLink>
-            ))}
+                <NavLink
+                  key={path}
+                  to={path}
+                  end={path === "/"}
+                  onClick={() => setMenuOpen(false)}
+                  onFocus={(event) =>
+                    event.currentTarget.scrollIntoView({
+                      block: "nearest",
+                      inline: "nearest",
+                    })
+                  }
+                >
+                  <span aria-hidden="true">{icon}</span>
+                  {title}
+                </NavLink>
+              ))}
           </nav>
           <div className="sidebar-bottom">
             <span className="dot" /> {MARKET} ONLY
@@ -259,10 +261,7 @@ function AppLayout() {
                 )
               }
             />
-            <Route
-              path="/admin/*"
-              element={<Admin onSessionChange={session.retry} />}
-            />
+            <Route path="/admin/*" element={<Admin />} />
             <Route path="*" element={<Empty>Halaman tidak ditemukan.</Empty>} />
           </Routes>
         </Suspense>
@@ -327,6 +326,15 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
   const notices = (
     <div className={immersive ? "home-notices" : undefined}>
       <Notice error={state.error} retry={state.retry} />
+      <Notice
+        error={
+          state.data?.error
+            ? "Data pasar belum tersedia. Status kantor belum dapat dipastikan."
+            : undefined
+        }
+        retry={state.retry}
+      />
+      {!immersive && <Notice error={market.error} retry={market.retry} />}
       {/* Market freshness is represented by the compact market metric and polling.
           Keep backend/schema details out of the public home/3D overlay. */}
       {market.data?.development && (
@@ -537,83 +545,87 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
         </div>
       )}
       {selected && (
-        <div className="modal-backdrop" onClick={() => setSelected(undefined)}>
-          <section className="modal" onClick={(e) => e.stopPropagation()}>
-            <button
-              className="close"
-              aria-label="Tutup"
-              onClick={() => setSelected(undefined)}
-            >
-              ×
-            </button>
-            <span className="eyebrow">BYGA AI TEAM</span>
-            <h2>
-              {selected === "market-wall"
-                ? "Market Wall"
-                : (roles[selected] ?? selected)}
-            </h2>
-            {selected === "market-wall" ? (
-              <>
-                <div className="segmented">
-                  {["H1", "M15", "M5"].map((t) => (
-                    <button
-                      key={t}
-                      className={tf === t ? "selected" : ""}
-                      onClick={() => setTf(t)}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-                <Chart candles={market.data?.timeframes[tf] ?? []} />
-              </>
-            ) : selected === "server-room" ? (
-              <>
-                <Notice error={health.error} retry={health.retry} />
-                {Object.entries(health.data ?? {}).map(([name, status]) => (
-                  <p key={name}>
-                    {name} <Badge value={status} />
-                  </p>
+        <InfoDialog
+          titleId="object-dialog-title"
+          onClose={() => setSelected(undefined)}
+        >
+          <button
+            className="close"
+            autoFocus
+            aria-label="Tutup"
+            onClick={() => setSelected(undefined)}
+          >
+            ×
+          </button>
+          <span className="eyebrow">BYGA AI TEAM</span>
+          <h2 id="object-dialog-title">
+            {selected === "market-wall"
+              ? "Market Wall"
+              : (roles[selected] ?? selected)}
+          </h2>
+          {selected === "market-wall" ? (
+            <>
+              <div className="segmented">
+                {["H1", "M15", "M5"].map((t) => (
+                  <button
+                    key={t}
+                    className={tf === t ? "selected" : ""}
+                    onClick={() => setTf(t)}
+                  >
+                    {t}
+                  </button>
                 ))}
-                <Link className="button" to="/admin">
-                  Provider diagnostics (Admin)
-                </Link>
-              </>
-            ) : selectedCharacter ? (
-              <>
-                <div className="character-live-summary">
-                  <Badge value={presenceFor(selectedCharacter)} />
-                  <small>{characterGroupLabels[selectedCharacter]}</small>
-                </div>
-                {selectedTurn && (
-                  <p className="character-live-vote">
-                    <Badge value={selectedTurn.analysis.vote} />
-                    <strong>Confidence {selectedTurn.analysis.confidence}%</strong>
-                  </p>
-                )}
-                <p>
-                  {meeting.active
-                    ? presenceFor(selectedCharacter) === "SPEAKING"
-                      ? "Sedang menyampaikan hasil AI case aktif di ruang meeting."
-                      : presenceFor(selectedCharacter) === "OUTPUT UNAVAILABLE"
-                        ? "Output karakter tidak lolos validasi atau tidak tersedia untuk case aktif."
-                        : "Status ini mengikuti posisi dan tahap karakter pada meeting aktif."
-                    : activityKinds[selectedCharacter]
-                      ? "Aktivitas kantor visual. Tidak memanggil AI dan tidak memengaruhi voting."
-                      : "Memantau pasar. Tidak ada panggilan AI saat aktivitas dekoratif."}
+              </div>
+              <Chart candles={market.data?.timeframes[tf] ?? []} />
+            </>
+          ) : selected === "server-room" ? (
+            <>
+              <Notice error={health.error} retry={health.retry} />
+              {Object.entries(health.data ?? {}).map(([name, status]) => (
+                <p key={name}>
+                  {name} <Badge value={status} />
                 </p>
-                <Link
-                  className="button primary"
-                  to={`/characters/${selectedCharacter}`}
-                >
-                  Lihat Detail ↗
-                </Link>
-              </>
-            ) : (
-              <p>Informasi objek belum tersedia.</p>
-            )}
-          </section>
-        </div>
+              ))}
+              <Link className="button" to="/admin">
+                Provider diagnostics (Admin)
+              </Link>
+            </>
+          ) : selectedCharacter ? (
+            <>
+              <div className="character-live-summary">
+                <Badge value={presenceFor(selectedCharacter)} />
+                <small>{characterGroupLabels[selectedCharacter]}</small>
+              </div>
+              {selectedTurn && (
+                <p className="character-live-vote">
+                  <Badge value={selectedTurn.analysis.vote} />
+                  <strong>
+                    Confidence {selectedTurn.analysis.confidence}%
+                  </strong>
+                </p>
+              )}
+              <p>
+                {meeting.active
+                  ? presenceFor(selectedCharacter) === "SPEAKING"
+                    ? "Sedang menyampaikan hasil AI case aktif di ruang meeting."
+                    : presenceFor(selectedCharacter) === "OUTPUT UNAVAILABLE"
+                      ? "Output karakter tidak lolos validasi atau tidak tersedia untuk case aktif."
+                      : "Status ini mengikuti posisi dan tahap karakter pada meeting aktif."
+                  : activityKinds[selectedCharacter]
+                    ? "Aktivitas kantor visual. Tidak memanggil AI dan tidak memengaruhi voting."
+                    : "Memantau pasar. Tidak ada panggilan AI saat aktivitas dekoratif."}
+              </p>
+              <Link
+                className="button primary"
+                to={`/characters/${selectedCharacter}`}
+              >
+                Lihat Detail ↗
+              </Link>
+            </>
+          ) : (
+            <p>Informasi objek belum tersedia.</p>
+          )}
+        </InfoDialog>
       )}
     </>
   );
@@ -882,7 +894,9 @@ function SignalView({ signal: s }: { signal: Signal }) {
         <Badge value={s.direction} />
         <strong className="big-number">{Math.round(s.confidence)}%</strong>
       </div>
-      <h2>{s.market} · {s.signal_id}</h2>
+      <h2>
+        {s.market} · {s.signal_id}
+      </h2>
       <div className="risk-grid">
         {[
           ["Entry Low", s.entry_low],
@@ -954,7 +968,7 @@ function Cases() {
 }
 function CaseDetail({ simulation = false }: { simulation?: boolean }) {
   const { id } = useParams();
-  const session = useData<{ admin: boolean }>("/auth/session");
+  const session = useSession();
   const path = session.data?.admin
     ? `/admin/${simulation ? "simulation" : "cases"}/${id}`
     : `/cases/${id}/public`;
@@ -962,6 +976,7 @@ function CaseDetail({ simulation = false }: { simulation?: boolean }) {
     PublicCase & {
       context?: { market?: { M5: { close: number }[] } };
       result?: {
+        reason?: string;
         signal?: Signal;
         analysts?: (PublicCase["analysts"][number] & {
           output?: { vote: string; summary: string };
@@ -971,7 +986,8 @@ function CaseDetail({ simulation = false }: { simulation?: boolean }) {
     }
   >(path, true);
   const c = data.data,
-    s = c?.signal ?? c?.result?.signal;
+    s = c?.signal ?? c?.result?.signal,
+    stopReason = c?.stop_reason ?? caseStopMessage(c?.result?.reason);
   return (
     <>
       <Heading
@@ -990,6 +1006,11 @@ function CaseDetail({ simulation = false }: { simulation?: boolean }) {
           )}
           <section className="panel">
             <Badge value={c.status} />
+            {stopReason && (
+              <p className="warning" role="status">
+                {stopReason}
+              </p>
+            )}
             <p>
               {c.direction ?? "Neutral"} · {formatWib(c.created_at)}
             </p>
@@ -1039,6 +1060,15 @@ function Characters() {
         title="AI Team"
         description="Delapan Analyst independen, Risk Manager, dan Head Trader."
       />
+      <Notice error={state.error} retry={state.retry} />
+      <Notice
+        error={
+          state.data?.error
+            ? "Status tim belum dapat dipastikan karena data pasar tidak tersedia."
+            : undefined
+        }
+        retry={state.retry}
+      />
       <div className="character-grid">
         {characterIds.map((id) => (
           <Link to={`/characters/${id}`} className="panel" key={id}>
@@ -1051,7 +1081,17 @@ function Characters() {
                     .join("")}
             </span>
             <h2>{roles[id]}</h2>
-            <Badge value={state.data?.active ? "ACTIVE" : "MONITORING"} />
+            <Badge
+              value={
+                state.loading
+                  ? "LOADING"
+                  : state.error || !state.data || state.data.error
+                    ? "UNKNOWN"
+                    : state.data.active
+                      ? "ACTIVE"
+                      : "MONITORING"
+              }
+            />
           </Link>
         ))}
       </div>
@@ -1060,7 +1100,7 @@ function Characters() {
 }
 function CharacterDetail() {
   const { id } = useParams();
-  const session = useData<{ admin: boolean }>("/auth/session");
+  const session = useSession();
   const history = useData<
     (PublicCase["analysts"][number] & { case_id: string; updated_at: number })[]
   >(`/characters/${id}`, true);
@@ -1072,7 +1112,18 @@ function CharacterDetail() {
         title={roles[id ?? ""] ?? id ?? "Character"}
       />
       <section className="panel">
-        <Badge value={state.data?.active ? "ACTIVE" : "MONITORING"} />
+        <Notice error={state.error} retry={state.retry} />
+        <Badge
+          value={
+            state.loading
+              ? "LOADING"
+              : state.error || !state.data || state.data.error
+                ? "UNKNOWN"
+                : state.data.active
+                  ? "ACTIVE"
+                  : "MONITORING"
+          }
+        />
         <p>
           {id === "boss"
             ? "Final review dan tie-breaker; tidak boleh membalik majority AI."

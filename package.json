@@ -18,7 +18,8 @@
     "deploy": "npm run build && node scripts/deploy.mjs",
     "password:hash": "node scripts/password.mjs",
     "test:browser": "playwright test",
-    "deploy:check": "node scripts/wrangler.mjs deploy --dry-run"
+    "deploy:check": "node scripts/wrangler.mjs deploy --dry-run",
+    "test:browser:integration": "playwright test --config playwright.integration.config.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.0.0",

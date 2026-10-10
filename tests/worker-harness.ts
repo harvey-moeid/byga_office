@@ -14,7 +14,24 @@ export class Office extends ProductionOffice {
       return Response.json({ ok: true });
     }
     if (path === "/__test/storage") {
-      return Response.json({ alarm: await this.ctx.storage.getAlarm() });
+      return Response.json({
+        alarm: await this.ctx.storage.getAlarm(),
+        pendingTick: await this.ctx.storage.get("pending_tick"),
+        buyCooldown: await this.ctx.storage.get("cooldown:BUY"),
+        sellCooldown: await this.ctx.storage.get("cooldown:SELL"),
+      });
+    }
+    if (path === "/__test/pause") {
+      await this.ctx.storage.deleteAlarm();
+      return Response.json({ ok: true });
+    }
+    if (path === "/__test/tick-due") {
+      await this.ctx.storage.put("pending_tick", Date.now() - 1);
+      return Response.json({ ok: true });
+    }
+    if (path === "/__test/clear-cooldown") {
+      await this.ctx.storage.delete(["cooldown:BUY", "cooldown:SELL"]);
+      return Response.json({ ok: true });
     }
     if (path === "/__test/mode" && request.method === "POST") {
       const body = (await request.json()) as { mode?: string };

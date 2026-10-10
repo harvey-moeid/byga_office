@@ -509,6 +509,72 @@ export interface AIRuntime {
   beforeCall(estimatedTokens?: number): Promise<void>;
   acquireCircuit?(provider: Provider, policy: ProviderPolicy): Promise<boolean>;
 }
+export function characterSemanticErrors(
+  c: Pick<CharacterConfig, "id">,
+  output: AnalystResult["output"],
+  context: unknown,
+) {
+  const errors = semanticErrors(output);
+  if (!output) return errors;
+  const authority = context as {
+    voting?: {
+      tie: boolean;
+      degraded: boolean;
+      direction: string | null;
+    };
+    risk_proposals?: Partial<
+      Record<
+        "BUY" | "SELL",
+        {
+          preferred_entry: number;
+          stop_loss: number;
+          take_profit: number;
+        }
+      >
+    >;
+  };
+  const selected = authority?.voting?.direction;
+  const selectedProposal =
+    selected === "BUY" || selected === "SELL"
+      ? authority?.risk_proposals?.[selected]
+      : undefined;
+  if (
+    c.id === "risk" &&
+    output.vote !== "NO_TRADE" &&
+    (output.vote !== selected || !selectedProposal)
+  )
+    errors.push(
+      "Risk Manager must support the selected direction and an existing proposal, or vote NO_TRADE",
+    );
+  if (output.price_levels) {
+    const planDirection = output.vote === "NO_TRADE" ? selected : output.vote;
+    const plan =
+      planDirection === "BUY" || planDirection === "SELL"
+        ? authority?.risk_proposals?.[planDirection]
+        : undefined;
+    if (
+      !plan ||
+      output.price_levels.entry !== plan.preferred_entry ||
+      output.price_levels.stop_loss !== plan.stop_loss ||
+      output.price_levels.take_profit !== plan.take_profit
+    )
+      errors.push(
+        "AI price levels must exactly copy an existing deterministic risk proposal",
+      );
+  }
+  if (
+    c.id === "boss" &&
+    authority?.voting &&
+    !authority.voting.tie &&
+    !authority.voting.degraded &&
+    authority.voting.direction &&
+    output.vote !== "NO_TRADE" &&
+    output.vote !== authority.voting.direction
+  ) {
+    errors.push("Boss cannot reverse normal analyst majority");
+  }
+  return errors;
+}
 export async function runCharacter(
   env: Env,
   c: CharacterConfig,
@@ -568,25 +634,7 @@ export async function runCharacter(
         raw = response.text;
         tokens = response.tokens;
         last = parseOutput(raw);
-        const semantic = semanticErrors(last);
-        const authority = context as {
-          voting?: {
-            tie: boolean;
-            degraded: boolean;
-            direction: string | null;
-          };
-        };
-        if (
-          c.id === "boss" &&
-          authority.voting &&
-          !authority.voting.tie &&
-          !authority.voting.degraded &&
-          authority.voting.direction &&
-          last.vote !== "NO_TRADE" &&
-          last.vote !== authority.voting.direction
-        ) {
-          semantic.push("Boss cannot reverse normal analyst majority");
-        }
+        const semantic = characterSemanticErrors(c, last, context);
         await runtime.audit({
           provider,
           model,

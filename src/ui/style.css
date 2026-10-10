@@ -347,8 +347,12 @@ p {
 .office-scene {
   height: 560px;
   position: relative;
-  background:
-    radial-gradient(circle at 50% 35%, #24312f 0, #111d1f 48%, #091215 100%);
+  background: radial-gradient(
+    circle at 50% 35%,
+    #24312f 0,
+    #111d1f 48%,
+    #091215 100%
+  );
   overflow: hidden;
   isolation: isolate;
 }
@@ -580,26 +584,97 @@ p {
   font-size: 10px;
   line-height: 1.4;
 }
-.meeting-status { width: min(330px, calc(100% - 40px)); max-height: min(46dvh, 430px); overflow: auto; backdrop-filter: blur(10px); }
-.meeting-status.meeting-status-compact { max-width: min(300px, calc(100% - 40px)); }
-.meeting-status-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.meeting-status-heading > strong { flex: 1; line-height: 1.35; }
-.meeting-status-toggle { cursor: pointer; color: #e5dfcb; background: #203c3e; border: 1px solid #628477; border-radius: 6px; padding: 5px 8px; min-height: 30px; font-size: 10px; white-space: nowrap; }
-.meeting-status-toggle:focus-visible { outline: 2px solid #e4c18c; outline-offset: 2px; }
-.meeting-status-case { color: #b5c8c0; overflow-wrap: anywhere; }
-.meeting-status-warning { font-size: 11px; color: #f2d69c; display: flex; gap: 6px; align-items: center; }
-.meeting-status-details { display: grid; gap: 8px; font-size: 11px; }
-.meeting-status-details p { margin: 0; color: #d0dbd5; line-height: 1.45; }
-.meeting-status-details ul { list-style: none; display: grid; gap: 7px; padding: 0; margin: 0; }
-.meeting-status-details li { display: grid; gap: 2px; padding: 7px 8px; border: 1px solid #385953; border-radius: 6px; }
-.meeting-status-details li strong { font-size: 10px; }
-.meeting-status-details li span { color: #f1d7a5; line-height: 1.35; }
-.meeting-status-details a { color: #e5c58f; text-decoration: underline; text-underline-offset: 3px; }
+.meeting-status {
+  width: min(330px, calc(100% - 40px));
+  max-height: min(46dvh, 430px);
+  overflow: auto;
+  backdrop-filter: blur(10px);
+}
+.meeting-status.meeting-status-compact {
+  max-width: min(300px, calc(100% - 40px));
+}
+.meeting-status-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.meeting-status-heading > strong {
+  flex: 1;
+  line-height: 1.35;
+}
+.meeting-status-toggle {
+  cursor: pointer;
+  color: #e5dfcb;
+  background: #203c3e;
+  border: 1px solid #628477;
+  border-radius: 6px;
+  padding: 5px 8px;
+  min-height: 30px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.meeting-status-toggle:focus-visible {
+  outline: 2px solid #e4c18c;
+  outline-offset: 2px;
+}
+.meeting-status-case {
+  color: #b5c8c0;
+  overflow-wrap: anywhere;
+}
+.meeting-status-warning {
+  font-size: 11px;
+  color: #f2d69c;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.meeting-status-details {
+  display: grid;
+  gap: 8px;
+  font-size: 11px;
+}
+.meeting-status-details p {
+  margin: 0;
+  color: #d0dbd5;
+  line-height: 1.45;
+}
+.meeting-status-details ul {
+  list-style: none;
+  display: grid;
+  gap: 7px;
+  padding: 0;
+  margin: 0;
+}
+.meeting-status-details li {
+  display: grid;
+  gap: 2px;
+  padding: 7px 8px;
+  border: 1px solid #385953;
+  border-radius: 6px;
+}
+.meeting-status-details li strong {
+  font-size: 10px;
+}
+.meeting-status-details li span {
+  color: #f1d7a5;
+  line-height: 1.35;
+}
+.meeting-status-details a {
+  color: #e5c58f;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 @media (max-width: 600px) {
-  .meeting-status { max-height: min(34dvh, 260px); width: calc(100% - 24px); }
+  .meeting-status {
+    max-height: min(34dvh, 260px);
+    width: calc(100% - 24px);
+  }
 }
 @media (max-height: 480px) {
-  .meeting-status { max-height: 40dvh; }
+  .meeting-status {
+    max-height: 40dvh;
+  }
 }
 .fallback-meeting {
   padding: 18px;
@@ -1251,6 +1326,15 @@ textarea {
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
+.editor-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
 .login {
   max-width: 480px;
   margin: 30px auto;
@@ -1303,6 +1387,9 @@ summary {
   padding: 20px;
 }
 .modal {
+  color: inherit;
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
   max-width: 480px;
   width: 100%;
   background: #1b292b;
@@ -1310,6 +1397,10 @@ summary {
   border-radius: 12px;
   padding: 30px;
   position: relative;
+}
+.modal::backdrop {
+  background: #0008;
+  backdrop-filter: blur(5px);
 }
 .modal h2 {
   font-size: 24px;
@@ -1417,14 +1508,19 @@ footer {
     display: none;
   }
   nav {
+    min-width: 0;
+    max-width: 100%;
+    width: 100%;
     flex-direction: row;
-    overflow-y: visible;
-    justify-content: space-around;
+    overflow-x: auto;
+    overflow-y: hidden;
+    justify-content: flex-start;
     gap: 0;
     height: 100%;
     align-items: center;
   }
   nav a {
+    flex: 1 0 auto;
     flex-direction: column;
     gap: 3px;
     font-size: 8px;
@@ -1556,6 +1652,8 @@ footer {
     padding: 0;
   }
   .modal {
+    margin: auto 0 0;
+    max-width: 100%;
     border-radius: 14px 14px 0 0;
     padding: 28px 22px;
   }

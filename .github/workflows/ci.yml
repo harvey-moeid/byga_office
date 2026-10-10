@@ -81,6 +81,10 @@ jobs:
       - name: Browser tests
         # Software WebGL and trace capture share the runner CPU; serialize graphics acceptance.
         run: npm run test:browser -- --workers=1 --reporter=line,html --trace=retain-on-failure
+      - name: Browser to Worker and D1 integration
+        env:
+          PLAYWRIGHT_HTML_REPORT: playwright-api-report
+        run: npm run test:browser:integration -- --reporter=line,html --trace=retain-on-failure
       - name: Upload browser report and failure traces
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -89,5 +93,7 @@ jobs:
           path: |
             playwright-report/
             test-results/
+            playwright-api-report/
+            browser-api-results/
           if-no-files-found: ignore
           retention-days: 7

@@ -1,10 +1,46 @@
 import { test, expect, type Page } from "@playwright/test";
 import type { MeetingSnapshot } from "../src/core/meeting";
 import {
+  caseStopMessage,
   defaultConfig,
   defaultCharacters,
   workersAIModel,
 } from "../src/core/contracts";
+test("stopped cases explain why no signal was published", async ({ page }) => {
+  await page.route("**/api/v1/auth/session", route => route.fulfill({ json: { admin: false } }));
+  await page.route("**/api/v1/cases/CASE-stale/public", route => route.fulfill({ json: {
+    id: "CASE-stale", status: "STALE", direction: "BUY", source: "AUTO",
+    created_at: Date.now(), updated_at: Date.now(), signal: null, analysts: [],
+    stop_reason: caseStopMessage("MARKET_CHANGED_DURING_ANALYSIS"),
+  } }));
+  await page.goto("/cases/CASE-stale");
+  await expect(page.getByRole("status")).toContainText("Data candle berubah selama analisis. Sinyal tidak diterbitkan.");
+  await expect(page.getByText("Preferred Entry", { exact: true })).toHaveCount(0);
+});
+test("stale cases close meetings even when the 3D speaker has not become visible", async ({ page }) => {
+  // Keep the actual meeting hook and UI, while simulating a renderer that has
+  // not reported a visible speaker yet. No GPU timing is involved in this case.
+  await page.addInitScript(() => {
+    HTMLCanvasElement.prototype.getContext = (() => ({ getExtension: () => null })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+  });
+  await page.route("**/src/ui/scene.tsx*", (route) => route.fulfill({
+    contentType: "application/javascript",
+    body: "export default function OfficeScene() { return null; }",
+  }));
+  await page.clock.install();
+  const snapshot = await fixtureMeeting(page);
+  await page.goto("/");
+  await expect(page.getByText("Tim menuju ruang meeting", { exact: true })).toBeVisible();
+  await page.clock.fastForward(15000);
+  await expect(page.getByText("Trend Analyst sedang berbicara", { exact: true })).toBeVisible();
+  await expect(page.locator(".meeting-bubble")).toHaveCount(0);
+  snapshot.status = "STALE";
+  snapshot.cancelled = true;
+  await page.clock.fastForward(5500);
+  await expect(page.getByText("Meeting dihentikan · kembali ke meja", { exact: true })).toBeVisible();
+  await page.clock.fastForward(8500);
+  await expect(page.locator(".meeting-status")).toHaveCount(0);
+});
 test("Admin and Simulation modules load only when their routes are opened", async ({
   page,
 }) => {
@@ -828,37 +864,60 @@ test("3D speech follows the seated character and opens the actual result detail"
   await page.goto("/");
   await expect(page.getByRole("button", { name: /Reset View/ })).toBeVisible();
   meetingEnabled = true;
-  const bubble = page.locator(".meeting-bubble").filter({ hasText: "Trend Analyst" });
-  await expect(bubble).toBeVisible({ timeout: 60000 });
-  // Capture geometry and open the finite-lived bubble in the same browser
-  // task. Software WebGL can make separate Playwright round-trips slow enough
-  // for the seven-second speech turn to advance before the click is sent.
-  const geometry = await bubble.evaluate((element) => {
-    const rect = (node: Element) => {
-      const value = node.getBoundingClientRect();
-      return {
-        x: value.x,
-        y: value.y,
-        width: value.width,
-        height: value.height,
-      };
-    };
-    const overlays = [
-      ".meeting-status",
-      ".home-hud > div",
-      ".home-hud .segmented",
-      ".scene-controls",
-      ".scene-quality",
-    ]
-      .map((selector) => document.querySelector(selector))
-      .filter((node): node is Element => !!node)
-      .map(rect);
-    const bubbleBounds = rect(element);
-    element.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, cancelable: true }),
+  // Poll visibility, capture geometry and click in one browser task. A separate
+  // locator assertion followed by a click can miss the seven-second speech
+  // window when software WebGL and trace capture delay protocol round-trips.
+  const openSpeech = async (label: string) => {
+    const handle = await page.waitForFunction(
+      (label) => {
+        const element = Array.from(
+          document.querySelectorAll<HTMLButtonElement>(".meeting-bubble"),
+        ).find((node) => node.getAttribute("aria-label") === label);
+        if (
+          !element?.checkVisibility({
+            checkOpacity: true,
+            checkVisibilityCSS: true,
+          })
+        )
+          return;
+        const rect = (node: Element) => {
+          const value = node.getBoundingClientRect();
+          return {
+            x: value.x,
+            y: value.y,
+            width: value.width,
+            height: value.height,
+          };
+        };
+        const overlays = [
+          ".meeting-status",
+          ".home-hud > div",
+          ".home-hud .segmented",
+          ".scene-controls",
+          ".scene-quality",
+        ]
+          .map((selector) => document.querySelector(selector))
+          .filter((node): node is Element => !!node)
+          .map(rect);
+        const bubbleBounds = rect(element);
+        if (bubbleBounds.width === 0 || bubbleBounds.height === 0) return;
+        element.dispatchEvent(
+          new MouseEvent("click", { bubbles: true, cancelable: true }),
+        );
+        return { bubbleBounds, overlays };
+      },
+      label,
+      { timeout: 60000, polling: 100 },
     );
-    return { bubbleBounds, overlays };
-  });
+    try {
+      const geometry = await handle.jsonValue();
+      if (!geometry) throw new Error("Visible speech did not yield geometry");
+      return geometry;
+    } finally {
+      await handle.dispose();
+    }
+  };
+  const geometry = await openSpeech("Baca percakapan Trend Analyst");
   const viewport = page.viewportSize()!;
   const { bubbleBounds } = geometry;
   expect(bubbleBounds.x).toBeGreaterThanOrEqual(8);
@@ -889,11 +948,7 @@ test("3D speech follows the seated character and opens the actual result detail"
   await page
     .getByRole("button", { name: "Tutup percakapan", exact: true })
     .click();
-  const boss = page.locator(".meeting-bubble").filter({ hasText: "Head Trader" });
-  await expect(boss).toBeVisible({ timeout: 60000 });
-  // Speech bubbles remain screen-clamped while following animated characters.
-  // dispatchEvent avoids waiting for a perfectly stable transform on software WebGL.
-  await boss.dispatchEvent("click");
+  await openSpeech("Baca percakapan Head Trader");
   await expect(page.getByRole("dialog")).toContainText(
     "Fixture boss: penjelasan lengkap",
   );

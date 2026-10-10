@@ -47,6 +47,22 @@ function env(gap = false, stale = false) {
   };
 }
 describe("Read-only chart repository", () => {
+  it.each([1000, 5000, 120000])(
+    "admits the just-closed H1/M15/M5 candles only after delay %s",
+    async (delay) => {
+      const boundary = Date.parse("2026-10-03T12:00:00Z");
+      const early = await readMarket(env(), boundary + delay - 1, 260, delay);
+      const ready = await readMarket(env(), boundary + delay, 260, delay);
+      for (const [tf, duration] of [
+        ["H1", 3600000],
+        ["M15", 900000],
+        ["M5", 300000],
+      ] as const) {
+        expect(early[tf].at(-1)!.timestamp).toBe(boundary - duration * 2);
+        expect(ready[tf].at(-1)!.timestamp).toBe(boundary - duration);
+      }
+    },
+  );
   it("normalizes seconds to UTC milliseconds, reads three closed timeframes with no writes", async () => {
     const e = env(),
       r = await readMarket(e, now);
@@ -57,7 +73,9 @@ describe("Read-only chart repository", () => {
   it("reads derivative enrichment with SELECT-only statements", async () => {
     const prepare = vi.fn((sql: string) => {
       expect(sql).toMatch(/^SELECT /);
-      expect(sql).not.toMatch(/\b(INSERT|DELETE|UPDATE|REPLACE|CREATE|ALTER|DROP)\b/);
+      expect(sql).not.toMatch(
+        /\b(INSERT|DELETE|UPDATE|REPLACE|CREATE|ALTER|DROP)\b/,
+      );
       return {
         bind: (
           market: string,

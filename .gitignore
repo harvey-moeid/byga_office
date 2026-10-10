@@ -9,3 +9,5 @@ coverage/
 
 playwright-report/
 test-results/
+browser-api-results/
+playwright-api-report/

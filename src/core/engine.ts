@@ -597,6 +597,7 @@ export function risk(
   direction: TradeDirection,
   context: MarketContext,
   config: TradingConfig,
+  tickSize = 0.01,
 ): Risk {
   const m = context.M15,
     s = structure(m, config.scanner.structureWindow),
@@ -637,13 +638,45 @@ export function risk(
   const tp = targets[0];
   if (tp === undefined || (direction === "BUY" ? stop >= low : stop <= high))
     throw new Error("No valid structural SL/TP");
-  const rr = Math.abs(tp - entry) / Math.abs(entry - stop);
+  // Expand the entry band and stop away from entry; targets round towards
+  // entry, never beyond the structural target to meet a minimum R:R.
+  const normalized = {
+    entry_low: tickPrice(low, tickSize, "floor"),
+    entry_high: tickPrice(high, tickSize, "ceil"),
+    preferred_entry: tickPrice(entry, tickSize, "round"),
+    stop_loss: tickPrice(
+      stop,
+      tickSize,
+      direction === "BUY" ? "floor" : "ceil",
+    ),
+    take_profit: tickPrice(
+      tp,
+      tickSize,
+      direction === "BUY" ? "floor" : "ceil",
+    ),
+  };
+  const rr =
+    Math.abs(normalized.take_profit - normalized.preferred_entry) /
+    Math.abs(normalized.preferred_entry - normalized.stop_loss);
+  if (
+    !Object.values(normalized).every(
+      (price) => Number.isFinite(price) && price > 0,
+    ) ||
+    normalized.entry_low > normalized.preferred_entry ||
+    normalized.preferred_entry > normalized.entry_high ||
+    (direction === "BUY"
+      ? normalized.stop_loss >= normalized.entry_low ||
+        normalized.take_profit <= normalized.entry_high
+      : normalized.take_profit >= normalized.entry_low ||
+        normalized.stop_loss <= normalized.entry_high) ||
+    !Number.isFinite(rr) ||
+    rr <= 0
+  )
+    throw new Error(
+      "Invalid positive, ordered risk levels after tick normalization",
+    );
   return {
-    entry_low: low,
-    entry_high: high,
-    preferred_entry: entry,
-    stop_loss: stop,
-    take_profit: tp,
+    ...normalized,
     risk_reward: rr,
     flags: rr < config.minRR ? ["LOW_RR"] : [],
     basis: {
@@ -654,6 +687,32 @@ export function risk(
       m5: structure(context.M5, config.scanner.structureWindow),
     },
   };
+}
+function tickPrice(
+  price: number,
+  tick: number,
+  rounding: "floor" | "ceil" | "round",
+) {
+  if (!Number.isFinite(price) || !Number.isFinite(tick) || tick <= 0)
+    throw new Error("Invalid price or tick size");
+  const [mantissa, exponent = "0"] = tick.toString().split("e");
+  const decimals = Math.max(
+    0,
+    (mantissa.split(".")[1]?.length ?? 0) - Number(exponent),
+  );
+  if (decimals > 15) throw new Error("Tick precision is not supported");
+  const units = price / tick;
+  const tolerance = Number.EPSILON * Math.max(1, Math.abs(units)) * 4;
+  if (tolerance >= 0.01) throw new Error("Price exceeds safe tick precision");
+  const ticks =
+    rounding === "floor"
+      ? Math.floor(units + tolerance)
+      : rounding === "ceil"
+        ? Math.ceil(units - tolerance)
+        : Math.round(units);
+  if (!Number.isSafeInteger(ticks))
+    throw new Error("Price exceeds safe tick precision");
+  return Number((ticks * tick).toFixed(decimals));
 }
 export function semanticErrors(output: AnalystResult["output"]) {
   if (!output) return ["No structured output"];
