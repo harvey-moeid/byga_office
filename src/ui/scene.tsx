@@ -58,7 +58,7 @@ import {
   type OfficeActivityKind,
 } from "./office-activity";
 import type { ComponentRef, RefObject } from "react";
-import type { MeetingTurn } from "../core/meeting";
+import type { PresentationTurn as MeetingTurn } from "../core/meeting";
 import type { CharacterPresence } from "./character-state";
 import { CharacterPeekBubble, SpeechBubble } from "./meeting-view";
 

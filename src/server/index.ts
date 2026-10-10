@@ -16,7 +16,7 @@ import type { Env } from "./env";
 import { isProviderConfigured } from "./providers";
 import { chartSchema, readMarket } from "./market";
 import type { CaseRow } from "./office";
-import { meetingTurns } from "../core/meeting";
+import { readOfficeMeetings } from "./meetings";
 import {
   boundedBody,
   errorResponse,
@@ -25,7 +25,7 @@ import {
   readJsonObject,
 } from "./http";
 import type { OfficeState } from "../core/api";
-import { privateText, redactPrivateAnalysis } from "./publication";
+import { privateText } from "./publication";
 export { Office } from "./office";
 const adminMethods: Record<string, string[]> = {
   "/config": ["GET", "POST"],
@@ -371,53 +371,13 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json(await officeState(env));
   }
   if (path === "/api/v1/office/meeting") {
-    const activeStatuses =
-      "'REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED'";
-    let current = await env.DB.prepare(
-      `SELECT uuid,id,status FROM cases WHERE mode='LIVE' AND status IN (${activeStatuses}) ORDER BY created_at LIMIT 1`,
-    ).first<{ uuid: string; id: string; status: string }>();
-    // Keep a just-finished meeting available long enough for the visual dialogue
-    // to finish, even when the actual AI pipeline completes between UI polls.
-    current ??= await env.DB.prepare(
-      "SELECT uuid,id,status FROM cases WHERE mode='LIVE' AND status IN ('COMPLETED','NO_CONSENSUS','FAILED','CONFIG_CHANGED','STALE') AND updated_at>=? ORDER BY updated_at DESC,created_at DESC LIMIT 1",
-    )
-      .bind(Date.now() - 180000)
-      .first<{ uuid: string; id: string; status: string }>();
-    if (!current) return json({ meeting: null });
-    const outputs = await env.DB.prepare(
-      "SELECT snapshot FROM ai_character_outputs WHERE case_uuid=?",
-    )
-      .bind(current.uuid)
-      .all<{ snapshot: string }>();
+    const requested = new URL(request.url).searchParams.get("current") ?? undefined;
+    if (requested && !/^[A-Za-z0-9:_-]{1,128}$/.test(requested))
+      throw new HttpError(400, "Invalid meeting ID", "INVALID_MEETING_ID");
     const { config } = (await (await office(env, "/config")).json()) as {
       config: { publicSignals: boolean };
     };
-    const visible = admin || config.publicSignals;
-    const turns = meetingTurns(outputs.results.map((row) => row.snapshot));
-    return json({
-      meeting: {
-        case_id: current.id,
-        status: current.status,
-        finished: [
-          "COMPLETED",
-          "NO_CONSENSUS",
-          "FAILED",
-          "CONFIG_CHANGED",
-          "STALE",
-        ].includes(current.status),
-        cancelled: ["FAILED", "CONFIG_CHANGED", "STALE"].includes(
-          current.status,
-        ),
-        ...turns,
-        prices_private: !visible,
-        turns: turns.turns.map((turn) => ({
-          ...turn,
-          analysis: visible
-            ? turn.analysis
-            : redactPrivateAnalysis(turn.analysis),
-        })),
-      },
-    });
+    return json(await readOfficeMeetings(env, admin || config.publicSignals, requested));
   }
   if (path === "/api/v1/scanners") {
     const state = (await (await office(env, "/state")).json()) as {

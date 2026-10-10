@@ -622,6 +622,24 @@ p {
   color: #b5c8c0;
   overflow-wrap: anywhere;
 }
+.meeting-scanner-summary {
+  margin-top: 8px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.meeting-scanner-summary p {
+  margin: 5px 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.meeting-scanner-summary span {
+  display: inline-block;
+  font-size: 9px;
+  border: 1px solid #58776f;
+  border-radius: 5px;
+  padding: 3px 5px;
+  margin: 2px 4px 2px 0;
+}
 .meeting-status-warning {
   font-size: 11px;
   color: #f2d69c;

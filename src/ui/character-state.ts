@@ -5,10 +5,10 @@ import type { MeetingPlayback } from "./meeting";
 import type { CharacterMotion } from "./character-motion";
 
 export const characterGroupLabels: Record<CharacterId, string> = {
-  trend: "SMC / ICT",
+  trend: "Indicators",
   structure: "SMC / ICT",
   momentum: "Indicators",
-  liquidity: "Indicators",
+  liquidity: "SMC / ICT",
   volume: "Volume",
   quant: "Volume",
   derivatives: "Derivatives / Positioning",
@@ -158,12 +158,12 @@ export function characterPresence(
   if (playback.phase === "speaking") {
     if (playback.speaker === id) return "SPEAKING";
     if (isBoss && playback.stage !== "BOSS_DECISION") return "WAITING IN OFFICE";
-    return hasOutput ? "SEATED" : "WAITING FOR OUTPUT";
+    return hasOutput || snapshot.kind === "SCANNER" ? "SEATED" : "WAITING FOR OUTPUT";
   }
 
   if (playback.phase === "waiting") {
     if (isBoss && playback.stage !== "BOSS_DECISION") return "WAITING IN OFFICE";
-    return hasOutput ? "SEATED" : "WAITING FOR OUTPUT";
+    return hasOutput || snapshot.kind === "SCANNER" ? "SEATED" : "WAITING FOR OUTPUT";
   }
 
   return activity ? activityLabels[activity] : "MONITORING";

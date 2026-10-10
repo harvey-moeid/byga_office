@@ -129,7 +129,7 @@ export const defaultConfig: TradingConfig = {
   confidenceWeights: [30, 40, 30],
   mtfWeights: [30, 45, 25],
   neutralScore: 50,
-  cooldownMinutes: 15,
+  cooldownMinutes: 0,
   cooldownAnchor: "FROM_TRIGGER",
   processingDelaySeconds: 5,
   context: { H1: 50, M15: 100, M5: 100, maxChars: 60000 },

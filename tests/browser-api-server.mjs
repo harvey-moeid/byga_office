@@ -110,6 +110,7 @@ async function reset() {
   await live.fetch("https://internal/state");
   await db.batch(
     [
+      "scanner_meetings",
       "signals",
       "ai_character_outputs",
       "risk_runs",

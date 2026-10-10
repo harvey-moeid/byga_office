@@ -1,0 +1,19 @@
+# Five-minute scanner meetings
+
+Each `*/5 * * * *` cron delivery produces a persisted scanner review after the configured closed-candle processing delay (default five seconds). Its identity is the UTC five-minute scheduled slot; repeated deliveries do not create another review or another AI operation. If several deliveries accumulate before the actor can scan, it keeps the latest scheduled event. Candle time and cron time are stored separately.
+
+The four groups are SMC/ICT, Indicators, Volume, and Derivatives/Positioning. The agreed default is at least two groups in the same direction, with more support than the opposite direction. Two BUY and two SELL is a conflict and never starts automatic AI. Neutral or insufficient consensus, unavailable market data, unchanged M5 candles, configured cooldowns, and exhausted daily budgets produce a visual scanner meeting with an explicit reason. These reviews are separate from trading cases and never enter the AI queue. The four group representatives explain their actual scanner results; Risk and Boss summarize the deterministic outcome. Scanner scores are not AI confidence, and these meetings do not create trade signals.
+
+A qualifying new closed M5 candle creates the usual AUTO case and runs the existing analyst, Risk, and Boss pipeline. Cooldown defaults to zero so a qualifying new candle can run on each cron. Daily case budgets, snapshot freshness, direction conflict handling, risk validation, signal publication guards, and candle idempotency remain enforced. Emergency and Simulation retain their existing explicit initiation rules.
+
+`GET /api/v1/office/meeting` returns `{ meeting }`. Meetings identify their source through `kind: AI | SCANNER`; scanner turns have `source: SCANNER` and a `scanner` payload rather than fabricated AI analysis. `scan` contains the public group directions, strengths, reasons, scheduled time, candle time, threshold, and outcome.
+
+While presenting a meeting, the UI polls `?current=<meeting-id>`. The API returns the latest candidate as `meeting` and fresh output/terminal updates for the current discussion as `requested_meeting`. The UI finishes the current discussion, including any open detail dialog, before taking the latest candidate. Intermediate results are skipped. Cancelled or stale AI cases close immediately and return the team to their desks before starting another discussion. Private AI prices are redacted independently for both response fields, and Simulation cases cannot be requested through this endpoint. Session expiration clears held private snapshots and dialogs.
+
+Migration `0007_scheduled_scanner_meetings.sql` creates the review table and, for existing installations, activates a new immutable configuration version with `scannerConsensusMin=2` and `cooldownMinutes=0`. All other settings and the previous configuration version are preserved. Fresh installations receive the same defaults. Reviews follow the configured retention period.
+
+Deployment must apply this migration before publishing the Worker that reads the new table. Local validation does not constitute production deployment or live provider acceptance.
+
+## Local verification (2026-10-10)
+
+`npm run check` passed TypeScript, ESLint, 285 unit/integration tests, and the frontend build. The 93 desktop/portrait/landscape browser scenarios were validated; the initial five-second 3D polling race was corrected and all six AI/scanner 3D scenarios passed on rerun. The 21 browser–Worker–D1 integration scenarios passed, including actual scanner data reaching the visual meeting with zero outbound AI calls. Worker deployment dry run and local migration application passed. Browser verification used system Chromium with software WebGL. Provider responses in trading pipeline tests are mocked; these checks do not assert production inference or deployment.

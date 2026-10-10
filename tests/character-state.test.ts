@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type { MeetingSnapshot } from "../src/core/meeting";
 import type { MeetingPlayback } from "../src/ui/meeting";
+import { analystGroup } from "../src/core/engine";
+import { scannerGroupLabels } from "../src/core/scanner-meeting";
 import {
   activityLabels,
   characterGroupLabels,
@@ -77,27 +79,27 @@ describe("3D character presence", () => {
 
   it("tracks meeting state per character instead of one global busy flag", () => {
     const gathering = playback("gathering");
-    expect(
-      characterPresence("trend", { playback: gathering, snapshot }),
-    ).toBe("WALKING TO MEETING");
-    expect(
-      characterPresence("boss", { playback: gathering, snapshot }),
-    ).toBe("WAITING IN OFFICE");
+    expect(characterPresence("trend", { playback: gathering, snapshot })).toBe(
+      "WALKING TO MEETING",
+    );
+    expect(characterPresence("boss", { playback: gathering, snapshot })).toBe(
+      "WAITING IN OFFICE",
+    );
 
-    expect(
-      characterPresence("quant", { playback: gathering, snapshot }),
-    ).toBe("WALKING TO MEETING");
+    expect(characterPresence("quant", { playback: gathering, snapshot })).toBe(
+      "WALKING TO MEETING",
+    );
 
     const speaking = playback("speaking", { speaker: "trend" });
-    expect(
-      characterPresence("trend", { playback: speaking, snapshot }),
-    ).toBe("SPEAKING");
+    expect(characterPresence("trend", { playback: speaking, snapshot })).toBe(
+      "SPEAKING",
+    );
     expect(
       characterPresence("structure", { playback: speaking, snapshot }),
     ).toBe("WAITING FOR OUTPUT");
-    expect(
-      characterPresence("quant", { playback: speaking, snapshot }),
-    ).toBe("OUTPUT UNAVAILABLE");
+    expect(characterPresence("quant", { playback: speaking, snapshot })).toBe(
+      "OUTPUT UNAVAILABLE",
+    );
 
     const bossEntering = playback("boss-entering", {
       stage: "BOSS_DECISION",
@@ -110,16 +112,28 @@ describe("3D character presence", () => {
     ).toBe("SEATED");
 
     const returning = playback("returning", { stage: "RETURN_TO_DESK" });
-    expect(
-      characterPresence("trend", { playback: returning, snapshot }),
-    ).toBe("RETURNING");
-    expect(
-      characterPresence("quant", { playback: returning, snapshot }),
-    ).toBe("RETURNING");
+    expect(characterPresence("trend", { playback: returning, snapshot })).toBe(
+      "RETURNING",
+    );
+    expect(characterPresence("quant", { playback: returning, snapshot })).toBe(
+      "RETURNING",
+    );
   });
 
   it("keeps role groups aligned with the four analysis groups and authorities", () => {
-    expect(characterGroupLabels.trend).toBe("SMC / ICT");
+    for (const id of [
+      "trend",
+      "structure",
+      "momentum",
+      "liquidity",
+      "volume",
+      "quant",
+      "derivatives",
+      "positioning",
+    ] as const)
+      expect(characterGroupLabels[id]).toBe(
+        scannerGroupLabels[analystGroup(id)!],
+      );
     expect(characterGroupLabels.momentum).toBe("Indicators");
     expect(characterGroupLabels.quant).toBe("Volume");
     expect(characterGroupLabels.positioning).toBe("Derivatives / Positioning");

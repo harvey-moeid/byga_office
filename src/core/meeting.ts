@@ -9,13 +9,27 @@ export interface MeetingTurn {
   character: CharacterId;
   analysis: Analysis;
 }
+export interface ScannerMeetingTurn {
+  character: CharacterId;
+  source: "SCANNER";
+  scanner: {
+    group?: string;
+    direction: "BUY" | "SELL" | "NONE";
+    strength?: number;
+    summary: string;
+    reasoning: string;
+  };
+}
+export type PresentationTurn = MeetingTurn | ScannerMeetingTurn;
 export interface MeetingSnapshot {
   case_id: string;
   status: string;
   finished: boolean;
   cancelled: boolean;
   prices_private?: boolean;
-  turns: MeetingTurn[];
+  kind?: "AI" | "SCANNER";
+  scan?: import("./scanner-meeting").ScannerReview;
+  turns: PresentationTurn[];
   unavailable: CharacterId[];
   failureReasons?: Partial<Record<CharacterId, string>>;
 }

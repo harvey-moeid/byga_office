@@ -1,5 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import type { MeetingSnapshot } from "../src/core/meeting";
+import { scannerMeeting, type ScannerReview } from "../src/core/scanner-meeting";
+import { analysisGroups } from "../src/core/contracts";
 import {
   caseStopMessage,
   defaultConfig,
@@ -720,7 +722,7 @@ async function fixtureMeeting(page: Page, enabled: () => boolean = () => true) {
     })),
     unavailable: [],
   };
-  await page.route("**/api/v1/office/meeting", (route) =>
+  await page.route("**/api/v1/office/meeting**", (route) =>
     route.fulfill({ json: { meeting: enabled() ? snapshot : null } }),
   );
   return snapshot;
@@ -754,7 +756,7 @@ test("meeting dialogue rotates actual case results, opens details, admits Boss l
   await trendCard.click();
   const characterModal = page.locator(".modal");
   await expect(characterModal).toContainText("SPEAKING");
-  await expect(characterModal).toContainText("SMC / ICT");
+  await expect(characterModal).toContainText("Indicators");
   await expect(characterModal).toContainText("SELL");
   await expect(characterModal).toContainText("Confidence 74%");
   await page.getByRole("button", { name: "Tutup", exact: true }).click();
@@ -866,7 +868,7 @@ test("3D speech follows the seated character and opens the actual result detail"
     "WebGL unavailable; meeting fallback is tested separately",
   );
   let meetingEnabled = false;
-  await fixtureMeeting(page, () => meetingEnabled);
+  const snapshot = await fixtureMeeting(page, () => meetingEnabled);
   // Low must preserve upstairs routing, camera framing and speech, not just
   // expose the second-floor navigation button. Alternate from a prior L1 case.
   await page.addInitScript(() => {
@@ -879,6 +881,8 @@ test("3D speech follows the seated character and opens the actual result detail"
   await expect(page.getByRole("button", { name: /Reset View/ })).toBeVisible();
   await expect(page.getByLabel("Kualitas 3D", { exact: true })).toHaveValue("low");
   meetingEnabled = true;
+  // The fixture becomes visible on the next five-second API poll.
+  await expect(page.locator(".meeting-status")).toHaveAttribute("data-case-id", snapshot.case_id, { timeout: 15000 });
   await expect(page.locator(".office-scene")).toHaveAttribute("data-meeting-floor", "2");
   // Poll visibility, capture geometry and click in one browser task. A separate
   // locator assertion followed by a click can miss the seven-second speech
@@ -972,5 +976,184 @@ test("3D speech follows the seated character and opens the actual result detail"
   );
   if (!process.env.CI)
     await page.screenshot({ path: testInfo.outputPath("meeting-boss-3d.png") });
+  expect(errors).toEqual([]);
+});
+
+function scannerFixture(id: string): MeetingSnapshot {
+  const review: ScannerReview = {
+    id,
+    scheduled_at: Date.now(),
+    candle_timestamp: Date.now() - 300000,
+    minimum: 2,
+    direction: null,
+    reason: "DIRECTION_CONFLICT",
+    groups: analysisGroups.map((group, i) => ({
+      group,
+      direction: i < 2 ? "BUY" : "SELL",
+      strength: 68,
+      reasons: [`Scanner ${group}: bukti aktual fixture`],
+    })),
+  };
+  return scannerMeeting(review);
+}
+
+test("scanner meetings explain a 2–2 conflict without AI and finish before the newest cron", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    HTMLCanvasElement.prototype.getContext = (() =>
+      null) as typeof HTMLCanvasElement.prototype.getContext;
+  });
+  await page.clock.install();
+  const first = scannerFixture("SCANNER-first");
+  const middle = scannerFixture("SCANNER-middle");
+  const newest = scannerFixture("SCANNER-newest");
+  const snapshots = [first, middle, newest];
+  let latest = first;
+  await page.route("**/api/v1/office/meeting**", (route) => {
+    const id = new URL(route.request().url()).searchParams.get("current");
+    return route.fulfill({
+      json: {
+        meeting: latest,
+        ...(id
+          ? {
+              requested_meeting:
+                snapshots.find((s) => s.case_id === id) ?? null,
+            }
+          : {}),
+      },
+    });
+  });
+  await page.goto("/");
+  const hud = page.locator(".meeting-status");
+  await expect(hud).toHaveAttribute("data-case-id", first.case_id);
+  await expect(hud).toContainText("2 BUY, 2 SELL");
+  await expect(hud).toContainText("tanpa AI");
+  await page.clock.fastForward(15000);
+  await page
+    .getByRole("button", {
+      name: "Baca percakapan Structure Analyst",
+      exact: true,
+    })
+    .click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Skor scanner 68/100");
+  await expect(dialog).toContainText("Scanner SMC_ICT: bukti aktual fixture");
+  await expect(dialog).not.toContainText("Confidence");
+  await expect(dialog).not.toContainText("Penjelasan AI");
+  latest = middle;
+  await page.clock.fastForward(5500);
+  latest = newest;
+  await page.clock.fastForward(300000);
+  await expect(hud).toHaveAttribute("data-case-id", first.case_id);
+  await expect(dialog).toContainText(first.case_id);
+  await page.keyboard.press("Escape");
+  for (const elapsed of [7500, 7500, 7500, 7500, 7500, 8500, 7500, 8500])
+    await page.clock.fastForward(elapsed);
+  await expect(hud).toHaveAttribute("data-case-id", newest.case_id);
+  await expect(hud).not.toContainText(middle.case_id);
+  const bounds = await hud.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(
+    page.viewportSize()!.width,
+  );
+});
+
+test("Low upstairs 3D meeting displays actual scanner speech without AI", async ({
+  page,
+}, testInfo) => {
+  test.setTimeout(120000);
+  let enabled = false;
+  const snapshot = scannerFixture("SCANNER-3d");
+  await page.route("**/api/v1/office/meeting**", (route) =>
+    route.fulfill({ json: { meeting: enabled ? snapshot : null } }),
+  );
+  await page.addInitScript(() => {
+    localStorage.setItem("byga:3d-quality", "low");
+    localStorage.setItem(
+      "byga:meeting-venue",
+      JSON.stringify({ caseId: "SCANNER-previous", floor: 1 }),
+    );
+  });
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: /Reset View/ })).toBeVisible();
+  enabled = true;
+  await expect(page.locator(".meeting-status")).toHaveAttribute(
+    "data-case-id",
+    snapshot.case_id,
+    { timeout: 15000 },
+  );
+  await expect(page.locator(".office-scene")).toHaveAttribute(
+    "data-meeting-floor",
+    "2",
+    { timeout: 15000 },
+  );
+  await expect(page.locator(".meeting-status")).toContainText(
+    "Review scanner · tanpa AI",
+  );
+  const geometryHandle = await page.waitForFunction(
+    () => {
+      const button = Array.from(
+        document.querySelectorAll<HTMLButtonElement>(".meeting-bubble"),
+      ).find(
+        (b) =>
+          b.getAttribute("aria-label") === "Baca percakapan Structure Analyst",
+      );
+      if (
+        !button?.checkVisibility({
+          checkOpacity: true,
+          checkVisibilityCSS: true,
+        })
+      )
+        return false;
+      const rect = (node: Element) => {
+        const { x, y, width, height } = node.getBoundingClientRect();
+        return { x, y, width, height };
+      };
+      const bubble = rect(button);
+      const overlays = [".meeting-status", ".scene-controls", ".scene-quality"]
+        .map((selector) => document.querySelector(selector))
+        .filter((node): node is Element => !!node)
+        .map(rect);
+      button.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+      return { bubble, overlays };
+    },
+    undefined,
+    { timeout: 60000, polling: 100 },
+  );
+  const geometry = await geometryHandle.jsonValue();
+  await geometryHandle.dispose();
+  if (!geometry)
+    throw new Error("Visible scanner speech did not yield geometry");
+  const viewport = page.viewportSize()!;
+  expect(geometry.bubble.x).toBeGreaterThanOrEqual(8);
+  expect(geometry.bubble.y).toBeGreaterThanOrEqual(8);
+  expect(geometry.bubble.x + geometry.bubble.width).toBeLessThanOrEqual(
+    viewport.width - 8,
+  );
+  expect(geometry.bubble.y + geometry.bubble.height).toBeLessThanOrEqual(
+    viewport.height - 8,
+  );
+  for (const overlay of geometry.overlays) {
+    const bubble = geometry.bubble;
+    expect(
+      bubble.x < overlay.x + overlay.width &&
+        bubble.x + bubble.width > overlay.x &&
+        bubble.y < overlay.y + overlay.height &&
+        bubble.y + bubble.height > overlay.y,
+    ).toBe(false);
+  }
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Scanner SMC_ICT: bukti aktual fixture");
+  await expect(dialog).toContainText("tanpa AI");
+  await expect(dialog).not.toContainText("Confidence");
+  await page.screenshot({
+    path: testInfo.outputPath("scanner-upstairs-low.png"),
+  });
+  await page.keyboard.press("Escape");
   expect(errors).toEqual([]);
 });

@@ -178,6 +178,7 @@ beforeEach(async () => {
   await live.fetch("https://internal/__test/pause");
   await db.batch(
     [
+      "scanner_meetings",
       "signals",
       "ai_character_outputs",
       "risk_runs",
@@ -365,18 +366,16 @@ describe.sequential("Backend/API audit regressions", () => {
           "UPDATE cases SET status='COMPLETED',updated_at=? WHERE uuid=?",
         )
         .bind(Date.now(), c.uuid),
-      db
-        .prepare("INSERT INTO ai_character_outputs VALUES (?,?,?)")
-        .bind(
-          c.uuid,
-          "risk",
-          JSON.stringify({
-            id: "risk",
-            status: "SUCCESS",
-            output: analysis,
-            flags: [],
-          }),
-        ),
+      db.prepare("INSERT INTO ai_character_outputs VALUES (?,?,?)").bind(
+        c.uuid,
+        "risk",
+        JSON.stringify({
+          id: "risk",
+          status: "SUCCESS",
+          output: analysis,
+          flags: [],
+        }),
+      ),
     ]);
     for (const path of [
       "/office/meeting",
@@ -408,6 +407,95 @@ describe.sequential("Backend/API audit regressions", () => {
         await (await call("/office/meeting", undefined, "GET", false)).json(),
       ),
     ).toContain("96.78");
+  });
+  it("returns the latest scanner review alongside fresh, redacted updates for a held AI case", async () => {
+    const c = await queuedCase();
+    const output = {
+      vote: "BUY",
+      confidence: 70,
+      summary: "Entry 12345.67",
+      reasoning: "SL 12000.11",
+      evidence: [],
+      risk_flags: [],
+      price_levels: {
+        entry: 12345.67,
+        stop_loss: 12000.11,
+        take_profit: 13000.99,
+      },
+    };
+    await db.batch([
+      db
+        .prepare(
+          "UPDATE cases SET status='COMPLETED',created_at=?,updated_at=? WHERE uuid=?",
+        )
+        .bind(Date.now() - 10000, Date.now(), c.uuid),
+      db
+        .prepare("INSERT INTO ai_character_outputs VALUES (?,?,?)")
+        .bind(
+          c.uuid,
+          "trend",
+          JSON.stringify({ id: "trend", status: "SUCCESS", output }),
+        ),
+      db
+        .prepare("INSERT INTO scanner_meetings VALUES (?,?,?,?,?)")
+        .bind(
+          "SCANNER-latest",
+          Date.now(),
+          JSON.stringify({
+            id: "SCANNER-latest",
+            scheduled_at: Date.now(),
+            candle_timestamp: null,
+            minimum: 2,
+            direction: null,
+            reason: "MARKET_UNAVAILABLE",
+            groups: [],
+          }),
+          null,
+          Date.now(),
+        ),
+    ]);
+    const path = "/office/meeting?current=" + encodeURIComponent(c.id);
+    const response = await call(path, undefined, "GET", false);
+    const publicResult = (await response.json()) as {
+      meeting: { case_id: string; kind: string };
+      requested_meeting: {
+        case_id: string;
+        finished: boolean;
+        turns: { analysis: typeof output }[];
+      };
+    };
+    expect(publicResult.meeting).toMatchObject({
+      case_id: "SCANNER-latest",
+      kind: "SCANNER",
+    });
+    expect(publicResult.requested_meeting).toMatchObject({
+      case_id: c.id,
+      finished: true,
+    });
+    expect(
+      publicResult.requested_meeting.turns[0].analysis.price_levels,
+    ).toBeNull();
+    expect(JSON.stringify(publicResult)).not.toContain("12345.67");
+    expect(JSON.stringify(await (await call(path)).json())).toContain(
+      "12345.67",
+    );
+    await db
+      .prepare("UPDATE cases SET status='STALE' WHERE uuid=?")
+      .bind(c.uuid)
+      .run();
+    expect(await (await call(path)).json()).toMatchObject({
+      requested_meeting: { cancelled: true, finished: true },
+    });
+    await db
+      .prepare("UPDATE cases SET mode='SIMULATION' WHERE uuid=?")
+      .bind(c.uuid)
+      .run();
+    expect(await (await call(path)).json()).toMatchObject({
+      requested_meeting: null,
+    });
+    expect((await call("/office/meeting?current=invalid%2Fid")).status).toBe(
+      400,
+    );
   });
   it("keeps config and old case intact when APPLY NOW hits quota", async () => {
     const c = await queuedCase(),

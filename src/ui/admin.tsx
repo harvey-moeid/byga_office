@@ -263,8 +263,9 @@ function ConfigEditor() {
                 <small id="scanner-consensus-help" className="muted">
                   Konsensus deterministik SMC/ICT, Indikator, Volume, dan
                   Derivatives / Market Positioning. Minimal 2 dari 4 group harus
-                  searah untuk memicu analisis otomatis. Scanner tetap aktif
-                  sebagai telemetry. Default: 2 dari 4.
+                  searah dan jumlahnya lebih besar daripada arah lawan untuk
+                  memicu AI. Cron setiap 5 menit; 2 BUY dan 2 SELL tetap meeting
+                  visual tanpa AI. Default: 2 dari 4, cooldown 0 menit.
                 </small>
               </label>
               {(
@@ -288,6 +289,12 @@ function ConfigEditor() {
                     value={draft[k]}
                     onChange={(e) => update(k, Number(e.target.value))}
                   />
+                  {k === "cooldownMinutes" && (
+                    <small className="muted">
+                      0: AI boleh berjalan pada setiap cron yang memenuhi syarat
+                      dan memiliki candle M5 baru.
+                    </small>
+                  )}
                 </label>
               ))}
               <label>

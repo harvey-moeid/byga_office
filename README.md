@@ -38,6 +38,8 @@ npm run deploy:check
 
 `check` runs strict TypeScript, ESLint, unit/integration tests, and the frontend build. Integration tests execute real workerd/D1/Durable Objects in isolated Miniflare storage, intercept outbound providers, and never use real AI keys/webhooks. No browser or production integration is implied by passing these tests.
 
+See [five-minute scanner meetings](docs/CRON_MEETINGS.md) for the two-group AI gate, no-AI visual review, meeting handoff API, and required configuration migration.
+
 See [trading safety corrections](docs/TRADING_SAFETY.md) for queue ownership, cooldown, snapshot validity, Emergency authority, delayed cron scans, tick-normalized risk and configuration invariants.
 
 ```sh
@@ -57,7 +59,7 @@ Browser tests cover desktop/mobile layout, the 3D renderer, WebGL fallback, offl
 
 `/` opens the full-viewport 3D office with floating navigation and camera controls; `/office` redirects there. Market/scanner cards and charts remain on `/operations`. The charcoal/emerald/amber palette combines a dark stage with warm oak/walnut furniture. Meeting chairs and characters share one seating plan and face across the table. WebGL loss keeps an interactive 2D fallback.
 
-Room names are now physical, depth-occluded 3D nameplates (graphite with champagne-gold lettering) fixed to room partitions, wall panels, server racks or small stands. Nine ground-floor areas have signs in all quality modes; the upstairs Boss Office and Strategy Room signs appear when the upper floor is enabled. Low uses the lightest material, Medium includes subtle raised details, and High/Ultra add a metal frame; the signs do not fade during meetings. Server Room signage retains its existing click action, and the scanner status is painted onto a wall-mounted monitor beside the existing closed-candle market monitor. Character speech bubbles remain interactive UI. **New browsers start in Medium**, while every explicit quality choice (including Auto) is saved for later visits; the Low mode still hides the upper floor.
+Room names are now physical, depth-occluded 3D nameplates (graphite with champagne-gold lettering) fixed to room partitions, wall panels, server racks or small stands. Nine ground-floor areas have signs in all quality modes; the upstairs Boss Office and Strategy Room signs appear when the upper floor is enabled. Low uses the lightest material, Medium includes subtle raised details, and High/Ultra add a metal frame; the signs do not fade during meetings. Server Room signage retains its existing click action, and the scanner status is painted onto a wall-mounted monitor beside the existing closed-candle market monitor. Character speech bubbles remain interactive UI. **New browsers start in Medium**, while every explicit quality choice (including Auto) is saved for later visits; Low also preserves both floors.
 
 ## Architecture
 

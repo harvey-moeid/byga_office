@@ -12,6 +12,7 @@ import {
   type AnalystResult,
   type Signal,
 } from "../src/core/contracts";
+import type { ScannerReview } from "../src/core/scanner-meeting";
 import type { CaseRow } from "../src/server/office";
 
 let mf: Miniflare;
@@ -199,8 +200,9 @@ beforeEach(async () => {
     ["M15", 900000],
     ["M5", 300000],
   ] as const) {
-    const latest =
-      Math.floor((Date.now() - duration - 5000) / duration) * duration;
+    // Use a stable closed-candle fixture away from the wall-clock cron edge.
+    // Exact interval boundary validation is exercised by the market tests.
+    const latest = Date.now() - duration - 6000;
     await chart.batch(
       Array.from({ length: 300 }, (_, i) => {
         const close = 100 + Math.sin(i / 8) * 8 + i * 0.02;
@@ -329,6 +331,205 @@ describe.sequential("Trading publication and queue safety", () => {
       "Risk Manager must support",
     );
     expect(calls).toBe(9);
+  });
+  it("creates a visual scanner review without AI for neutral data and deduplicates cron retries", async () => {
+    await chart.exec(
+      "UPDATE candles SET open=100,close=100,high=101,low=99,volume=100",
+    );
+    await live.fetch("https://test/tick", { method: "POST" });
+    await live.fetch("https://test/__test/pause");
+    const saved = (await db
+      .prepare("SELECT snapshot FROM scanner_meetings")
+      .first<{ snapshot: string }>())!;
+    const review = JSON.parse(saved.snapshot) as ScannerReview;
+    expect(review.reason).toBe("NO_CONSENSUS");
+    expect(review.groups).toHaveLength(4);
+    expect(review.groups.every((g) => g.direction === "NONE")).toBe(true);
+    await alarm();
+    await live.fetch("https://test/tick", { method: "POST" });
+    expect(
+      (await db
+        .prepare("SELECT COUNT(*) n FROM scanner_meetings")
+        .first<{ n: number }>())!.n,
+    ).toBe(1);
+    expect(
+      (await db.prepare("SELECT COUNT(*) n FROM cases").first<{ n: number }>())!
+        .n,
+    ).toBe(0);
+    expect(calls).toBe(0);
+    const response = await mf.dispatchFetch(
+      "https://safety.test/api/v1/office/meeting",
+    );
+    const result = (await response.json()) as {
+      meeting: { kind: string; turns: unknown[] };
+    };
+    expect(result.meeting.kind).toBe("SCANNER");
+    expect(result.meeting.turns).toHaveLength(6);
+    expect(JSON.stringify(result)).not.toContain('"analysis"');
+  });
+  it("still creates the next cron review when its M5 candle is unchanged, without repeating AI", async () => {
+    await config({ scannerConsensusMin: 4 });
+    const now = Date.now();
+    for (const scheduledTime of [now - 300000, now]) {
+      await live.fetch("https://test/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledTime }),
+      });
+      await live.fetch("https://test/__test/pause");
+      await live.fetch("https://test/__test/tick-due");
+      await alarm();
+    }
+    const reviews = await db
+      .prepare("SELECT snapshot FROM scanner_meetings ORDER BY scheduled_at")
+      .all<{ snapshot: string }>();
+    expect(reviews.results).toHaveLength(2);
+    expect(JSON.parse(reviews.results[1].snapshot)).toMatchObject({
+      reason: "CANDLE_UNCHANGED",
+    });
+    expect(calls).toBe(0);
+  });
+  it("explains exhausted daily AI budgets without creating another trading case", async () => {
+    await config({ budgets: { ...defaultConfig.budgets, casesPerDay: 1 } });
+    const old = await emergency("daily-budget-used");
+    await db
+      .prepare("UPDATE cases SET status='STALE' WHERE uuid=?")
+      .bind(old.uuid)
+      .run();
+    await live.fetch("https://test/tick", { method: "POST" });
+    await live.fetch("https://test/__test/pause");
+    const saved = (await db
+      .prepare("SELECT snapshot,case_uuid FROM scanner_meetings")
+      .first<{ snapshot: string; case_uuid: string | null }>())!;
+    expect(JSON.parse(saved.snapshot).reason).toBe("AI_BUDGET");
+    expect(saved.case_uuid).toBeNull();
+    await alarm();
+    expect(calls).toBe(0);
+    expect(
+      (await db.prepare("SELECT COUNT(*) n FROM cases").first<{ n: number }>())!
+        .n,
+    ).toBe(1);
+  });
+  it("reports invalid market data through a visual meeting without AI", async () => {
+    await chart.exec("DELETE FROM candles");
+    await live.fetch("https://test/tick", { method: "POST" });
+    await live.fetch("https://test/__test/pause");
+    const saved = (await db
+      .prepare("SELECT snapshot FROM scanner_meetings")
+      .first<{ snapshot: string }>())!;
+    expect(JSON.parse(saved.snapshot)).toMatchObject({
+      reason: "MARKET_UNAVAILABLE",
+      groups: [],
+      candle_timestamp: null,
+    });
+    expect(
+      (await db.prepare("SELECT COUNT(*) n FROM cases").first<{ n: number }>())!
+        .n,
+    ).toBe(0);
+    expect(calls).toBe(0);
+  });
+  it("allows a fresh AUTO candle five minutes after the previous case, without the former 15-minute cooldown", async () => {
+    expect(defaultConfig.cooldownMinutes).toBe(0);
+    const old = await emergency("previous-cron");
+    await db
+      .prepare(
+        "UPDATE cases SET source='AUTO',status='COMPLETED',created_at=?,updated_at=?,candle_timestamp=candle_timestamp-300000 WHERE uuid=?",
+      )
+      .bind(Date.now() - 300000, Date.now() - 300000, old.uuid)
+      .run();
+    await live.fetch("https://test/tick", { method: "POST" });
+    await live.fetch("https://test/__test/pause");
+    const saved = (await db
+      .prepare("SELECT snapshot,case_uuid FROM scanner_meetings")
+      .first<{ snapshot: string; case_uuid: string }>())!;
+    expect(JSON.parse(saved.snapshot).reason).toBe("AI_QUEUED");
+    expect(saved.case_uuid).not.toBe(old.uuid);
+    expect((await row(saved.case_uuid)).source).toBe("AUTO");
+    await alarm();
+    expect((await row(saved.case_uuid)).status).toBe("COMPLETED");
+    expect(calls).toBe(10);
+    await live.fetch("https://test/tick", { method: "POST" });
+    await alarm();
+    expect(calls).toBe(10);
+  });
+  it("recovers a committed AUTO case after response loss without duplicating AI or reporting a market failure", async () => {
+    await live.fetch("https://test/__test/interrupt-case");
+    await live.fetch("https://test/tick", { method: "POST" });
+    await live.fetch("https://test/__test/pause");
+    const saved = (await db
+      .prepare("SELECT snapshot,case_uuid FROM scanner_meetings")
+      .first<{ snapshot: string; case_uuid: string }>())!;
+    expect(JSON.parse(saved.snapshot).reason).toBe("AI_QUEUED");
+    expect(await (await live.fetch("https://test/state")).json()).toMatchObject(
+      { error: null },
+    );
+    expect((await row(saved.case_uuid)).source).toBe("AUTO");
+    await live.fetch("https://test/tick", { method: "POST" });
+    await alarm();
+    expect((await row(saved.case_uuid)).status).toBe("COMPLETED");
+    expect(calls).toBe(10);
+    expect(
+      (await db.prepare("SELECT COUNT(*) n FROM cases").first<{ n: number }>())!
+        .n,
+    ).toBe(1);
+  });
+  it("keeps only the newest delayed cron when events arrive out of order", async () => {
+    await config({ processingDelaySeconds: 120, scannerConsensusMin: 4 });
+    const latest = Date.now();
+    for (const scheduledTime of [latest, latest - 300000, latest]) {
+      await live.fetch("https://test/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ scheduledTime }),
+      });
+      await live.fetch("https://test/__test/pause");
+    }
+    const stored = (await (
+      await live.fetch("https://test/__test/storage")
+    ).json()) as { pendingTickSlot: number; pendingTick: number };
+    expect(stored.pendingTickSlot).toBe(latest);
+    expect(stored.pendingTick).toBe(latest + 120000);
+    await live.fetch("https://test/__test/tick-due");
+    await alarm();
+    const saved = (await db
+      .prepare("SELECT scheduled_at FROM scanner_meetings")
+      .first<{ scheduled_at: number }>())!;
+    expect(saved.scheduled_at).toBe(Math.floor(latest / 300000) * 300000);
+    expect(calls).toBe(0);
+  });
+  it("migrates existing settings to two groups and zero cooldown while preserving other settings and old versions", async () => {
+    await config({
+      scannerConsensusMin: 4,
+      cooldownMinutes: 15,
+      minRR: 3,
+      publicSignals: true,
+    });
+    const before = (await (await live.fetch("https://test/config")).json()) as {
+      id: string;
+      config: typeof defaultConfig;
+    };
+    await db.exec("DROP TABLE scanner_meetings");
+    await db.exec(
+      await readFile("migrations/0007_scheduled_scanner_meetings.sql", "utf8"),
+    );
+    const after = (await (await live.fetch("https://test/config")).json()) as {
+      id: string;
+      config: typeof defaultConfig;
+    };
+    expect(after.id).not.toBe(before.id);
+    expect(after.config).toEqual({
+      ...before.config,
+      scannerConsensusMin: 2,
+      cooldownMinutes: 0,
+    });
+    expect(
+      JSON.parse(
+        (await db
+          .prepare("SELECT snapshot FROM trading_config_versions WHERE id=?")
+          .bind(before.id)
+          .first<{ snapshot: string }>())!.snapshot,
+      ),
+    ).toEqual(before.config);
   });
   it("persists a delayed cron scan, preserves its alarm and consumes each candle once", async () => {
     await config({ processingDelaySeconds: 120, scannerConsensusMin: 4 });

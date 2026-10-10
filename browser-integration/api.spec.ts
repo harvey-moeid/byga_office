@@ -300,3 +300,46 @@ for (const kind of ["emergency", "simulation", "config"] as const) {
     expect(stats.outboundCalls).toBe(0);
   });
 }
+
+test("real scanner review reaches the visual meeting without an external AI call", async ({
+  page,
+}) => {
+  await login(page);
+  await page
+    .getByRole("combobox", { name: "Minimal Group Consensus" })
+    .selectOption("4");
+  await page
+    .getByRole("button", { name: "Save new version", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("Tersimpan:");
+  await page.getByRole("button", { name: "Emergency", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Run scanner check", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("Scan diminta");
+  const result = (await (
+    await page.request.get("/api/v1/office/meeting")
+  ).json()) as {
+    meeting: {
+      case_id: string;
+      kind: string;
+      scan: { groups: { direction: string }[] };
+      turns: unknown[];
+    };
+  };
+  expect(result.meeting.kind).toBe("SCANNER");
+  expect(result.meeting.scan.groups).toHaveLength(4);
+  expect(result.meeting.turns).toHaveLength(6);
+  await page.goto("/");
+  await expect(page.locator(".meeting-status")).toHaveAttribute(
+    "data-case-id",
+    result.meeting.case_id,
+  );
+  await expect(page.locator(".meeting-status")).toContainText(
+    "Review scanner · tanpa AI",
+  );
+  const stats = (await (
+    await page.request.get("http://127.0.0.1:8788/__test/stats")
+  ).json()) as { outboundCalls: number };
+  expect(stats.outboundCalls).toBe(0);
+});

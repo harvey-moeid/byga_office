@@ -26,7 +26,7 @@ export function advanceMeeting(
     return {
       caseId: meeting.case_id,
       phase: "gathering",
-      stage: "AI_ANALYSIS",
+      stage: meeting.kind === "SCANNER" ? "SCANNER_REVIEW" : "AI_ANALYSIS",
       shown: [],
       until: now + (reduced ? 4000 : 14000),
     };
@@ -52,7 +52,9 @@ export function advanceMeeting(
         ? "BOSS_DECISION"
         : next.character === "risk"
           ? "RISK_REVIEW"
-          : "AI_ANALYSIS";
+          : meeting.kind === "SCANNER"
+            ? "SCANNER_REVIEW"
+            : "AI_ANALYSIS";
     if (next.character === "boss" && previous.stage !== "BOSS_DECISION")
       return {
         ...previous,
@@ -97,6 +99,34 @@ export function advanceMeeting(
     phase: "waiting",
     until: now,
   };
+}
+
+/** Finish the visible discussion before replacing it with the latest cron.
+ * The API supplies fresh terminal/output updates for the held case, so it can
+ * finish even when a newer case is already being processed by the backend. */
+export function holdMeeting(
+  current: MeetingSnapshot | null,
+  playback: MeetingPlayback | undefined,
+  latest: MeetingSnapshot | null,
+  requested?: MeetingSnapshot | null,
+): MeetingSnapshot | null {
+  if (
+    !current ||
+    !playback ||
+    playback.caseId !== current.case_id ||
+    playback.phase === "done"
+  )
+    return latest;
+  if (latest?.case_id === current.case_id) return latest;
+  if (requested?.case_id === current.case_id) return requested;
+  if (requested === null && current.kind !== "SCANNER" && !current.finished)
+    return {
+      ...current,
+      cancelled: true,
+      finished: true,
+      status: "UNAVAILABLE",
+    };
+  return current;
 }
 
 export function speechExcerpt(summary: string) {

@@ -39,6 +39,7 @@ import {
   voting,
 } from "../core/engine";
 import { digest, json } from "./auth";
+import { CRON_INTERVAL_MS, type ScannerReview } from "../core/scanner-meeting";
 import { configWriteSchema, type ConfigWriteResult } from "../core/api";
 import {
   errorResponse,
@@ -276,11 +277,19 @@ export class Office extends DurableObject<Env> {
         scheduledTime + config.processingDelaySeconds * 1000,
       );
       const pending = await this.ctx.storage.get<number>("pending_tick");
-      // Retain the earliest unconsumed event when cron delivery is repeated.
-      await this.ctx.storage.put(
-        "pending_tick",
-        Math.min(pending ?? Infinity, due),
-      );
+      const pendingSlot =
+        await this.ctx.storage.get<number>("pending_tick_slot");
+      // A delayed actor scans the most recent cron event. Replays cannot replace
+      // a newer pending event or postpone another delivery of the same event.
+      if (pendingSlot === undefined || scheduledTime >= pendingSlot) {
+        await this.ctx.storage.put({
+          pending_tick:
+            scheduledTime === pendingSlot
+              ? Math.min(pending ?? Infinity, due)
+              : due,
+          pending_tick_slot: scheduledTime,
+        });
+      }
       const currentAlarm = await this.ctx.storage.getAlarm();
       await this.scheduleAlarm(Math.min(currentAlarm ?? Infinity, due));
       return json({ ok: true, scan_after: due });
@@ -723,18 +732,36 @@ export class Office extends DurableObject<Env> {
     }
     return json({ error: "Unknown action" }, 404);
   }
-  private async tick() {
-    // An idle office still needs scheduled retention and outbox maintenance.
+  private async tick(scheduledAt = Date.now()) {
     if ((await this.ctx.storage.getAlarm()) === null)
       await this.scheduleAlarm(Date.now() + 1000);
     await retryDeliveries(this.env);
+    const slot = Math.floor(scheduledAt / CRON_INTERVAL_MS) * CRON_INTERVAL_MS;
+    const reviewId = `SCANNER-${slot}`;
+    if (
+      await this.env.DB.prepare("SELECT id FROM scanner_meetings WHERE id=?")
+        .bind(reviewId)
+        .first()
+    )
+      return;
     const { id, config } = await this.config();
+    let review: ScannerReview = {
+      id: reviewId,
+      scheduled_at: slot,
+      candle_timestamp: null,
+      minimum: config.scannerConsensusMin,
+      direction: null,
+      reason: "MARKET_UNAVAILABLE",
+      groups: [],
+    };
+    let aiCase: CaseRow | undefined;
+    let scannedCandle: number | undefined;
     try {
       const { market, derivatives } = await this.marketData(config);
       await this.ctx.storage.delete("market_error");
       const candle = market.M5.at(-1)!.timestamp;
-      if (candle === (await this.ctx.storage.get("last_processed_candle")))
-        return;
+      const unchanged =
+        candle === (await this.ctx.storage.get("last_processed_candle"));
       const scanners = scan(market, config, id);
       const groups = analyzeGroups(
         market,
@@ -744,54 +771,117 @@ export class Office extends DurableObject<Env> {
         Date.now(),
         derivatives,
       );
-      await this.ctx.storage.put("scanners", scanners);
-      await this.ctx.storage.put("groups", groups);
+      await this.ctx.storage.put({ scanners, groups });
       const run = crypto.randomUUID();
       await this.env.DB.batch([
         this.env.DB.prepare(
           "INSERT OR IGNORE INTO scanner_runs VALUES (?,?,?,?,?)",
         ).bind(run, candle, id, "LIVE", Date.now()),
-        ...scanners.map((s) =>
+        ...scanners.map((scanner) =>
           this.env.DB.prepare(
             "INSERT OR IGNORE INTO scanner_outputs SELECT uuid,?,? FROM scanner_runs WHERE candle_timestamp=? AND config_version=? AND mode=?",
-          ).bind(s.name, JSON.stringify(s), candle, id, "LIVE"),
+          ).bind(scanner.name, JSON.stringify(scanner), candle, id, "LIVE"),
         ),
       ]);
       const direction = groupTrigger(groups, config.scannerConsensusMin);
-      if (direction) {
+      const counts = groupComposition(groups);
+      review = {
+        ...review,
+        candle_timestamp: candle,
+        direction,
+        groups: groups.map(({ group, direction, strength, reasons }) => ({
+          group,
+          direction,
+          strength,
+          reasons,
+        })),
+        reason: unchanged
+          ? "CANDLE_UNCHANGED"
+          : direction
+            ? "AI_QUEUED"
+            : counts.BUY > 0 && counts.BUY === counts.SELL
+              ? "DIRECTION_CONFLICT"
+              : "NO_CONSENSUS",
+      };
+      if (direction && !unchanged) {
         const { time: last } = await this.cooldownAnchor(config, direction);
-        if (Date.now() - last >= config.cooldownMinutes * 60000) {
-          await this.createCase(
-            market,
-            scanners,
-            groups,
-            config,
-            id,
-            "LIVE",
-            "AUTO",
-            direction,
-            `${MARKET}:${candle}:LIVE`,
-            true,
-            "NONE",
-          );
-          if (!(await this.ctx.storage.get("active")))
-            await this.ctx.storage.put("office", "TRIGGERED");
+        if (Date.now() - last < config.cooldownMinutes * 60000)
+          review.reason = "COOLDOWN";
+        else {
+          try {
+            aiCase = await this.createCase(
+              market,
+              scanners,
+              groups,
+              config,
+              id,
+              "LIVE",
+              "AUTO",
+              direction,
+              `${MARKET}:${candle}:LIVE`,
+              true,
+              "NONE",
+            );
+            if (!(await this.ctx.storage.get("active")))
+              await this.ctx.storage.put("office", "TRIGGERED");
+          } catch (error) {
+            review.reason =
+              error instanceof Error &&
+              error.message === "Daily AI case budget reached"
+                ? "AI_BUDGET"
+                : "AI_START_FAILED";
+            if (review.reason === "AI_START_FAILED") throw error;
+          }
         }
-      } else if (!(await this.ctx.storage.get("active")))
+      }
+      if (!aiCase && !(await this.ctx.storage.get("active")))
         await this.ctx.storage.put(
           "office",
-          scanners.some((s) => s.direction !== "NONE")
+          scanners.some((scanner) => scanner.direction !== "NONE")
             ? "WATCHING"
             : "MONITORING",
         );
-      await this.ctx.storage.put("last_processed_candle", candle);
-      await this.scheduleAlarm(Date.now() + 1000);
+      scannedCandle = candle;
     } catch (error) {
       await this.ctx.storage.put(
         "market_error",
         error instanceof Error ? error.message : "Market unavailable",
       );
     }
+    if (
+      review.reason === "AI_START_FAILED" &&
+      review.candle_timestamp !== null
+    ) {
+      // Recover a case committed before an actor/storage interruption. Its
+      // idempotency key owns the operation even when the response was lost.
+      aiCase ??=
+        (await this.env.DB.prepare(
+          "SELECT * FROM cases WHERE idempotency_key=?",
+        )
+          .bind(`${MARKET}:${review.candle_timestamp}:LIVE`)
+          .first<CaseRow>()) ?? undefined;
+      if (aiCase) {
+        review.reason = "AI_QUEUED";
+        scannedCandle = review.candle_timestamp;
+        await this.ctx.storage.delete("market_error");
+      }
+    }
+    // Persist every cron review, including neutral/conflicting/missing data,
+    // separately from trading cases. These rows never enter the AI queue.
+    await this.env.DB.prepare(
+      "INSERT OR IGNORE INTO scanner_meetings(id,scheduled_at,snapshot,case_uuid,created_at) VALUES (?,?,?,?,?)",
+    )
+      .bind(
+        review.id,
+        slot,
+        JSON.stringify(review),
+        aiCase?.uuid ?? null,
+        Date.now(),
+      )
+      .run();
+    if (scannedCandle !== undefined)
+      await this.ctx.storage.put("last_processed_candle", scannedCandle);
+    await this.scheduleAlarm(Date.now() + 1000);
   }
   private async repeatCase(key: string, request: unknown) {
     const existing = await this.env.DB.prepare(
@@ -1127,10 +1217,14 @@ export class Office extends DurableObject<Env> {
       pending !== undefined &&
       pending <= Date.now()
     ) {
-      await this.tick();
+      const slot = await this.ctx.storage.get<number>("pending_tick_slot");
+      await this.tick(slot);
       // Keep the event until the scan returns, so a restart can retry it.
-      if ((await this.ctx.storage.get<number>("pending_tick")) === pending)
-        await this.ctx.storage.delete("pending_tick");
+      if (
+        (await this.ctx.storage.get<number>("pending_tick")) === pending &&
+        (await this.ctx.storage.get<number>("pending_tick_slot")) === slot
+      )
+        await this.ctx.storage.delete(["pending_tick", "pending_tick_slot"]);
     }
     await retryDeliveries(this.env);
     // Each canonical actor owns one mode; resume its in-flight work first.
@@ -1726,6 +1820,9 @@ export class Office extends DurableObject<Env> {
   private async cleanup() {
     const { config } = await this.config();
     await this.env.DB.batch([
+      this.env.DB.prepare(
+        "DELETE FROM scanner_meetings WHERE created_at<?",
+      ).bind(Date.now() - config.retentionDays * 86400000),
       this.env.DB.prepare(
         "UPDATE ai_runs SET raw=NULL,rendered_prompt=NULL WHERE created_at<? AND (raw IS NOT NULL OR rendered_prompt IS NOT NULL)",
       ).bind(Date.now() - config.retentionDays * 86400000),

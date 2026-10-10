@@ -17,6 +17,7 @@ export class Office extends ProductionOffice {
       return Response.json({
         alarm: await this.ctx.storage.getAlarm(),
         pendingTick: await this.ctx.storage.get("pending_tick"),
+        pendingTickSlot: await this.ctx.storage.get("pending_tick_slot"),
         buyCooldown: await this.ctx.storage.get("cooldown:BUY"),
         sellCooldown: await this.ctx.storage.get("cooldown:SELL"),
       });
@@ -27,6 +28,19 @@ export class Office extends ProductionOffice {
     }
     if (path === "/__test/tick-due") {
       await this.ctx.storage.put("pending_tick", Date.now() - 1);
+      return Response.json({ ok: true });
+    }
+    if (path === "/__test/interrupt-case") {
+      // Inject a lost response after a real D1 commit; never deployed.
+      const actor = this as unknown as {
+        createCase: (...args: unknown[]) => Promise<unknown>;
+      };
+      const original = actor.createCase.bind(this);
+      actor.createCase = async (...args) => {
+        actor.createCase = original;
+        await original(...args);
+        throw new Error("Fixture interruption after committed AUTO case");
+      };
       return Response.json({ ok: true });
     }
     if (path === "/__test/clear-cooldown") {

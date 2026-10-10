@@ -598,16 +598,26 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
               </div>
               {selectedTurn && (
                 <p className="character-live-vote">
-                  <Badge value={selectedTurn.analysis.vote} />
+                  <Badge
+                    value={
+                      "scanner" in selectedTurn
+                        ? selectedTurn.scanner.direction
+                        : selectedTurn.analysis.vote
+                    }
+                  />
                   <strong>
-                    Confidence {selectedTurn.analysis.confidence}%
+                    {"scanner" in selectedTurn
+                      ? "Scanner · tanpa AI"
+                      : `Confidence ${selectedTurn.analysis.confidence}%`}
                   </strong>
                 </p>
               )}
               <p>
                 {meeting.active
                   ? presenceFor(selectedCharacter) === "SPEAKING"
-                    ? "Sedang menyampaikan hasil AI case aktif di ruang meeting."
+                    ? meeting.snapshot?.kind === "SCANNER"
+                      ? "Sedang menjelaskan hasil scanner tanpa panggilan AI."
+                      : "Sedang menyampaikan hasil AI case aktif di ruang meeting."
                     : presenceFor(selectedCharacter) === "OUTPUT UNAVAILABLE"
                       ? "Output karakter tidak lolos validasi atau tidak tersedia untuk case aktif."
                       : "Status ini mengikuti posisi dan tahap karakter pada meeting aktif."
