@@ -643,12 +643,15 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   await expect(page.getByLabel("Kualitas 3D", { exact: true })).toHaveValue(
     "low",
   );
-  const scene = await page.locator(".office-scene").boundingBox();
   const viewport = page.viewportSize()!;
-  expect(scene?.x).toBe(0);
-  expect(scene?.y).toBe(0);
-  expect(scene?.width).toBe(viewport.width);
-  expect(scene?.height).toBe(viewport.height);
+  // Low also loads the rig asynchronously. Its controls can already be in
+  // the DOM while Suspense hides the scene; wait for the final visible layout.
+  await expect
+    .poll(() => page.locator(".office-scene").boundingBox(), {
+      timeout: 15_000,
+      message: "Reloaded Low scene finishes loading and fills the viewport",
+    })
+    .toEqual({ x: 0, y: 0, width: viewport.width, height: viewport.height });
   const menuButton = page.getByRole("button", { name: /^Menu/ });
   const fullscreenButton = page.getByRole("button", {
     name: "Buka fullscreen 3D",
