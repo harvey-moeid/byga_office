@@ -202,6 +202,32 @@ afterAll(async () => {
 });
 
 describe.sequential("Backend/API audit regressions", () => {
+  it("serves bounded public chart snapshots and exclusive deltas without starting AI or changing market rows", async () => {
+    const before = await chart.prepare("SELECT COUNT(*) n FROM candles").first<{ n: number }>();
+    for (const timeframe of ["M5", "M15", "H1"]) {
+      const response = await call(`/market/candles?timeframe=${timeframe}&limit=10`, undefined, "GET", false);
+      expect(response.status).toBe(200);
+      const body = await response.json() as { candles: { timestamp: number; close: number }[]; status: string; market: string; latest_timestamp: number };
+      expect(body.market).toBe("BTCUSDT.P");
+      expect(body.candles).toHaveLength(10);
+      expect(body.status).toBe("OK");
+      expect(body.latest_timestamp).toBe(body.candles[9].timestamp);
+      const delta = await call(`/market/candles?timeframe=${timeframe}&after=${body.candles[8].timestamp}`, undefined, "GET", false);
+      const result = await delta.json() as { candles: unknown[]; has_more: boolean };
+      expect(result.candles).toEqual([body.candles[9]]);
+      expect(result.has_more).toBe(false);
+      const unchanged = await call(`/market/candles?timeframe=${timeframe}&after=${body.latest_timestamp}`, undefined, "GET", false);
+      expect(await unchanged.json()).toMatchObject({ candles: [], status: "OK", latest_timestamp: body.latest_timestamp });
+      const backlog = await call(`/market/candles?timeframe=${timeframe}&after=0&limit=10`, undefined, "GET", false);
+      expect(await backlog.json()).toMatchObject({ has_more: true, latest_timestamp: body.latest_timestamp });
+    }
+    for (const query of ["timeframe=D1", "limit=1001", "after=-1", "market=ETHUSDT", "limit=10&limit=20"])
+      expect((await call(`/market/candles?${query}`, undefined, "GET", false)).status).toBe(400);
+    expect((await call("/market/candles", {}, "POST", false)).status).toBe(405);
+    expect(await chart.prepare("SELECT COUNT(*) n FROM candles").first()).toEqual(before);
+    expect(await db.prepare("SELECT COUNT(*) n FROM ai_runs").first()).toEqual({ n: 0 });
+    expect(await db.prepare("SELECT COUNT(*) n FROM cases").first()).toEqual({ n: 0 });
+  });
   it("rejects unauthenticated routes and unsupported methods before any mutation", async () => {
     for (const path of [
       "/config",

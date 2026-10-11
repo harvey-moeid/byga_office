@@ -15,6 +15,7 @@ import { isAdmin, json, login, logout, sameOrigin } from "./auth";
 import type { Env } from "./env";
 import { isProviderConfigured } from "./providers";
 import { chartSchema, readMarket } from "./market";
+import { chartQuery, readChart } from "./chart";
 import type { CaseRow } from "./office";
 import { readOfficeMeetings } from "./meetings";
 import {
@@ -450,6 +451,16 @@ async function route(request: Request, env: Env): Promise<Response> {
         };
       }),
     );
+  }
+  if (path === "/api/v1/market/candles") {
+    const now = Date.now();
+    const query = chartQuery(url.searchParams, now);
+    try {
+      return json(await readChart(env, query, now, await marketProcessingDelay(env)));
+    } catch (error) {
+      console.error("chart_unavailable", error instanceof Error ? error.message : String(error));
+      return json({ error: "Data chart belum tersedia. Coba lagi nanti.", code: "CHART_UNAVAILABLE" }, 503);
+    }
   }
   if (path === "/api/v1/market/status") {
     try {

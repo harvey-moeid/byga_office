@@ -48,6 +48,7 @@ import {
   supportsWebGL,
 } from "./shared";
 const Admin = lazy(() => import("./admin"));
+const ChartPage = lazy(() => import("./chart"));
 const Simulation = lazy(() => import("./simulation"));
 const SimulationHistory = lazy(() =>
   import("./simulation").then((m) => ({ default: m.SimulationHistory })),
@@ -152,6 +153,7 @@ function AppLayout() {
               ["/", "◈", "Home"],
               ["/operations", "▤", "Operations"],
               ["/scanners", "▦", "Scanners"],
+              ["/chart", "▥", "Chart"],
               ["/signals", "↗", "Signals"],
               ["/cases", "▤", "Cases"],
               ["/characters", "◎", "AI Team"],
@@ -207,6 +209,7 @@ function AppLayout() {
             <Route path="/office" element={<Navigate to="/" replace />} />
             <Route path="/operations" element={<Dashboard />} />
             <Route path="/scanners" element={<Scanners />} />
+            <Route path="/chart" element={<ChartPage />} />
             <Route path="/scanners/:id" element={<ScannerDetail />} />
             <Route path="/signals" element={<Signals />} />
             <Route path="/signals/:id" element={<SignalDetail />} />
