@@ -14,6 +14,7 @@ import {
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import { showsCoffeeCup, type CharacterMotion } from "./character-motion";
 import { characterBlink, workstationMotion } from "./character-expression";
+import type { Quality } from "./quality";
 import {
   buildCharacterVisual,
   type RiggedCharacterStyle,
@@ -600,7 +601,9 @@ export function RiggedOfficeCharacter({
   listenerYaw,
   motionSpeed,
   phase,
+  quality,
 }: {
+  quality: Quality;
   phase: number;
   motionSpeed: RefObject<number>;
   listenerYaw: RefObject<number>;
@@ -630,9 +633,9 @@ export function RiggedOfficeCharacter({
   );
   const character = useMemo(() => {
     const root = cloneSkeleton(model.scene);
-    const build = buildCharacterVisual(root, stableStyle);
+    const build = buildCharacterVisual(root, stableStyle, quality);
     return { root, ...build };
-  }, [model.scene, stableStyle]);
+  }, [model.scene, stableStyle, quality]);
   const root = character.root;
   const { actions, mixer } = useAnimations(CLIPS, root);
   const active = useRef<string | undefined>(undefined);

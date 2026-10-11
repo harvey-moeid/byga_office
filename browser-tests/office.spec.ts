@@ -592,6 +592,11 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   // and verifies native context-loss recovery within this single test.
   test.setTimeout(120_000);
   const errors: string[] = [];
+  const rigLoads: number[] = [];
+  page.on("response", (response) => {
+    if (new URL(response.url()).pathname === "/models/byga/rigged-office-humanoid.gltf")
+      rigLoads.push(response.status());
+  });
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
   const supported = await page.evaluate(() => {
@@ -618,11 +623,9 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   await expect(
     page.getByRole("button", { name: "Lantai 2", exact: true }),
   ).toBeVisible();
-  // Medium intentionally keeps the lightweight procedural character/furniture
-  // path. Verify the premium character asset independently so CI software
-  // WebGL is not forced into the high-cost High profile just to test an HTTP file.
-  const rig = await page.request.get("/models/byga/rigged-office-humanoid.gltf");
-  expect(rig.status()).toBe(200);
+  // Medium now mounts the new avatar; verify the renderer actually loads its
+  // local rig rather than probing an asset that the scene might never use.
+  await expect.poll(() => rigLoads).toContain(200);
   await quality.selectOption("low");
   const upstairs = page.getByRole("button", { name: "Lantai 2", exact: true });
   await expect(upstairs).toBeVisible();

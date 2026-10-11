@@ -1072,7 +1072,7 @@ export default function OfficeScene({
               avatar={avatars[id] ?? "professional"}
               state={state}
               activity={activities[id]}
-              decorative={profile.decorative}
+              quality={quality}
               meetingFloor={meetingFloor}
               upperFloorEnabled={profile.upperFloor}
               onSelect={onSelect}

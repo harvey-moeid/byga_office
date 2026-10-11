@@ -7,6 +7,7 @@ import {
   LatheGeometry,
   Mesh,
   MeshPhysicalMaterial,
+  MeshStandardMaterial,
   SphereGeometry,
   TorusGeometry,
   RepeatWrapping,
@@ -15,6 +16,8 @@ import {
   type Material,
   type Object3D,
 } from "three";
+
+import type { Quality } from "./quality";
 
 type OutfitStyle = "formal" | "smart" | "cool" | "casual" | "relaxed";
 
@@ -34,12 +37,20 @@ export type RiggedCharacterStyle = {
   boss: boolean;
 };
 
-function material(
+function createMaterial(
   name: string,
   color: string,
   roughness: number,
   options: { metalness?: number; clearcoat?: number } = {},
+  physical = true,
 ) {
+  if (!physical)
+    return new MeshStandardMaterial({
+      name,
+      color,
+      roughness,
+      metalness: options.metalness ?? 0,
+    });
   return new MeshPhysicalMaterial({
     name,
     color,
@@ -50,8 +61,8 @@ function material(
   });
 }
 
-function sculptedHead() {
-  const head = new SphereGeometry(1, 28, 20);
+function sculptedHead(width: number, height: number) {
+  const head = new SphereGeometry(1, width, height);
   const vertices = head.attributes.position;
   for (let i = 0; i < vertices.count; i++) {
     const y = vertices.getY(i);
@@ -87,48 +98,82 @@ function surfaceTexture(woven: boolean) {
 const clothTexture = surfaceTexture(true);
 const skinTexture = surfaceTexture(false);
 
-const geometry = {
-  torso: new LatheGeometry(
-    [
-      [0.15, -0.3],
-      [0.165, -0.28],
-      [0.155, -0.14],
-      [0.17, 0.02],
-      [0.215, 0.17],
-      [0.205, 0.23],
-      [0.16, 0.275],
-      [0.075, 0.29],
-    ].map(([x, y]) => new Vector2(x, y)),
-    24,
-  ),
-  pelvis: new SphereGeometry(1, 22, 16),
-  head: sculptedHead(),
-  hair: new SphereGeometry(1, 24, 16, 0, Math.PI * 2, 0, Math.PI * 0.43),
-  hairLong: new SphereGeometry(1, 22, 16),
-  eye: new SphereGeometry(1, 14, 10),
-  pupil: new SphereGeometry(1, 12, 8),
-  nose: new SphereGeometry(1, 16, 10),
-  mouth: new SphereGeometry(1, 12, 8),
-  ear: new SphereGeometry(1, 14, 10),
-  upperArm: new CapsuleGeometry(0.055, 0.23, 6, 14),
-  lowerArm: new CapsuleGeometry(0.045, 0.22, 6, 14),
-  upperLeg: new CapsuleGeometry(0.073, 0.304, 6, 14),
-  lowerLeg: new CapsuleGeometry(0.052, 0.306, 6, 14),
-  hand: new SphereGeometry(1, 16, 10),
-  finger: new CapsuleGeometry(0.007, 0.023, 3, 6),
-  brow: new CapsuleGeometry(0.0045, 0.027, 3, 8),
-  button: new SphereGeometry(0.006, 8, 6),
-  shoe: new SphereGeometry(1, 18, 12),
-  neck: new CylinderGeometry(0.047, 0.052, 0.13, 18),
-  lapel: new BoxGeometry(0.075, 0.22, 0.014),
-  tie: new BoxGeometry(0.034, 0.23, 0.012),
-  zipper: new BoxGeometry(0.012, 0.32, 0.01),
-  collar: new BoxGeometry(0.17, 0.035, 0.018),
-  badge: new BoxGeometry(0.05, 0.02, 0.01),
-  phone: new BoxGeometry(0.065, 0.12, 0.015),
-  cup: new CylinderGeometry(0.043, 0.038, 0.085, 18),
-  cupHandle: new TorusGeometry(0.031, 0.008, 8, 18, Math.PI * 1.45),
-};
+function createGeometry(quality: Quality) {
+  const width = quality === "low" ? 10 : quality === "medium" ? 16 : 28;
+  const height = quality === "low" ? 8 : quality === "medium" ? 12 : 20;
+  const smallWidth = quality === "low" ? 6 : quality === "medium" ? 8 : 14;
+  const smallHeight = quality === "low" ? 4 : quality === "medium" ? 6 : 10;
+  const radial = quality === "low" ? 6 : quality === "medium" ? 10 : 14;
+  const caps = quality === "low" ? 3 : quality === "medium" ? 4 : 6;
+  return {
+    torso: new LatheGeometry(
+      [
+        [0.15, -0.3],
+        [0.165, -0.28],
+        [0.155, -0.14],
+        [0.17, 0.02],
+        [0.215, 0.17],
+        [0.205, 0.23],
+        [0.16, 0.275],
+        [0.075, 0.29],
+      ].map(([x, y]) => new Vector2(x, y)),
+      width,
+    ),
+    pelvis: new SphereGeometry(1, width, height),
+    head: sculptedHead(width, height),
+    hair: new SphereGeometry(
+      1,
+      width,
+      height,
+      0,
+      Math.PI * 2,
+      0,
+      Math.PI * 0.43,
+    ),
+    hairLong: new SphereGeometry(1, width, height),
+    eye: new SphereGeometry(1, smallWidth, smallHeight),
+    pupil: new SphereGeometry(1, smallWidth, smallHeight),
+    nose: new SphereGeometry(1, smallWidth, smallHeight),
+    mouth: new SphereGeometry(1, smallWidth, smallHeight),
+    ear: new SphereGeometry(1, smallWidth, smallHeight),
+    upperArm: new CapsuleGeometry(0.055, 0.23, caps, radial),
+    lowerArm: new CapsuleGeometry(0.045, 0.22, caps, radial),
+    upperLeg: new CapsuleGeometry(0.073, 0.304, caps, radial),
+    lowerLeg: new CapsuleGeometry(0.052, 0.306, caps, radial),
+    hand: new SphereGeometry(1, smallWidth, smallHeight),
+    finger: new CapsuleGeometry(0.007, 0.023, 2, quality === "low" ? 4 : 6),
+    brow: new CapsuleGeometry(0.0045, 0.027, 2, quality === "low" ? 4 : 8),
+    button: new SphereGeometry(0.006, 8, 6),
+    shoe: new SphereGeometry(1, smallWidth, smallHeight),
+    neck: new CylinderGeometry(0.047, 0.052, 0.13, radial),
+    lapel: new BoxGeometry(0.075, 0.22, 0.014),
+    tie: new BoxGeometry(0.034, 0.23, 0.012),
+    zipper: new BoxGeometry(0.012, 0.32, 0.01),
+    collar: new BoxGeometry(0.17, 0.035, 0.018),
+    badge: new BoxGeometry(0.05, 0.02, 0.01),
+    phone: new BoxGeometry(0.065, 0.12, 0.015),
+    cup: new CylinderGeometry(0.043, 0.038, 0.085, radial),
+    cupHandle: new TorusGeometry(
+      0.031,
+      0.008,
+      quality === "low" ? 4 : 8,
+      radial,
+      Math.PI * 1.45,
+    ),
+  };
+}
+
+// Geometry belongs to the shared LOD cache; individual characters only own materials.
+const geometryCache = new Map<Quality, ReturnType<typeof createGeometry>>();
+function characterGeometry(quality: Quality) {
+  const level = quality === "ultra" ? "high" : quality;
+  let geometry = geometryCache.get(level);
+  if (!geometry) {
+    geometry = createGeometry(level);
+    geometryCache.set(level, geometry);
+  }
+  return geometry;
+}
 
 type CharacterBuild = {
   materials: Material[];
@@ -163,7 +208,16 @@ function attachMesh(
 export function buildCharacterVisual(
   root: Object3D,
   style: RiggedCharacterStyle,
+  quality: Quality = "high",
 ): CharacterBuild {
+  const geometry = characterGeometry(quality);
+  const detailed = quality === "high" || quality === "ultra";
+  const material = (
+    name: string,
+    color: string,
+    roughness: number,
+    options: { metalness?: number; clearcoat?: number } = {},
+  ) => createMaterial(name, color, roughness, options, detailed);
   const rigDriver = root.getObjectByName("RigDriver");
   if (rigDriver) rigDriver.visible = false;
 
@@ -196,12 +250,15 @@ export function buildCharacterVisual(
     phoneMaterial,
     cupMaterial,
   ];
-  skin.bumpMap = skinTexture;
-  skin.bumpScale = 0.00045;
-  for (const cloth of [jacket, shirt, trousers]) {
-    cloth.bumpMap = clothTexture;
-    cloth.bumpScale = 0.0007;
+  if (detailed) {
+    skin.bumpMap = skinTexture;
+    skin.bumpScale = 0.00045;
   }
+  if (quality !== "low")
+    for (const cloth of [jacket, shirt, trousers]) {
+      cloth.bumpMap = clothTexture;
+      cloth.bumpScale = 0.0007;
+    }
   const eyes: Mesh[] = [];
   const fingers: Group[] = [];
 
@@ -307,15 +364,16 @@ export function buildCharacterVisual(
       [0.7, 1, 0.6],
       [0, 0, Math.PI / 2],
     );
-    attachMesh(
-      root,
-      "Head",
-      `${prefix}InnerEar`,
-      geometry.ear,
-      lip,
-      [side * 0.124, 0.12, 0.007],
-      [0.005, 0.018, 0.006],
-    );
+    if (quality !== "low")
+      attachMesh(
+        root,
+        "Head",
+        `${prefix}InnerEar`,
+        geometry.ear,
+        lip,
+        [side * 0.124, 0.12, 0.007],
+        [0.005, 0.018, 0.006],
+      );
 
     attachMesh(
       root,
@@ -359,14 +417,14 @@ export function buildCharacterVisual(
       finger.position.set((fingerIndex - 1.5) * 0.015, -0.055, 0.009);
       root.getObjectByName(`${prefix}Hand`)!.add(finger);
       const length = [0.85, 1, 0.93, 0.72][fingerIndex];
-      for (let segment = 0; segment < 2; segment++) {
+      for (let segment = 0; segment < (quality === "low" ? 1 : 2); segment++) {
         const mesh = new Mesh(geometry.finger, skin);
         mesh.position.set(
           0,
           -0.014 - segment * 0.021 * length,
           segment * 0.006,
         );
-        mesh.scale.y = length;
+        mesh.scale.y = length * (quality === "low" ? 1.5 : 1);
         mesh.rotation.x = -segment * 0.3;
         mesh.castShadow = true;
         finger.add(mesh);
@@ -383,15 +441,16 @@ export function buildCharacterVisual(
       [1.2, 1.25, 1.2],
       [0, 0, -side * 0.5],
     );
-    attachMesh(
-      root,
-      `${prefix}Foot`,
-      `${prefix}Sole`,
-      geometry.shoe,
-      trousers,
-      [0, -0.049, 0.075],
-      [0.071, 0.024, 0.132],
-    );
+    if (quality !== "low")
+      attachMesh(
+        root,
+        `${prefix}Foot`,
+        `${prefix}Sole`,
+        geometry.shoe,
+        trousers,
+        [0, -0.049, 0.075],
+        [0.071, 0.024, 0.132],
+      );
 
     attachMesh(
       root,
@@ -537,55 +596,66 @@ export function buildCharacterVisual(
   phone.visible = false;
 
   // Asymmetric swept locks soften the helmet silhouette of a plain hair cap.
-  for (let lock = 0; lock < 5; lock++)
+  for (let lock = 0; lock < (quality === "low" ? 3 : 5); lock++)
     attachMesh(
       root,
       "Head",
       `HairLock${lock}`,
       geometry.hairLong,
       hair,
-      [-0.076 + lock * 0.034, 0.248 - Math.abs(lock - 2) * 0.005, 0.024],
+      [
+        -0.076 + lock * (quality === "low" ? 0.068 : 0.034),
+        0.248 - Math.abs(lock - (quality === "low" ? 1 : 2)) * 0.005,
+        0.024,
+      ],
       [0.038, 0.028, 0.073],
       [0.12, -0.22, -0.24],
     );
-  for (let button = 0; button < 3; button++)
+  if (quality !== "low") {
+    for (let button = 0; button < 3; button++)
+      attachMesh(
+        root,
+        "Chest",
+        `JacketButton${button}`,
+        geometry.button,
+        accent,
+        [0.015, -0.04 - button * 0.065, 0.113],
+      );
     attachMesh(
       root,
       "Chest",
-      `JacketButton${button}`,
-      geometry.button,
-      accent,
-      [0.015, -0.04 - button * 0.065, 0.113],
+      "BreastPocket",
+      geometry.badge,
+      jacket,
+      [0.115, 0.09, 0.117],
+      [1.2, 0.25, 0.65],
     );
-  attachMesh(
-    root,
-    "Chest",
-    "BreastPocket",
-    geometry.badge,
-    jacket,
-    [0.115, 0.09, 0.117],
-    [1.2, 0.25, 0.65],
-  );
-  attachMesh(
-    root,
-    "LeftLowerArm",
-    "Wristwatch",
-    geometry.collar,
-    shoes,
-    [0, -0.285, 0.034],
-    [0.36, 0.75, 0.65],
-  );
-  attachMesh(
-    root,
-    "LeftLowerArm",
-    "WatchFace",
-    geometry.badge,
-    accent,
-    [0, -0.285, 0.045],
-    [0.5, 1, 0.5],
-  );
+    attachMesh(
+      root,
+      "LeftLowerArm",
+      "Wristwatch",
+      geometry.collar,
+      shoes,
+      [0, -0.285, 0.034],
+      [0.36, 0.75, 0.65],
+    );
+    attachMesh(
+      root,
+      "LeftLowerArm",
+      "WatchFace",
+      geometry.badge,
+      accent,
+      [0, -0.285, 0.045],
+      [0.5, 1, 0.5],
+    );
+  }
 
   root.userData.bygaCharacterRig = "v1";
   root.userData.bygaCharacterVisual = "v2";
+  root.userData.bygaCharacterQuality = quality;
+  root.traverse((object) => {
+    if (object instanceof Mesh)
+      object.castShadow = object.receiveShadow = detailed;
+  });
   return { materials, eyes, fingers, mouth };
 }

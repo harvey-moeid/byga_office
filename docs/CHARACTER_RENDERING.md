@@ -4,8 +4,10 @@ Phase 1 replaces the decorative character renderer without changing the trading 
 
 ## Quality contract
 
-- `low`, `medium`: keep the lightweight procedural character renderer for constrained or software-rendered devices.
-- `high`, `ultra`: render the articulated humanoid path using the local `public/models/byga/rigged-office-humanoid.gltf` skeleton and `AnimationMixer` clips. Select High or Ultra to see the detailed avatar upgrade.
+- All quality levels use the same new articulated avatar, local `public/models/byga/rigged-office-humanoid.gltf` skeleton and `AnimationMixer` clips.
+- `low`: reduced polygon counts, single-segment animated fingers, three swept hair locks, standard materials and no bump maps or avatar shadows. Small watch/pocket/button/sole details are omitted.
+- `medium`: intermediate polygon counts, full fingers and outfit details, standard materials and cloth bump maps; avatar shadows remain disabled.
+- `high`, `ultra`: full avatar geometry, physical materials, skin/cloth bump maps and avatar shadows.
 - Auto quality may move into `low`; that must not alter character IDs, office destinations, meeting attendance, speech routing, or backend state.
 
 ## Rig contract
@@ -53,16 +55,18 @@ Phase 1 must not change:
 
 - `tests/character-motion.test.ts` covers deterministic motion selection.
 - `tests/character-rig.test.ts` validates the local glTF skin/joint hierarchy and embedded buffer.
-- Browser acceptance temporarily selects Medium quality and verifies the rig asset returns HTTP 200, then returns to Low to preserve the existing low-cost WebGL/context-loss coverage.
+- Browser acceptance verifies the rig asset loads through the Medium renderer, then switches to Low to exercise both floors and WebGL/context-loss coverage.
 - Normal repository gates still require TypeScript, ESLint, Vitest, build and Playwright acceptance before merge/deploy.
 
 ## Avatar and movement upgrade
 
-High and Ultra now use a tapered jaw, smaller eyes with eyebrows/lids, swept hair, a tailored jacket silhouette, articulated fingers, watch and shoe soles. Shared, locally generated skin and woven cloth bump maps add surface detail without external asset requests. These remain procedural miniature humanoids, not photoreal character scans.
+All qualities use a tapered jaw, smaller eyes with eyebrows/lids, swept hair, a tailored jacket silhouette and articulated fingers. Medium, High and Ultra also include watch and shoe-sole details. Shared, locally generated skin and woven cloth bump maps add surface detail without external asset requests. These remain procedural miniature humanoids, not photoreal character scans.
 
 Characters blink at staggered intervals and move their mouths during conversation. Workstation monitoring crossfades through typing, mouse and screen-review clips on an 18-second cycle offset by character ID. This cycle only decorates the existing `type` presence; it does not imply a new AI request or alter meeting attendance. Reduced motion disables blinking, mouth/jitter and the workstation cycle while preserving required travel and seat poses.
 
-`src/ui/character-locomotion.ts` accelerates at departure, brakes at the final destination, and consumes multiple route waypoints in one update. Position follows the original planner's segments exactly, including doorways and stairs. Walking animation cadence follows actual travel speed. Both lightweight and detailed renderers use this movement path.
+`src/ui/character-locomotion.ts` accelerates at departure, brakes at the final destination, and consumes multiple route waypoints in one update. Position follows the original planner's segments exactly, including doorways and stairs. Walking animation cadence follows actual travel speed. Every avatar quality uses this movement path. Quality changes rebuild only the local avatar geometry/materials; the world-space root, route, activity and meeting state stay in place.
+
+`tests/character-lod.test.ts` verifies shared identity and expressive hands at every quality, consistent joint positions/body bounds, lower triangle counts in Low/Medium, cheap materials/no avatar shadows in those modes, and shared geometry with independently owned materials.
 
 `tests/character-locomotion.test.ts` verifies acceleration, braking, corner preservation, empty-route safety, and upstairs meeting arrival within 14 seconds at 60 FPS, 12 FPS and half-second updates.
 
