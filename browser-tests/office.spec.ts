@@ -585,6 +585,67 @@ test("Admin reviews ambiguous deliveries with explicit confirmation and no resen
   await page.getByRole("button", { name: "Konfirmasi", exact: true }).click();
   await expect(page.getByText("SENT", { exact: true })).toBeVisible();
 });
+test("3D controls stay visible while the character rig is loading", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("byga:3d-quality", "low"),
+  );
+  let rigRequested = false;
+  let releaseRig!: () => void;
+  const rigReady = new Promise<void>((resolve) => {
+    releaseRig = resolve;
+  });
+  await page.route(
+    "**/models/byga/rigged-office-humanoid.gltf",
+    async (route) => {
+      rigRequested = true;
+      await rigReady;
+      await route.continue();
+    },
+  );
+  try {
+    await page.goto("/", { waitUntil: "domcontentloaded" });
+    const supported = await page.evaluate(() => {
+      const gl = document.createElement("canvas").getContext("webgl2");
+      if (gl) gl.getExtension("WEBGL_lose_context")?.loseContext();
+      return !!gl;
+    });
+    test.skip(!supported, "System Chromium does not expose WebGL2");
+    await expect.poll(() => rigRequested).toBe(true);
+    // Hold the real asset request until the controls have been checked. This
+    // reproduces Suspense hiding the DOM without relying on GPU/network timing.
+    await expect(
+      page.getByRole("button", { name: "Buka fullscreen 3D" }),
+    ).toBeVisible();
+    await expect(page.getByLabel("Kualitas 3D", { exact: true })).toHaveValue(
+      "low",
+    );
+    const upstairs = page.getByRole("button", {
+      name: "Lantai 2",
+      exact: true,
+    });
+    await upstairs.click();
+    await expect(upstairs).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Reset View", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "Seluruh kantor", exact: true }),
+    ).toHaveAttribute("aria-pressed", "true");
+    const loaded = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+          "/models/byga/rigged-office-humanoid.gltf" && response.ok(),
+    );
+    releaseRig();
+    await loaded;
+    await expect(page.locator(".office-scene canvas")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Buka fullscreen 3D" }),
+    ).toBeVisible();
+  } finally {
+    releaseRig();
+  }
+});
 test("3D renderer mounts rooms and reset controls when WebGL is available", async ({
   page,
 }, testInfo) => {
