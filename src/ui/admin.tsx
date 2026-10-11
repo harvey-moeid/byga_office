@@ -1,3 +1,4 @@
+import { ScannerSettings } from "./scanner-settings";
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -354,7 +355,11 @@ function ConfigEditor() {
             ))}
             <details>
               <summary>Scanner, context, dan budget settings</summary>
-              {(["scanner", "context", "budgets"] as const).map((k) => (
+              <ScannerSettings
+                value={draft.scanner}
+                onChange={(value) => update("scanner", value)}
+              />
+              {(["context", "budgets"] as const).map((k) => (
                 <JsonField
                   key={`${k}:${baseVersion.current}:${editorRevision}`}
                   label={k}

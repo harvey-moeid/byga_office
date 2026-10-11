@@ -38,6 +38,8 @@ npm run deploy:check
 
 `check` runs strict TypeScript, ESLint, unit/integration tests, and the frontend build. Integration tests execute real workerd/D1/Durable Objects in isolated Miniflare storage, intercept outbound providers, and never use real AI keys/webhooks. No browser or production integration is implied by passing these tests.
 
+See [3D camera and scanner settings](docs/OFFICE_UI_SETTINGS.md) for speaker tracking, group identities, and numeric scanner controls.
+
 See [five-minute scanner meetings](docs/CRON_MEETINGS.md) for the two-group AI gate, no-AI visual review, meeting handoff API, and required configuration migration.
 
 See [trading safety corrections](docs/TRADING_SAFETY.md) for queue ownership, cooldown, snapshot validity, Emergency authority, delayed cron scans, tick-normalized risk and configuration invariants.

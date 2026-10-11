@@ -1,3 +1,5 @@
+import { useFrame } from "@react-three/fiber";
+import type { RefObject } from "react";
 import { useAnimations, useGLTF } from "@react-three/drei";
 import { useEffect, useMemo, useRef } from "react";
 import {
@@ -448,7 +450,9 @@ export function RiggedOfficeCharacter({
   style,
   showPhone,
   motionReduced,
+  listenerYaw,
 }: {
+  listenerYaw: RefObject<number>;
   motion: CharacterMotion;
   style: RiggedCharacterStyle;
   showPhone: boolean;
@@ -481,6 +485,10 @@ export function RiggedOfficeCharacter({
   const root = character.root;
   const { actions, mixer } = useAnimations(CLIPS, root);
   const active = useRef<CharacterMotion | undefined>(undefined);
+  const head = useMemo(() => root.getObjectByName("Head"), [root]);
+  useFrame(() => {
+    if (head && motion === "sit") head.rotation.y = listenerYaw.current;
+  });
 
   useEffect(() => {
     active.current = undefined;
@@ -502,8 +510,16 @@ export function RiggedOfficeCharacter({
     next.setLoop(LoopRepeat, Infinity);
     next.setEffectiveTimeScale(motionReduced ? 0.6 : 1);
     next.setEffectiveWeight(1);
-    next.reset().fadeIn(previous ? 0.24 : 0.08).play();
-    previous?.fadeOut(0.24);
+    const transition =
+      requested === "walk" || active.current === "walk" ? 0.38 : 0.3;
+    next
+      .reset()
+      .fadeIn(previous ? transition : 0.08)
+      .play();
+    // Phase offsets avoid a whole row of characters moving in sync.
+    if (requested === "type" || requested === "idle")
+      next.time = Math.random() * next.getClip().duration;
+    previous?.fadeOut(transition);
     active.current = requested;
     return () => {
       if (!active.current) return;
@@ -525,4 +541,3 @@ export function RiggedOfficeCharacter({
     </group>
   );
 }
-

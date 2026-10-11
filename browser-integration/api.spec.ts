@@ -34,6 +34,15 @@ test("real auth, versioned config, scanner mutation and logout agree with the UI
   )) as { id: string };
   await page.getByLabel("minRR", { exact: true }).fill("2");
   await page
+    .getByText("Scanner, context, dan budget settings", { exact: true })
+    .click();
+  await page
+    .getByRole("spinbutton", { name: "EMA cepat", exact: true })
+    .fill("12");
+  await page
+    .getByRole("spinbutton", { name: "Rasio volume minimum", exact: true })
+    .fill("1.15");
+  await page
     .getByRole("button", { name: "Save new version", exact: true })
     .click();
   await expect(page.getByRole("status")).toContainText(
@@ -41,9 +50,14 @@ test("real auth, versioned config, scanner mutation and logout agree with the UI
   );
   const current = (await browserGet(page, "/api/v1/admin/config").then(
     (r) => r.body,
-  )) as { id: string; config: { minRR: number } };
+  )) as {
+    id: string;
+    config: { minRR: number; scanner: { ema: number[]; volumeRatio: number } };
+  };
   expect(current.id).not.toBe(previous.id);
   expect(current.config.minRR).toBe(2);
+  expect(current.config.scanner.ema).toEqual([12, 50, 200]);
+  expect(current.config.scanner.volumeRatio).toBe(1.15);
   await page.reload();
   await expect(page.getByLabel("minRR", { exact: true })).toHaveValue("2");
   expect((await browserGet(page, "/api/v1/admin/scan")).status).toBe(405);

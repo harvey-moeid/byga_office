@@ -1,3 +1,4 @@
+import { characterIdentity } from "./group-identity";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CharacterId } from "../core/contracts";
 import type {
@@ -186,6 +187,7 @@ export function SpeechBubble({
     <button
       className={`meeting-bubble${turn.character === "boss" ? " boss-bubble" : ""}`}
       data-vote={copy.direction}
+      data-group={characterIdentity(turn.character).label}
       aria-label={`Baca percakapan ${roles[turn.character]}`}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => {
@@ -200,9 +202,15 @@ export function SpeechBubble({
             .toLowerCase()
             .replaceAll("_", "-")}`}
         >
-          {copy.badge}
+          {copy.direction}
         </span>
       </strong>
+      <span
+        className="speech-group"
+        style={{ color: characterIdentity(turn.character).color }}
+      >
+        {characterIdentity(turn.character).label}
+      </span>
       <span className="speech-text">{speechExcerpt(copy.summary)}</span>
       <small>
         {"scanner" in turn
@@ -280,7 +288,8 @@ export function MeetingStatus({
             Cron ·{" "}
             {new Date(snapshot.scan.scheduled_at).toLocaleTimeString("id-ID", {
               timeZone: "Asia/Jakarta",
-            })} WIB
+            })}{" "}
+            WIB
           </small>
           <p>{scannerReviewSummary(snapshot.scan)}</p>
           {snapshot.scan.groups.map((group) => (

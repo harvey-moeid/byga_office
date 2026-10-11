@@ -748,7 +748,8 @@ test("meeting dialogue rotates actual case results, opens details, admits Boss l
   await expect(trend).toBeVisible();
   await expect(page.locator(".meeting-bubble")).toHaveCount(1);
   await expect(trend).not.toContainText("Kalimat ketiga");
-  await expect(trend.locator(".speech-vote")).toContainText("SELL · 74%");
+  await expect(trend.locator(".speech-text")).not.toContainText("Kalimat kedua");
+  await expect(trend.locator(".speech-vote")).toHaveText("SELL");
   await expect(trend.locator(".speech-vote")).toHaveClass(/vote-sell/);
   const trendCard = page.locator(".operations-grid button").filter({
     hasText: "Trend Analyst",
@@ -764,6 +765,7 @@ test("meeting dialogue rotates actual case results, opens details, admits Boss l
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("Kalimat ketiga hanya di detail.");
   await expect(dialog).toContainText("Fixture trend: penjelasan lengkap");
+  await expect(dialog).toContainText("Confidence 74%");
   await page.clock.fastForward(30000);
   await expect(dialog).toContainText("Trend Analyst");
   const bounds = await dialog.boundingBox();
@@ -778,7 +780,7 @@ test("meeting dialogue rotates actual case results, opens details, admits Boss l
     exact: true,
   });
   await expect(risk).toBeVisible();
-  await expect(risk.locator(".speech-vote")).toContainText("NO_TRADE · 74%");
+  await expect(risk.locator(".speech-vote")).toHaveText("NO_TRADE");
   await expect(risk.locator(".speech-vote")).toHaveClass(/vote-no-trade/);
   await page.clock.fastForward(7500);
   await expect(
@@ -791,7 +793,7 @@ test("meeting dialogue rotates actual case results, opens details, admits Boss l
     exact: true,
   });
   await expect(boss).toContainText("Keputusan akhir");
-  await expect(boss.locator(".speech-vote")).toContainText("BUY · 74%");
+  await expect(boss.locator(".speech-vote")).toHaveText("BUY");
   await expect(boss.locator(".speech-vote")).toHaveClass(/vote-buy/);
   await expect(page.locator(".meeting-bubble")).toHaveCount(1);
   await boss.hover();
@@ -1155,5 +1157,91 @@ test("Low upstairs 3D meeting displays actual scanner speech without AI", async 
     path: testInfo.outputPath("scanner-upstairs-low.png"),
   });
   await page.keyboard.press("Escape");
+  await page.screenshot({ path: testInfo.outputPath("scanner-upstairs-scene.png") });
+  await expect(page.getByLabel("Empat grup analisis")).toContainText("SMC / ICT");
+  const legend = page.getByRole("group", { name: "Empat grup analisis", exact: true });
+  await expect(legend.locator("span")).toHaveCount(4);
+  const legendBounds = (await legend.boundingBox())!;
+  for (const selector of [".scene-controls", ".scene-quality", ".home-hud .segmented", ".home-menu-button", ".meeting-status"]) {
+    const bounds = await page.locator(selector).boundingBox();
+    if (!bounds) continue;
+    expect(legendBounds.x < bounds.x + bounds.width && legendBounds.x + legendBounds.width > bounds.x && legendBounds.y < bounds.y + bounds.height && legendBounds.y + legendBounds.height > bounds.y).toBe(false);
+  }
+  const follow = page.getByRole("button", { name: "Ikuti pembicara", exact: true });
+  await follow.click();
+  await expect(page.locator(".office-scene")).toHaveAttribute("data-camera-follow", "manual");
+  await follow.click();
+  await expect(page.locator(".office-scene")).toHaveAttribute("data-camera-follow", "speaker");
   expect(errors).toEqual([]);
+});
+
+
+test("scanner numeric settings validate tuples and persist the exact parameters", async ({
+  page,
+}) => {
+  let config = structuredClone(defaultConfig);
+  const writes: (typeof defaultConfig)[] = [];
+  await page.route("**/api/v1/auth/session", (route) =>
+    route.fulfill({ json: { admin: true } }),
+  );
+  await page.route("**/api/v1/admin/config", (route) => {
+    if (route.request().method() === "POST") {
+      config = route.request().postDataJSON().config;
+      writes.push(config);
+      return route.fulfill({ json: { id: "TRADING-CONFIG-v2" } });
+    }
+    return route.fulfill({
+      json: {
+        config,
+        id: writes.length ? "TRADING-CONFIG-v2" : "TRADING-CONFIG-v1",
+        versions: [],
+      },
+    });
+  });
+  await page.goto("/admin");
+  await page
+    .getByText("Scanner, context, dan budget settings", { exact: true })
+    .click();
+  const save = page.getByRole("button", {
+    name: "Save new version",
+    exact: true,
+  });
+  const fast = page.getByRole("spinbutton", { name: "EMA cepat", exact: true });
+  await expect(fast).toHaveValue("20");
+  await fast.fill("100");
+  await expect(save).toBeDisabled();
+  await expect(page.getByRole("alert")).toContainText("fast < middle < slow");
+  await fast.fill("10");
+  await page
+    .getByRole("spinbutton", { name: "RSI momentum BUY", exact: true })
+    .fill("40");
+  await expect(save).toBeDisabled();
+  await page
+    .getByRole("spinbutton", { name: "RSI momentum BUY", exact: true })
+    .fill("60");
+  const ratio = page.getByRole("spinbutton", {
+    name: "Rasio volume minimum",
+    exact: true,
+  });
+  await ratio.fill("");
+  await expect(save).toBeDisabled();
+  await ratio.fill("1.25");
+  await expect(save).toBeEnabled();
+  await save.click();
+  await expect(page.getByRole("status")).toContainText(
+    "Tersimpan: TRADING-CONFIG-v2",
+  );
+  expect(writes).toHaveLength(1);
+  expect(writes[0].scanner).toEqual({
+    ...defaultConfig.scanner,
+    ema: [10, 50, 200],
+    momentumRsi: [60, 45],
+    volumeRatio: 1.25,
+  });
+  await page.reload();
+  await page
+    .getByText("Scanner, context, dan budget settings", { exact: true })
+    .click();
+  await expect(fast).toHaveValue("10");
+  await expect(ratio).toHaveValue("1.25");
 });

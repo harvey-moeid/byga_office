@@ -130,7 +130,8 @@ export function holdMeeting(
 }
 
 export function speechExcerpt(summary: string) {
-  const sentences = summary.match(/[^.!?]+[.!?]+|[^.!?]+$/g) ?? [summary];
-  const excerpt = sentences.slice(0, 2).join("").trim();
-  return excerpt.length > 190 ? excerpt.slice(0, 187).trimEnd() + "…" : excerpt;
+  const text = summary.trim().replace(/\s+/g, " ");
+  // Decimal points belong to prices/ratios, not sentence boundaries.
+  const excerpt = text.match(/^.*?[.!?](?=\s|$)/)?.[0] ?? text;
+  return excerpt.length > 120 ? excerpt.slice(0, 117).trimEnd() + "…" : excerpt;
 }

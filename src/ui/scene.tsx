@@ -3,6 +3,7 @@ import { ContactShadows, OrbitControls } from "@react-three/drei";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   TOUCH,
+  Vector3,
   ACESFilmicToneMapping,
   BufferGeometry,
   CanvasTexture,
@@ -13,7 +14,12 @@ import {
   type WebGLRenderer,
   type PerspectiveCamera,
 } from "three";
-import { fitOfficeCamera, type CameraBounds } from "./office-camera";
+import {
+  fitOfficeCamera,
+  fitMeetingCamera,
+  meetingViewport,
+  type CameraBounds,
+} from "./office-camera";
 import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
 import {
   characterIds,
@@ -21,6 +27,9 @@ import {
   type AvatarPreset,
   type CharacterId,
 } from "../core/contracts";
+import { characterIdentity, groupIdentity } from "./group-identity";
+import { desks } from "./navigation";
+import { PhysicalSign } from "./physical-signs";
 import { isMeeting } from "./navigation";
 import {
   initialQuality,
@@ -47,6 +56,7 @@ import {
   type MeetingFloor,
   type MeetingVenueRecord,
 } from "./meeting-venue";
+import { characterTarget } from "./multi-floor-navigation";
 import { OfficeCharacter } from "./office-character";
 import type { CharacterMotion } from "./character-motion";
 import {
@@ -97,6 +107,8 @@ function InteriorReflections() {
   return null;
 }
 
+type CharacterPositions = Partial<Record<CharacterId, Vector3>>;
+
 type View = "overview" | "cinematic" | "floor" | "meeting" | "boss" | "upper";
 const QUALITY_STORAGE_KEY = "byga:3d-quality";
 const MEETING_VENUE_STORAGE_KEY = "byga:meeting-venue";
@@ -139,73 +151,289 @@ const views: Record<
     target: [4.8, 4.8, 0.45],
   },
 };
+function SceneCadence({ fps }: { fps: number }) {
+  const { invalidate } = useThree();
+  useEffect(() => {
+    let handle = 0,
+      previous = 0;
+    const frame = (now: number) => {
+      if (!document.hidden && now - previous >= 1000 / fps) {
+        previous = now;
+        invalidate();
+      }
+      handle = requestAnimationFrame(frame);
+    };
+    handle = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(handle);
+  }, [fps, invalidate]);
+  return null;
+}
+
 function CameraView({
   view,
   reset,
   controls,
   meetingFloor,
   upperFloorEnabled,
+  follow,
+  speaker,
+  positions,
+  reduced,
+  interrupted,
 }: {
   view: View;
   reset: number;
   controls: RefObject<ComponentRef<typeof OrbitControls> | null>;
   meetingFloor: MeetingFloor;
   upperFloorEnabled: boolean;
+  follow: boolean;
+  speaker?: CharacterId;
+  positions: RefObject<CharacterPositions>;
+  reduced: boolean;
+  interrupted: RefObject<boolean>;
 }) {
-  const { camera, size } = useThree();
+  const { camera, size, gl } = useThree();
+  const goal = useRef<{ position: Vector3; target: Vector3 }>(undefined);
+  const initialized = useRef(false);
+  const recalculate = useRef(true);
+  const layoutClock = useRef(0);
   useEffect(() => {
-    const setting =
-      view === "meeting" && meetingFloor === 2 && upperFloorEnabled
-        ? { ...views.meeting, ...UPPER_MEETING_VIEW }
+    goal.current = undefined;
+    recalculate.current = follow || !initialized.current;
+  }, [follow]);
+  useEffect(() => {
+    recalculate.current = true;
+  }, [view, reset, meetingFloor, upperFloorEnabled, size.width, size.height]);
+  useEffect(() => {
+    if (follow) recalculate.current = true;
+  }, [speaker, follow]);
+  useFrame((_, dt) => {
+    const c = controls.current;
+    if (!c) return;
+    if (interrupted.current) {
+      goal.current = undefined;
+      recalculate.current = false;
+      interrupted.current = false;
+    }
+    // Manual interaction owns the camera until Follow is explicitly enabled.
+    if (!follow && !recalculate.current && !goal.current) return;
+    layoutClock.current += dt;
+    if (recalculate.current || (follow && layoutClock.current >= 0.35)) {
+      layoutClock.current = 0;
+      recalculate.current = false;
+      const upperMeeting =
+        view === "meeting" && meetingFloor === 2 && upperFloorEnabled;
+      const setting = upperMeeting
+        ? UPPER_MEETING_VIEW
         : view === "boss" && upperFloorEnabled
-          ? { ...views.boss, ...UPPER_BOSS_VIEW }
+          ? UPPER_BOSS_VIEW
           : views[view];
-    const upperMeeting =
-      view === "meeting" && meetingFloor === 2 && upperFloorEnabled;
-    const bounds: CameraBounds =
-      view === "overview" || view === "cinematic"
-        ? { min: [-9, -0.55, -8], max: [9, 6.6, 8] }
-        : view === "floor"
-          ? { min: [-7.5, 0, -3.5], max: [1.5, 2.3, 3.5] }
-          : view === "upper"
-            ? { min: [1.7, 3.55, -6.25], max: [8.4, 6.6, 7] }
-            : view === "boss"
-              ? upperFloorEnabled
-                ? { min: [2.05, 3.68, 3.35], max: [6.88, 6.1, 6.82] }
-                : { min: [4, 0, 4], max: [8, 2.5, 7.5] }
-              : upperMeeting
-                ? { min: [2.1, 3.68, -4.5], max: [7.2, 5.8, 0.1] }
-                : { min: [2.6, 0, -1.5], max: [7.4, 2.2, 3.5] };
-    camera.position.copy(
-      fitOfficeCamera(
-        setting.camera,
-        setting.target,
-        bounds,
-        size.width / size.height,
-        (camera as PerspectiveCamera).fov,
-      ),
-    );
-    controls.current?.target.set(...setting.target);
-    // A portrait overview needs more camera distance than a landscape scene.
-    // Keep orbit limits from clamping that fitted camera and cropping the floor.
-    if (controls.current)
-      controls.current.maxDistance = Math.max(
-        48,
-        camera.position.distanceTo(controls.current.target) * 1.2,
-      );
-    camera.lookAt(...setting.target);
-    controls.current?.update();
-  }, [
-    camera,
-    controls,
-    meetingFloor,
-    reset,
-    size.height,
-    size.width,
-    upperFloorEnabled,
-    view,
-  ]);
+      const bounds: CameraBounds =
+        view === "overview" || view === "cinematic"
+          ? { min: [-9, -0.55, -8], max: [9, 6.6, 8] }
+          : view === "floor"
+            ? { min: [-7.5, 0, -3.5], max: [1.5, 2.3, 3.5] }
+            : view === "upper"
+              ? { min: [1.7, 3.55, -6.25], max: [8.4, 6.6, 7] }
+              : view === "boss"
+                ? upperFloorEnabled
+                  ? { min: [2.05, 3.68, 3.35], max: [6.88, 6.1, 6.82] }
+                  : { min: [4, 0, 4], max: [8, 2.5, 7.5] }
+                : upperMeeting
+                  ? { min: [2.85, 3.68, -3.65], max: [6.5, 5.55, -0.75] }
+                  : { min: [3.3, 0, -0.45], max: [6.7, 1.85, 2.45] };
+      const target = new Vector3(...setting.target);
+      const seed = new Vector3(...setting.camera);
+      const meetingView = view === "meeting";
+      // Keep all seats in frame; bias the ensemble toward the actual speaker.
+      const speakingPosition = speaker ? positions.current[speaker] : undefined;
+      if (
+        meetingView &&
+        follow &&
+        speakingPosition &&
+        Math.abs(speakingPosition.y - bounds.min[1]) < 0.35
+      ) {
+        const center = new Vector3(
+          (bounds.min[0] + bounds.max[0]) / 2,
+          target.y,
+          (bounds.min[2] + bounds.max[2]) / 2,
+        );
+        seed.x += (speakingPosition.x - center.x) * 1.2;
+        seed.z += (speakingPosition.z - center.z) * 0.6;
+        target
+          .copy(center)
+          .lerp(
+            new Vector3(speakingPosition.x, target.y, speakingPosition.z),
+            0.16,
+          );
+      }
+      const perspective = camera as PerspectiveCamera;
+      let occupancy: [number, number] = [0.76, 0.76];
+      let meetingFrame: ReturnType<typeof fitMeetingCamera> | undefined;
+      if (meetingView) {
+        const canvas = gl.domElement.getBoundingClientRect();
+        const hudElement = document.querySelector(".meeting-status");
+        const hud =
+          hudElement &&
+          (!document.fullscreenElement ||
+            document.fullscreenElement.contains(hudElement))
+            ? hudElement.getBoundingClientRect()
+            : undefined;
+        const buttons = document
+          .querySelector(".scene-controls")
+          ?.getBoundingClientRect();
+        const legend = document.querySelector(".scene-group-legend")?.getBoundingClientRect();
+        const rect = meetingViewport(
+          size.width,
+          size.height,
+          hud
+            ? {
+                left: hud.left - canvas.left,
+                top: hud.top - canvas.top,
+                width: hud.width,
+                height: hud.height,
+              }
+            : undefined,
+          Math.min(buttons?.top ?? canvas.bottom, legend?.top ?? canvas.bottom) - canvas.top - 12,
+        );
+        occupancy = [
+          (0.72 * rect.width) / size.width,
+          (0.72 * rect.height) / size.height,
+        ];
+        meetingFrame = fitMeetingCamera(
+          [seed.x, seed.y, seed.z],
+          [target.x, target.y, target.z],
+          bounds,
+          size.width / size.height,
+          perspective.fov,
+          occupancy,
+        );
+        perspective.setViewOffset(
+          size.width,
+          size.height,
+          size.width / 2 -
+            rect.left -
+            rect.width / 2 +
+            (meetingFrame.center[0] * size.width) / 2,
+          size.height / 2 -
+            rect.top -
+            rect.height / 2 -
+            (meetingFrame.center[1] * size.height) / 2,
+          size.width,
+          size.height,
+        );
+      } else perspective.clearViewOffset();
+      const destination =
+        meetingFrame?.position ??
+        fitOfficeCamera(
+          [seed.x, seed.y, seed.z],
+          [target.x, target.y, target.z],
+          bounds,
+          size.width / size.height,
+          perspective.fov,
+          occupancy,
+        );
+      c.maxDistance = Math.max(48, destination.distanceTo(target) * 1.2);
+      goal.current = { position: destination, target };
+    }
+    const destination = goal.current;
+    if (!destination) return;
+    const alpha =
+      reduced || !initialized.current
+        ? 1
+        : 1 - Math.exp(-Math.min(dt, 0.1) * 3.5);
+    camera.position.lerp(destination.position, alpha);
+    c.target.lerp(destination.target, alpha);
+    camera.lookAt(c.target);
+    c.update();
+    initialized.current = true;
+    if (
+      camera.position.distanceToSquared(destination.position) < 0.00001 &&
+      c.target.distanceToSquared(destination.target) < 0.00001
+    )
+      goal.current = undefined;
+  });
   return null;
+}
+
+function GroupMarkers({
+  quality,
+  meetingFloor,
+}: {
+  quality: Quality;
+  meetingFloor: MeetingFloor;
+}) {
+  const representatives = [
+    "structure",
+    "trend",
+    "volume",
+    "derivatives",
+  ] as const;
+  return (
+    <group name="analysis-group-markers">
+      {characterIds.slice(0, 8).map((id, index) => (
+        <mesh
+          key={`desk-${id}`}
+          position={[desks[index][0], 0.81, desks[index][1] + 0.35]}
+        >
+          <boxGeometry args={[1.45, 0.025, 0.055]} />
+          <meshBasicMaterial
+            color={characterIdentity(id).color}
+            toneMapped={false}
+          />
+        </mesh>
+      ))}
+      {representatives.map((id) => {
+        const identity = characterIdentity(id);
+        const index = characterIds.indexOf(id);
+        const desk = desks[index];
+        return (
+          <group key={id}>
+            <PhysicalSign
+              quality={quality}
+              sign={{
+                id: `group-${id}`,
+                label: identity.label.toUpperCase(),
+                width: 1.25,
+                height: 0.23,
+                position: [desk[0], 1.65, desk[1] - 0.38],
+                mount: "stand",
+                style: "plaque",
+                floor: 1,
+              }}
+            />
+          </group>
+        );
+      })}
+      {/* Small, unlit seat accents keep group identity visible at both venues. */}
+      {characterIds.map((id, index) => {
+        const seat = characterTarget(
+          index,
+          "BOSS_DECISION",
+          meetingFloor,
+          true,
+        );
+        return (
+          <mesh
+            key={id}
+            name={`meeting-seat-group:${id}`}
+            position={[
+              seat.position[0],
+              seat.position[1] + 0.04,
+              seat.position[2],
+            ]}
+            rotation={[-Math.PI / 2, 0, 0]}
+          >
+            <ringGeometry args={[0.24, 0.29, 16]} />
+            <meshBasicMaterial
+              color={characterIdentity(id).color}
+              toneMapped={false}
+            />
+          </mesh>
+        );
+      })}
+    </group>
+  );
 }
 function PerformanceMonitor({
   quality,
@@ -365,6 +593,23 @@ export default function OfficeScene({
 }) {
   const [view, setView] = useState<View>("overview");
   const [reset, setReset] = useState(0);
+  const [followSpeaker, setFollowSpeaker] = useState(
+    () => window.localStorage.getItem("byga:camera-follow") !== "false",
+  );
+  const cameraInterrupted = useRef(false);
+  useEffect(() => {
+    window.localStorage.setItem("byga:camera-follow", String(followSpeaker));
+  }, [followSpeaker]);
+  const positions = useRef<CharacterPositions>({});
+  const [reduced, setReduced] = useState(
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+  );
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const change = () => setReduced(media.matches);
+    media.addEventListener("change", change);
+    return () => media.removeEventListener("change", change);
+  }, []);
   const [peekCharacter, setPeekCharacter] = useState<CharacterId>();
   const sceneRoot = useRef<HTMLDivElement>(null);
   const [fullscreen, setFullscreen] = useState(false);
@@ -418,17 +663,19 @@ export default function OfficeScene({
         meetingWasActive.current = true;
         setView((current) => {
           beforeMeetingView.current = current;
-          return "meeting";
+          return followSpeaker ? "meeting" : current;
         });
       }
       return;
     }
     if (meetingWasActive.current) {
       meetingWasActive.current = false;
-      setView(beforeMeetingView.current);
-      setReset((value) => value + 1);
+      if (followSpeaker) {
+        setView(beforeMeetingView.current);
+        setReset((value) => value + 1);
+      }
     }
-  }, [meetingId]);
+  }, [meetingId, followSpeaker]);
   const labelHost = useRef<HTMLDivElement>(null!);
   const deviceQuality = useMemo(
     () =>
@@ -645,6 +892,8 @@ export default function OfficeScene({
     [onActivityChange],
   );
   const zoomCamera = (factor: number) => {
+    cameraInterrupted.current = true;
+    setFollowSpeaker(false);
     const c = controls.current;
     if (!c) return;
     const offset = c.object.position.clone().sub(c.target);
@@ -663,6 +912,10 @@ export default function OfficeScene({
       data-meeting-floor={meetingActive ? meetingFloor : undefined}
       data-boss-floor={profile.upperFloor ? 2 : 1}
       data-camera-view={view}
+      data-camera-follow={meetingActive && followSpeaker ? "speaker" : "manual"}
+      data-camera-speaker={
+        meetingActive && followSpeaker ? speech?.character : undefined
+      }
     >
       <div ref={labelHost} className="scene-label-layer" />
       <div className="scene-title">
@@ -683,6 +936,7 @@ export default function OfficeScene({
         <b>{fullscreen ? "Keluar" : "Fullscreen"}</b>
       </button>
       <Canvas
+        frameloop="demand"
         shadows={profile.shadows}
         onPointerMissed={() => setPeekCharacter(undefined)}
         dpr={profile.dpr}
@@ -706,6 +960,11 @@ export default function OfficeScene({
           });
         }}
       >
+        <SceneCadence
+          fps={
+            reduced || quality === "low" ? 30 : quality === "medium" ? 40 : 60
+          }
+        />
         <color attach="background" args={["#101f26"]} />
         <fog attach="fog" args={["#101f26", 180, 300]} />
         <hemisphereLight args={["#e4f2ff", "#bcae96", 1.65]} />
@@ -731,20 +990,30 @@ export default function OfficeScene({
           intensity={1.5}
           color="#dce8ef"
         />
-        <pointLight
-          position={[5, 3.2, 1]}
-          intensity={6.5}
-          distance={10}
-          decay={2}
-          color="#ffd8a6"
-        />
-        <pointLight
-          position={[-3, 2.8, 2]}
-          intensity={3.4}
-          distance={8}
-          decay={2}
-          color="#ffe2b8"
-        />
+        {profile.decorative ? (
+          <>
+            <pointLight
+              position={[5, 3.2, 1]}
+              intensity={6.5}
+              distance={10}
+              decay={2}
+              color="#ffd8a6"
+            />
+            <pointLight
+              position={[-3, 2.8, 2]}
+              intensity={3.4}
+              distance={8}
+              decay={2}
+              color="#ffe2b8"
+            />
+          </>
+        ) : (
+          <directionalLight
+            position={[-3, 10, 5]}
+            intensity={0.45}
+            color="#fff0df"
+          />
+        )}
         <OfficeEnvironment detail={profile.decorative} />
         {profile.shadows && (
           <ContactShadows
@@ -754,7 +1023,7 @@ export default function OfficeScene({
             blur={quality === "ultra" ? 2.8 : 2.2}
             far={8}
             resolution={quality === "ultra" ? 1024 : 512}
-            frames={quality === "ultra" ? Infinity : 1}
+            frames={1}
           />
         )}
         {profile.upperFloor && (
@@ -779,6 +1048,7 @@ export default function OfficeScene({
           onSelect={onSelect}
         />
         <ScannerDisplay scanners={scanners} />
+        <GroupMarkers quality={quality} meetingFloor={meetingFloor} />
         <mesh
           name="server-room-select-zone"
           position={[-7.65, 1, 0]}
@@ -796,6 +1066,9 @@ export default function OfficeScene({
             <OfficeCharacter
               key={id}
               index={index}
+              positions={positions}
+              speaker={speech?.character}
+              motionReduced={reduced}
               avatar={avatars[id] ?? "professional"}
               state={state}
               activity={activities[id]}
@@ -849,10 +1122,19 @@ export default function OfficeScene({
           controls={controls}
           meetingFloor={meetingFloor}
           upperFloorEnabled={profile.upperFloor}
+          follow={meetingActive && followSpeaker}
+          speaker={speech?.character}
+          positions={positions}
+          reduced={reduced}
+          interrupted={cameraInterrupted}
         />
         <OrbitControls
           ref={controls}
           makeDefault
+          onStart={() => {
+            cameraInterrupted.current = true;
+            setFollowSpeaker(false);
+          }}
           touches={{ ONE: TOUCH.ROTATE, TWO: TOUCH.DOLLY_PAN }}
           target={views.overview.target}
           minDistance={4}
@@ -878,6 +1160,14 @@ export default function OfficeScene({
           }}
         />
       </Canvas>
+      <div className="scene-group-legend" role="group" aria-label="Empat grup analisis">
+        {Object.entries(groupIdentity).map(([key, identity]) => (
+          <span key={key} style={{ borderColor: identity.color }}>
+            <i style={{ background: identity.color }} />
+            {identity.label}
+          </span>
+        ))}
+      </div>
       <div className="scene-controls">
         <div
           className="scene-view-buttons"
@@ -891,6 +1181,7 @@ export default function OfficeScene({
                 key={key}
                 aria-pressed={view === key}
                 onClick={() => {
+                  setFollowSpeaker(false);
                   setView(key);
                   setReset((v) => v + 1);
                 }}
@@ -899,6 +1190,19 @@ export default function OfficeScene({
               </button>
             ))}
         </div>
+        <button
+          className="scene-follow"
+          aria-pressed={followSpeaker}
+          onClick={() => {
+            setFollowSpeaker((value) => !value);
+            if (!followSpeaker && meetingActive) {
+              setView("meeting");
+              setReset((v) => v + 1);
+            }
+          }}
+        >
+          Ikuti pembicara
+        </button>
         <div
           className="scene-camera-actions"
           role="group"
@@ -914,6 +1218,7 @@ export default function OfficeScene({
         <button
           className="scene-reset"
           onClick={() => {
+            setFollowSpeaker(false);
             setView("overview");
             setReset((v) => v + 1);
           }}
