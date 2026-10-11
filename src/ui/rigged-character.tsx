@@ -6,12 +6,14 @@ import {
   AnimationClip,
   Euler,
   LoopRepeat,
+  MathUtils,
   Quaternion,
   QuaternionKeyframeTrack,
   VectorKeyframeTrack,
 } from "three";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import { showsCoffeeCup, type CharacterMotion } from "./character-motion";
+import { characterBlink, workstationMotion } from "./character-expression";
 import {
   buildCharacterVisual,
   type RiggedCharacterStyle,
@@ -30,11 +32,7 @@ function quaternions(values: RotationKey[]) {
   });
 }
 
-function rotationTrack(
-  bone: string,
-  times: number[],
-  values: RotationKey[],
-) {
+function rotationTrack(bone: string, times: number[], values: RotationKey[]) {
   return new QuaternionKeyframeTrack(
     `${bone}.quaternion`,
     times,
@@ -86,42 +84,66 @@ function humanoidAnimations() {
   };
 
   const idle = new AnimationClip("idle", 4, [
-    positionTrack("Hips", [0, 1, 2, 3, 4], [
-      [0, 0.97, 0],
-      [0, 0.975, 0],
-      [0, 0.97, 0],
-      [0, 0.974, 0],
-      [0, 0.97, 0],
-    ]),
-    rotationTrack("Spine", [0, 1, 2, 3, 4], [
-      [0, 0, -0.012],
-      [0.005, 0.008, 0],
-      [0, 0, 0.012],
-      [-0.005, -0.008, 0],
-      [0, 0, -0.012],
-    ]),
-    rotationTrack("Chest", [0, 2, 4], [
-      [0.01, -0.015, 0],
-      [-0.006, 0.018, 0],
-      [0.01, -0.015, 0],
-    ]),
-    rotationTrack("Head", [0, 1, 2.2, 3.2, 4], [
-      [0, -0.05, 0],
-      [0.015, 0.02, 0],
-      [-0.01, 0.06, 0],
-      [0.012, -0.015, 0],
-      [0, -0.05, 0],
-    ]),
-    rotationTrack("LeftUpperArm", [0, 2, 4], [
-      [0.025, 0, -0.035],
-      [-0.015, 0, -0.02],
-      [0.025, 0, -0.035],
-    ]),
-    rotationTrack("RightUpperArm", [0, 2, 4], [
-      [-0.02, 0, 0.03],
-      [0.015, 0, 0.018],
-      [-0.02, 0, 0.03],
-    ]),
+    positionTrack(
+      "Hips",
+      [0, 1, 2, 3, 4],
+      [
+        [0, 0.97, 0],
+        [0, 0.975, 0],
+        [0, 0.97, 0],
+        [0, 0.974, 0],
+        [0, 0.97, 0],
+      ],
+    ),
+    rotationTrack(
+      "Spine",
+      [0, 1, 2, 3, 4],
+      [
+        [0, 0, -0.012],
+        [0.005, 0.008, 0],
+        [0, 0, 0.012],
+        [-0.005, -0.008, 0],
+        [0, 0, -0.012],
+      ],
+    ),
+    rotationTrack(
+      "Chest",
+      [0, 2, 4],
+      [
+        [0.01, -0.015, 0],
+        [-0.006, 0.018, 0],
+        [0.01, -0.015, 0],
+      ],
+    ),
+    rotationTrack(
+      "Head",
+      [0, 1, 2.2, 3.2, 4],
+      [
+        [0, -0.05, 0],
+        [0.015, 0.02, 0],
+        [-0.01, 0.06, 0],
+        [0.012, -0.015, 0],
+        [0, -0.05, 0],
+      ],
+    ),
+    rotationTrack(
+      "LeftUpperArm",
+      [0, 2, 4],
+      [
+        [0.025, 0, -0.035],
+        [-0.015, 0, -0.02],
+        [0.025, 0, -0.035],
+      ],
+    ),
+    rotationTrack(
+      "RightUpperArm",
+      [0, 2, 4],
+      [
+        [-0.02, 0, 0.03],
+        [0.015, 0, 0.018],
+        [-0.02, 0, 0.03],
+      ],
+    ),
   ]);
 
   const walkTimes = [0, 0.25, 0.5, 0.75, 1];
@@ -229,25 +251,41 @@ function humanoidAnimations() {
 
   const typeTimes = [0, 0.35, 0.7, 1.05, 1.4];
   const typing = new AnimationClip("type", 1.4, [
-    positionTrack("Hips", typeTimes, typeTimes.map(() => [0, 0.62, 0])),
-    ...Object.entries(sitPose).map(([bone, rotation]) =>
-      rotationTrack(bone, typeTimes, typeTimes.map(() => rotation)),
+    positionTrack(
+      "Hips",
+      typeTimes,
+      typeTimes.map(() => [0, 0.62, 0]),
     ),
-    rotationTrack("LeftUpperArm", typeTimes, typeTimes.map(() => [-0.78, 0.05, -0.08])),
-    rotationTrack("RightUpperArm", typeTimes, typeTimes.map(() => [-0.78, -0.05, 0.08])),
+    ...Object.entries(sitPose).map(([bone, rotation]) =>
+      rotationTrack(
+        bone,
+        typeTimes,
+        typeTimes.map(() => rotation),
+      ),
+    ),
+    rotationTrack(
+      "LeftUpperArm",
+      typeTimes,
+      typeTimes.map(() => [-0.78, 0.05, -0.08]),
+    ),
+    rotationTrack(
+      "RightUpperArm",
+      typeTimes,
+      typeTimes.map(() => [-0.78, -0.05, 0.08]),
+    ),
     rotationTrack("LeftLowerArm", typeTimes, [
       [-1.02, 0.08, 0],
       [-1.12, -0.03, 0],
       [-1.03, 0.06, 0],
-      [-1.10, -0.05, 0],
+      [-1.1, -0.05, 0],
       [-1.02, 0.08, 0],
     ]),
     rotationTrack("RightLowerArm", typeTimes, [
-      [-1.10, -0.04, 0],
+      [-1.1, -0.04, 0],
       [-1.03, 0.06, 0],
       [-1.12, -0.02, 0],
       [-1.03, 0.05, 0],
-      [-1.10, -0.04, 0],
+      [-1.1, -0.04, 0],
     ]),
     rotationTrack("Head", typeTimes, [
       [0.11, 0.02, 0],
@@ -260,7 +298,11 @@ function humanoidAnimations() {
 
   const talkTimes = [0, 0.55, 1.1, 1.65, 2.2];
   const standingTalk = new AnimationClip("talk", 2.2, [
-    positionTrack("Hips", talkTimes, talkTimes.map(() => [0, 0.97, 0])),
+    positionTrack(
+      "Hips",
+      talkTimes,
+      talkTimes.map(() => [0, 0.97, 0]),
+    ),
     rotationTrack("Spine", talkTimes, [
       [0.005, -0.02, 0],
       [0.015, 0.015, 0],
@@ -306,11 +348,19 @@ function humanoidAnimations() {
   ]);
 
   const meetingTalk = new AnimationClip("meeting-talk", 2.2, [
-    positionTrack("Hips", talkTimes, talkTimes.map(() => [0, 0.62, 0])),
+    positionTrack(
+      "Hips",
+      talkTimes,
+      talkTimes.map(() => [0, 0.62, 0]),
+    ),
     ...Object.entries(sitPose)
       .filter(([bone]) => bone !== "Chest")
       .map(([bone, rotation]) =>
-        rotationTrack(bone, talkTimes, talkTimes.map(() => rotation)),
+        rotationTrack(
+          bone,
+          talkTimes,
+          talkTimes.map(() => rotation),
+        ),
       ),
     rotationTrack("Chest", talkTimes, [
       [-0.01, -0.04, 0],
@@ -351,8 +401,16 @@ function humanoidAnimations() {
 
   const coffeeTimes = [0, 0.6, 1.2, 1.8, 2.4];
   const coffee = new AnimationClip("coffee", 2.4, [
-    positionTrack("Hips", coffeeTimes, coffeeTimes.map(() => [0, 0.97, 0])),
-    rotationTrack("Spine", coffeeTimes, coffeeTimes.map(() => [0.015, 0, 0])),
+    positionTrack(
+      "Hips",
+      coffeeTimes,
+      coffeeTimes.map(() => [0, 0.97, 0]),
+    ),
+    rotationTrack(
+      "Spine",
+      coffeeTimes,
+      coffeeTimes.map(() => [0.015, 0, 0]),
+    ),
     rotationTrack("RightUpperArm", coffeeTimes, [
       [-0.4, 0, 0.08],
       [-0.9, -0.05, 0.12],
@@ -378,7 +436,11 @@ function humanoidAnimations() {
 
   const stretchTimes = [0, 0.7, 1.4, 2.1, 2.8];
   const stretch = new AnimationClip("stretch", 2.8, [
-    positionTrack("Hips", stretchTimes, stretchTimes.map(() => [0, 0.97, 0])),
+    positionTrack(
+      "Hips",
+      stretchTimes,
+      stretchTimes.map(() => [0, 0.97, 0]),
+    ),
     rotationTrack("Spine", stretchTimes, [
       [0, 0, 0],
       [-0.08, 0, 0],
@@ -425,8 +487,16 @@ function humanoidAnimations() {
 
   const reviewTimes = [0, 0.8, 1.6, 2.4, 3.2];
   const review = new AnimationClip("review", 3.2, [
-    positionTrack("Hips", reviewTimes, reviewTimes.map(() => [0, 0.97, 0])),
-    rotationTrack("Spine", reviewTimes, reviewTimes.map(() => [0.025, 0, 0])),
+    positionTrack(
+      "Hips",
+      reviewTimes,
+      reviewTimes.map(() => [0, 0.97, 0]),
+    ),
+    rotationTrack(
+      "Spine",
+      reviewTimes,
+      reviewTimes.map(() => [0.025, 0, 0]),
+    ),
     rotationTrack("Head", reviewTimes, [
       [0.13, -0.05, 0],
       [0.1, 0.03, 0],
@@ -434,13 +504,90 @@ function humanoidAnimations() {
       [0.09, -0.02, 0],
       [0.13, -0.05, 0],
     ]),
-    rotationTrack("LeftUpperArm", reviewTimes, reviewTimes.map(() => [-0.44, 0.05, -0.05])),
-    rotationTrack("RightUpperArm", reviewTimes, reviewTimes.map(() => [-0.44, -0.05, 0.05])),
-    rotationTrack("LeftLowerArm", reviewTimes, reviewTimes.map(() => [-0.88, 0, 0])),
-    rotationTrack("RightLowerArm", reviewTimes, reviewTimes.map(() => [-0.88, 0, 0])),
+    rotationTrack(
+      "LeftUpperArm",
+      reviewTimes,
+      reviewTimes.map(() => [-0.44, 0.05, -0.05]),
+    ),
+    rotationTrack(
+      "RightUpperArm",
+      reviewTimes,
+      reviewTimes.map(() => [-0.44, -0.05, 0.05]),
+    ),
+    rotationTrack(
+      "LeftLowerArm",
+      reviewTimes,
+      reviewTimes.map(() => [-0.88, 0, 0]),
+    ),
+    rotationTrack(
+      "RightLowerArm",
+      reviewTimes,
+      reviewTimes.map(() => [-0.88, 0, 0]),
+    ),
   ]);
 
-  return [idle, walk, sit, typing, standingTalk, meetingTalk, coffee, stretch, review];
+  const mouse = typing.clone();
+  mouse.name = "mouse";
+  mouse.tracks = mouse.tracks.filter(
+    (track) =>
+      !["RightUpperArm", "RightLowerArm", "Head"].some((bone) =>
+        track.name.startsWith(`${bone}.`),
+      ),
+  );
+  mouse.tracks.push(
+    rotationTrack(
+      "RightUpperArm",
+      typeTimes,
+      typeTimes.map(() => [-0.82, -0.12, 0.18]),
+    ),
+    rotationTrack("RightLowerArm", typeTimes, [
+      [-0.8, -0.04, 0],
+      [-0.83, 0.035, 0],
+      [-0.8, -0.01, 0],
+      [-0.85, 0.02, 0],
+      [-0.8, -0.04, 0],
+    ]),
+    rotationTrack("Head", typeTimes, [
+      [0.04, -0.06, 0],
+      [0.02, -0.02, 0],
+      [0.05, 0.02, 0],
+      [0.03, -0.03, 0],
+      [0.04, -0.06, 0],
+    ]),
+  );
+  const deskReview = stillPose("desk-review", 3.6, 0.62, {
+    ...sitPose,
+    LeftUpperArm: [-0.7, 0.03, -0.06],
+    RightUpperArm: [-0.7, -0.03, 0.06],
+    LeftLowerArm: [-0.82, 0, 0],
+    RightLowerArm: [-0.82, 0, 0],
+  });
+  deskReview.tracks.push(
+    rotationTrack(
+      "Head",
+      [0, 0.9, 1.8, 2.7, 3.6],
+      [
+        [-0.025, -0.13, 0],
+        [-0.01, 0, 0],
+        [0.015, 0.12, 0],
+        [-0.015, 0.02, 0],
+        [-0.025, -0.13, 0],
+      ],
+    ),
+  );
+  return [
+    idle,
+    walk,
+    sit,
+    typing,
+    mouse,
+    deskReview,
+    standingTalk,
+    meetingTalk,
+    coffee,
+    stretch,
+    review,
+  ];
 }
 
 const CLIPS = humanoidAnimations();
@@ -451,7 +598,11 @@ export function RiggedOfficeCharacter({
   showPhone,
   motionReduced,
   listenerYaw,
+  motionSpeed,
+  phase,
 }: {
+  phase: number;
+  motionSpeed: RefObject<number>;
   listenerYaw: RefObject<number>;
   motion: CharacterMotion;
   style: RiggedCharacterStyle;
@@ -484,10 +635,97 @@ export function RiggedOfficeCharacter({
   }, [model.scene, stableStyle]);
   const root = character.root;
   const { actions, mixer } = useAnimations(CLIPS, root);
-  const active = useRef<CharacterMotion | undefined>(undefined);
+  const active = useRef<string | undefined>(undefined);
   const head = useMemo(() => root.getObjectByName("Head"), [root]);
-  useFrame(() => {
+  const hands = useMemo(
+    () => [root.getObjectByName("LeftHand"), root.getObjectByName("RightHand")],
+    [root],
+  );
+  const eyeScales = useMemo(
+    () => character.eyes.map((eye) => eye.scale.y),
+    [character.eyes],
+  );
+
+  const playMotion = (requested: string) => {
+    const next = actions[requested] ?? actions.idle;
+    if (!next || active.current === requested) return;
+    const previous = active.current ? actions[active.current] : undefined;
+    const transition =
+      requested === "walk" || active.current === "walk" ? 0.38 : 0.36;
+    next.enabled = true;
+    next.setLoop(LoopRepeat, Infinity);
+    next
+      .reset()
+      .setEffectiveWeight(1)
+      .setEffectiveTimeScale(motionReduced ? 0.6 : 1);
+    next.fadeIn(previous ? transition : 0.08).play();
+    if (requested !== "walk")
+      next.time = (phase * 0.37) % next.getClip().duration;
+    previous?.fadeOut(transition);
+    active.current = requested;
+  };
+
+  useFrame(({ clock }, dt) => {
+    if (document.hidden) return;
+    const time = clock.elapsedTime;
+    const requested =
+      motion === "type" && !motionReduced
+        ? workstationMotion(time, phase)
+        : motion;
+    playMotion(requested);
+    const action = active.current ? actions[active.current] : undefined;
+    if (action)
+      action.setEffectiveTimeScale(
+        motion === "walk"
+          ? MathUtils.clamp(motionSpeed.current / 1.25, 0.2, 2.4)
+          : motionReduced
+            ? 0.6
+            : 1,
+      );
     if (head && motion === "sit") head.rotation.y = listenerYaw.current;
+    const openness = motionReduced ? 1 : characterBlink(time, phase);
+    character.eyes.forEach((eye, i) => {
+      eye.scale.y = eyeScales[i] * openness;
+    });
+    const speaking = motion === "talk" || motion === "meeting-talk";
+    character.mouth.scale.y = MathUtils.damp(
+      character.mouth.scale.y,
+      speaking && !motionReduced
+        ? 0.005 + Math.max(0, Math.sin(time * 11 + phase)) * 0.012
+        : 0.005,
+      20,
+      Math.min(dt, 0.06),
+    );
+    character.fingers.forEach((finger, i) => {
+      const typing = requested === "type" && !motionReduced;
+      const mouseClick = requested === "mouse" && i === 4 && !motionReduced;
+      const curl = typing
+        ? 0.18 + Math.max(0, Math.sin(time * 12 + i * 1.7 + phase)) * 0.42
+        : mouseClick
+          ? 0.16 + Math.max(0, Math.sin(time * 4)) * 0.25
+          : motion === "coffee"
+            ? 0.7
+            : speaking
+              ? 0.12
+              : 0.28;
+      finger.rotation.x = MathUtils.damp(
+        finger.rotation.x,
+        -curl,
+        18,
+        Math.min(dt, 0.06),
+      );
+    });
+    hands.forEach((hand, side) => {
+      if (!hand) return;
+      hand.rotation.x =
+        requested === "type" && !motionReduced
+          ? 0.13 + Math.sin(time * 7 + side * 2 + phase) * 0.035
+          : requested === "mouse"
+            ? 0.12
+            : motion === "coffee"
+              ? -0.18
+              : 0;
+    });
   });
 
   useEffect(() => {
@@ -500,32 +738,6 @@ export function RiggedOfficeCharacter({
     if (coffee) coffee.visible = showsCoffeeCup(motion);
     if (phone) phone.visible = showPhone;
   }, [motion, root, showPhone]);
-
-  useEffect(() => {
-    const requested = motion;
-    const next = actions[requested] ?? actions.idle;
-    if (!next || active.current === requested) return;
-    const previous = active.current ? actions[active.current] : undefined;
-    next.enabled = true;
-    next.setLoop(LoopRepeat, Infinity);
-    next.setEffectiveTimeScale(motionReduced ? 0.6 : 1);
-    next.setEffectiveWeight(1);
-    const transition =
-      requested === "walk" || active.current === "walk" ? 0.38 : 0.3;
-    next
-      .reset()
-      .fadeIn(previous ? transition : 0.08)
-      .play();
-    // Phase offsets avoid a whole row of characters moving in sync.
-    if (requested === "type" || requested === "idle")
-      next.time = Math.random() * next.getClip().duration;
-    previous?.fadeOut(transition);
-    active.current = requested;
-    return () => {
-      if (!active.current) return;
-      actions[active.current]?.fadeOut(0.12);
-    };
-  }, [actions, motion, motionReduced]);
 
   useEffect(
     () => () => {

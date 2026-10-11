@@ -4,8 +4,8 @@ Phase 1 replaces the decorative character renderer without changing the trading 
 
 ## Quality contract
 
-- `low`: keep the existing procedural character renderer. It is the explicit LOD/fallback for constrained or software-rendered devices.
-- `medium`, `high`, `ultra`: render the articulated humanoid path using the local `public/models/byga/rigged-office-humanoid.gltf` skeleton and `AnimationMixer` clips.
+- `low`, `medium`: keep the lightweight procedural character renderer for constrained or software-rendered devices.
+- `high`, `ultra`: render the articulated humanoid path using the local `public/models/byga/rigged-office-humanoid.gltf` skeleton and `AnimationMixer` clips. Select High or Ultra to see the detailed avatar upgrade.
 - Auto quality may move into `low`; that must not alter character IDs, office destinations, meeting attendance, speech routing, or backend state.
 
 ## Rig contract
@@ -28,6 +28,8 @@ The local glTF is authored for this repository and contains a skin definition wi
 - `walk`: alternating legs, knees, feet, arm counter-swing, hip bob and torso counter-rotation.
 - `sit`: neutral meeting seat pose.
 - `type`: seated typing pose for normal workstation monitoring.
+- `mouse`: seated mouse interaction with right-hand clicks.
+- `desk-review`: seated screen review with a subtle gaze sweep.
 - `talk`: standing conversation gesture for ambient office activity.
 - `meeting-talk`: seated meeting speech gesture that preserves the meeting pose.
 - `coffee`: right-hand drink motion with the cup prop visible.
@@ -54,6 +56,14 @@ Phase 1 must not change:
 - Browser acceptance temporarily selects Medium quality and verifies the rig asset returns HTTP 200, then returns to Low to preserve the existing low-cost WebGL/context-loss coverage.
 - Normal repository gates still require TypeScript, ESLint, Vitest, build and Playwright acceptance before merge/deploy.
 
-## Follow-up visual work
+## Avatar and movement upgrade
 
-Phase 1 intentionally stops at the character layer. Character-to-character avoidance, facial morph targets/blinking, finger articulation, texture maps, and photoreal character scans are separate upgrades so they cannot destabilize the trading workflow.
+High and Ultra now use a tapered jaw, smaller eyes with eyebrows/lids, swept hair, a tailored jacket silhouette, articulated fingers, watch and shoe soles. Shared, locally generated skin and woven cloth bump maps add surface detail without external asset requests. These remain procedural miniature humanoids, not photoreal character scans.
+
+Characters blink at staggered intervals and move their mouths during conversation. Workstation monitoring crossfades through typing, mouse and screen-review clips on an 18-second cycle offset by character ID. This cycle only decorates the existing `type` presence; it does not imply a new AI request or alter meeting attendance. Reduced motion disables blinking, mouth/jitter and the workstation cycle while preserving required travel and seat poses.
+
+`src/ui/character-locomotion.ts` accelerates at departure, brakes at the final destination, and consumes multiple route waypoints in one update. Position follows the original planner's segments exactly, including doorways and stairs. Walking animation cadence follows actual travel speed. Both lightweight and detailed renderers use this movement path.
+
+`tests/character-locomotion.test.ts` verifies acceleration, braking, corner preservation, empty-route safety, and upstairs meeting arrival within 14 seconds at 60 FPS, 12 FPS and half-second updates.
+
+Character-to-character avoidance, facial morph targets and photoreal scans remain future visual work. Desktop/mobile visual and performance acceptance still requires a browser with WebGL before merge/deploy.

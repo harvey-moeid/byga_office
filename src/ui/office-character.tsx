@@ -33,6 +33,7 @@ import {
 } from "./multi-floor-navigation";
 import type { MeetingFloor } from "./meeting-venue";
 import { RiggedOfficeCharacter } from "./rigged-character";
+import { advanceCharacterRoute } from "./character-locomotion";
 import {
   characterMotion,
   showsCoffeeCup,
@@ -487,6 +488,8 @@ export function OfficeCharacter({
   const floorTransitioning = useRef(false);
   const poseTime = useRef(0);
   const gaitPhase = useRef(index);
+  const travelSpeed = useRef(0);
+  const motionSpeed = useRef(0);
   const walkBlend = useRef(0);
   const listenerYaw = useRef(0);
   useEffect(() => {
@@ -553,34 +556,32 @@ export function OfficeCharacter({
       speechOnScreenRef.current = false;
       setSpeechOnScreen(false);
     }
-    const point = path.current[0];
-    let walking = false;
-    if (point) {
-      const distance = position.current.distanceTo(point);
-      if (distance < 0.035) path.current.shift();
-      else {
-        walking = true;
-        direction.current.copy(point).sub(position.current).normalize();
-        // Cross-floor meetings have a fixed 14s gathering window. Keep long
-        // stair transfers brisk enough to finish before the first speaker,
-        // while preserving normal office walking for decorative activity.
-        const travelSpeed = reduced
-          ? 4
-          : floorTransitioning.current
-            ? 2.7
-            : meeting
-              ? 1.8
-              : 1.25;
-        const step = Math.min(distance, movementDelta * travelSpeed);
-        position.current.addScaledVector(direction.current, step);
-        gaitPhase.current += step * 7.5;
-        const target = Math.atan2(direction.current.x, direction.current.z);
-        const difference = Math.atan2(
-          Math.sin(target - root.current.rotation.y),
-          Math.cos(target - root.current.rotation.y),
-        );
-        root.current.rotation.y += difference * Math.min(1, delta * 10);
-      }
+    const cruiseSpeed = reduced
+      ? 4
+      : floorTransitioning.current
+        ? 2.7
+        : meeting
+          ? 1.8
+          : 1.25;
+    const movement = advanceCharacterRoute(
+      position.current,
+      path.current,
+      travelSpeed.current,
+      movementDelta,
+      cruiseSpeed,
+      direction.current,
+    );
+    travelSpeed.current = movement.speed;
+    motionSpeed.current = movement.traveled / Math.max(movementDelta, 0.001);
+    const walking = path.current.length > 0;
+    gaitPhase.current += movement.traveled * 7.5;
+    if (walking && movement.traveled > 0) {
+      const facing = Math.atan2(direction.current.x, direction.current.z);
+      const difference = Math.atan2(
+        Math.sin(facing - root.current.rotation.y),
+        Math.cos(facing - root.current.rotation.y),
+      );
+      root.current.rotation.y += difference * (1 - Math.exp(-dt * 10));
     }
     const atActivity = !!activeActivity && !walking && !path.current.length;
     if (
@@ -817,6 +818,8 @@ export function OfficeCharacter({
         {decorative ? (
           <RiggedOfficeCharacter
             motion={motion}
+            phase={index}
+            motionSpeed={motionSpeed}
             motionReduced={reduced}
             listenerYaw={listenerYaw}
             showPhone={characterIds[index] === "boss" && state === "DISCORD"}
