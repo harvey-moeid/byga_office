@@ -592,6 +592,11 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   // and verifies native context-loss recovery within this single test.
   test.setTimeout(120_000);
   const errors: string[] = [];
+  const rigLoads: number[] = [];
+  page.on("response", (response) => {
+    if (new URL(response.url()).pathname === "/models/byga/rigged-office-humanoid.gltf")
+      rigLoads.push(response.status());
+  });
   page.on("pageerror", (e) => errors.push(e.message));
   await page.goto("/");
   const supported = await page.evaluate(() => {
@@ -618,11 +623,9 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   await expect(
     page.getByRole("button", { name: "Lantai 2", exact: true }),
   ).toBeVisible();
-  // Medium intentionally keeps the lightweight procedural character/furniture
-  // path. Verify the premium character asset independently so CI software
-  // WebGL is not forced into the high-cost High profile just to test an HTTP file.
-  const rig = await page.request.get("/models/byga/rigged-office-humanoid.gltf");
-  expect(rig.status()).toBe(200);
+  // Medium now mounts the new avatar; verify the renderer actually loads its
+  // local rig rather than probing an asset that the scene might never use.
+  await expect.poll(() => rigLoads).toContain(200);
   await quality.selectOption("low");
   const upstairs = page.getByRole("button", { name: "Lantai 2", exact: true });
   await expect(upstairs).toBeVisible();
@@ -640,12 +643,15 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   await expect(page.getByLabel("Kualitas 3D", { exact: true })).toHaveValue(
     "low",
   );
-  const scene = await page.locator(".office-scene").boundingBox();
   const viewport = page.viewportSize()!;
-  expect(scene?.x).toBe(0);
-  expect(scene?.y).toBe(0);
-  expect(scene?.width).toBe(viewport.width);
-  expect(scene?.height).toBe(viewport.height);
+  // Low also loads the rig asynchronously. Its controls can already be in
+  // the DOM while Suspense hides the scene; wait for the final visible layout.
+  await expect
+    .poll(() => page.locator(".office-scene").boundingBox(), {
+      timeout: 15_000,
+      message: "Reloaded Low scene finishes loading and fills the viewport",
+    })
+    .toEqual({ x: 0, y: 0, width: viewport.width, height: viewport.height });
   const menuButton = page.getByRole("button", { name: /^Menu/ });
   const fullscreenButton = page.getByRole("button", {
     name: "Buka fullscreen 3D",
