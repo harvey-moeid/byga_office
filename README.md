@@ -43,6 +43,8 @@ See [3D camera and scanner settings](docs/OFFICE_UI_SETTINGS.md) for speaker tra
 
 See [five-minute scanner meetings](docs/CRON_MEETINGS.md) for the two-group AI gate, no-AI visual review, meeting handoff API, and required configuration migration.
 
+Admin → Trading Config can select **4 or 8 AI voters**. Four uses one analyst per group (Trend, Structure, Volume, Derivatives); Risk and Boss still review separately. The default remains eight. See [voting modes and case snapshots](docs/AI_VOTING_MODES.md).
+
 See [trading safety corrections](docs/TRADING_SAFETY.md) for queue ownership, cooldown, snapshot validity, Emergency authority, delayed cron scans, tick-normalized risk and configuration invariants.
 
 ```sh

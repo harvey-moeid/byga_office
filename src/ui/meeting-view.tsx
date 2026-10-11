@@ -279,6 +279,9 @@ export function MeetingStatus({
         <small className="meeting-status-case">
           {snapshot.kind === "SCANNER" ? "Review scanner · tanpa AI" : "Case"} ·{" "}
           {snapshot.case_id}
+          {snapshot.kind !== "SCANNER" && snapshot.participants
+            ? ` · ${snapshot.participants.filter((id) => id !== "risk" && id !== "boss").length} AI voting + Risk/Boss`
+            : ""}
           {snapshot.cancelled ? ` · ${snapshot.status}` : ""}
         </small>
       )}

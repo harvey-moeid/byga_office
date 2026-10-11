@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { characterIds, type Analysis } from "../src/core/contracts";
-import { meetingTurns, meetingFailureReason, type MeetingSnapshot } from "../src/core/meeting";
+import { meetingTurns, meetingFailureReason, participantsFromContext, type MeetingSnapshot } from "../src/core/meeting";
 import { advanceMeeting, speechExcerpt } from "../src/ui/meeting";
 
 const analysis: Analysis = {
@@ -21,6 +21,15 @@ const complete: MeetingSnapshot = {
   unavailable: [],
 };
 describe("meeting presentation", () => {
+  it("limits compact meetings to the selected council and excludes inactive output from speech and failure notices", () => {
+    const participants = participantsFromContext(JSON.stringify({ config: { aiVoterCount: 4 }, private: "private-prompt" }));
+    expect(participants).toEqual(["trend", "structure", "volume", "derivatives", "risk", "boss"]);
+    expect(participantsFromContext("{}")).toEqual(characterIds);
+    const output = meetingTurns(characterIds.map(id => JSON.stringify({ id, status: id === "quant" ? "UNAVAILABLE" : "SUCCESS", output: analysis })), participants);
+    expect(output.turns.map(turn => turn.character)).toEqual(participants);
+    expect(output.unavailable).toEqual([]);
+    expect(JSON.stringify(participants)).not.toContain("private-prompt");
+  });
   it("publishes actual validated output in role order without private metadata or fabricated failure speech", () => {
     const output = meetingTurns([
       JSON.stringify({

@@ -20,11 +20,16 @@ export interface ConfigWriteResult {
 export interface OfficeState {
   observed_at: number;
   scanner_consensus_min?: number;
+  ai_voter_count?: 4 | 8;
   group_consensus_min?: number;
   group_names?: string[];
   groups?: GroupSnapshot[];
   office: string;
-  active: { id: string; status: string } | null;
+  active: {
+    id: string;
+    status: string;
+    participants?: import("./contracts").CharacterId[];
+  } | null;
   scanners: ScannerOutput[];
   last_processed_candle?: number;
   error: "MARKET_UNAVAILABLE" | null;

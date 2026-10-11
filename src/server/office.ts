@@ -3,6 +3,8 @@ import { z } from "zod";
 import {
   analysisGroups,
   analysisSchema,
+  aiVoters,
+  caseParticipants,
   characterIds,
   characterSchema,
   configSchema,
@@ -41,6 +43,7 @@ import {
 } from "../core/engine";
 import { digest, json } from "./auth";
 import { CRON_INTERVAL_MS, type ScannerReview } from "../core/scanner-meeting";
+import { participantsFromContext } from "../core/meeting";
 import { configWriteSchema, type ConfigWriteResult } from "../core/api";
 import { credentialWriteSchema } from "../core/credentials";
 import {
@@ -308,16 +311,23 @@ export class Office extends DurableObject<Env> {
       const observed_at = Date.now();
       const { config } = await this.config();
       const active = await this.env.DB.prepare(
-        "SELECT id,status FROM cases WHERE mode='LIVE' AND status IN ('REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED') ORDER BY created_at LIMIT 1",
-      ).first();
+        "SELECT id,status,context FROM cases WHERE mode='LIVE' AND status IN ('REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED') ORDER BY created_at LIMIT 1",
+      ).first<{ id: string; status: string; context: string }>();
       return json({
         observed_at,
         scanner_consensus_min: config.scannerConsensusMin,
+        ai_voter_count: config.aiVoterCount,
         group_names: analysisGroups,
         group_consensus_min: config.scannerConsensusMin,
         groups: (await this.ctx.storage.get("groups")) ?? [],
         office: (await this.ctx.storage.get("office")) ?? "MONITORING",
-        active,
+        active: active
+          ? {
+              id: active.id,
+              status: active.status,
+              participants: participantsFromContext(active.context),
+            }
+          : null,
         scanners: (await this.ctx.storage.get("scanners")) ?? [],
         last_processed_candle: await this.ctx.storage.get(
           "last_processed_candle",
@@ -743,7 +753,12 @@ export class Office extends DurableObject<Env> {
           .first<{ uuid: string; context: string }>();
         if (!row)
           return json({ error: "Historical AI snapshot not found" }, 404);
-        historical = (JSON.parse(row.context) as CaseContext).characters;
+        const historicalContext = JSON.parse(row.context) as CaseContext;
+        const historicalConfig = configSchema.parse(historicalContext.config);
+        config.aiVoterCount = historicalConfig.aiVoterCount;
+        historical = historicalContext.characters.filter((c) =>
+          caseParticipants(historicalConfig).includes(c.id),
+        );
         const outputs = await this.env.DB.prepare(
           "SELECT snapshot FROM ai_character_outputs WHERE case_uuid=?",
         )
@@ -1016,12 +1031,19 @@ export class Office extends DurableObject<Env> {
     strictReplay = false,
     request?: unknown,
   ) {
+    const roster = characters ?? (await this.characters());
+    const participants = caseParticipants(config);
+    const selectedCharacters = participants.map((id) => {
+      const character = roster.find((c) => c.id === id);
+      if (!character) throw new Error(`Case participant missing: ${id}`);
+      return character;
+    });
     const context: CaseContext = {
       market,
       scanners,
       groups,
       config,
-      characters: characters ?? (await this.characters()),
+      characters: selectedCharacters,
       sendDiscord,
       focus,
       strict_replay: strictReplay,
@@ -1663,27 +1685,28 @@ export class Office extends DurableObject<Env> {
     const groups = s.groups?.length
       ? s.groups
       : analyzeGroups(s.market, s.scanners, s.config, row.config_version);
+    const voterContexts = aiVoters(s.config).map((id) => {
+      const c = s.characters.find((character) => character.id === id);
+      if (!c) throw new Error(`Case participant missing: ${id}`);
+      const specialization = analystGroup(c.id);
+      if (!specialization)
+        throw new Error(`No analysis group assigned to ${c.id}`);
+      const group = groups.find((item) => item.group === specialization);
+      if (!group)
+        throw new Error(`Missing ${specialization} deterministic snapshot`);
+      return {
+        character: c,
+        context: {
+          ...buildGroupContext(s.market, group, s.config, c.id),
+          case_id: row.id,
+          focus: s.focus,
+        },
+      };
+    });
     const settled = await Promise.allSettled(
-      s.characters
-        .filter((c) => c.id !== "risk" && c.id !== "boss")
-        .map((c) => {
-          const specialization = analystGroup(c.id);
-          if (!specialization)
-            throw new Error(`No analysis group assigned to ${c.id}`);
-          const group = groups.find((item) => item.group === specialization);
-          if (!group)
-            throw new Error(`Missing ${specialization} deterministic snapshot`);
-          return this.character(
-            row,
-            c,
-            {
-              ...buildGroupContext(s.market, group, s.config, c.id),
-              case_id: row.id,
-              focus: s.focus,
-            },
-            s.config,
-          );
-        }),
+      voterContexts.map(({ character, context }) =>
+        this.character(row, character, context, s.config),
+      ),
     );
     // Do not start recovery while sibling provider requests are still running.
     const rejected = settled.find((r) => r.status === "rejected");

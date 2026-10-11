@@ -248,6 +248,28 @@ function ConfigEditor() {
           >
             <div className="form-grid">
               <label>
+                Jumlah AI untuk voting
+                <select
+                  aria-label="Jumlah AI untuk voting"
+                  value={draft.aiVoterCount ?? 8}
+                  onChange={(e) =>
+                    update("aiVoterCount", Number(e.target.value) as 4 | 8)
+                  }
+                  aria-describedby="ai-voter-count-help"
+                >
+                  <option value={4}>4 AI — satu wakil tiap grup</option>
+                  <option value={8}>8 AI — seluruh analis</option>
+                </select>
+                <small id="ai-voter-count-help" className="muted">
+                  Mode 4: Structure, Trend, Volume, dan Derivatives. Mode 8:
+                  seluruh analis. Risk Manager dan Boss tetap melakukan review
+                  setelah voting, sehingga ada 6 atau 10 peran sebelum retry dan
+                  fallback. Mode 4 mengurangi panggilan AI, dengan lebih sedikit
+                  pendapat. Case aktif mengikuti konfigurasi saat dibuat;
+                  gunakan APPLY NOW untuk menggantinya. Default: 8 AI.
+                </small>
+              </label>
+              <label>
                 Minimal Group Consensus
                 <select
                   value={draft.scannerConsensusMin}

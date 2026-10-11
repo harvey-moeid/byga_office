@@ -521,7 +521,7 @@ export function voting(
   const minimumSuccess = Math.ceil(expected / 2);
   const directional = counts.BUY + counts.SELL;
   // NO_TRADE is an abstention, but a lone directional vote must not decide an
-  // eight-analyst case. Two directional votes is the minimum quorum; this
+  // configured analyst council. Two directional votes is the minimum quorum; this
   // preserves the documented plurality rule once real directional participation exists.
   const directionalQuorum = Math.min(2, expected);
   const degraded = success < minimumSuccess;

@@ -204,6 +204,26 @@ afterAll(async () => {
 });
 
 describe.sequential("Backend/API audit regressions", () => {
+  it("validates 4/8 voting settings and keeps a queued case pinned when the next-case setting changes", async () => {
+    for (const aiVoterCount of [0, 5, 6, 10, "4", null]) {
+      expect((await config({ ...defaultConfig, aiVoterCount } as TradingConfig)).status).toBe(400);
+    }
+    expect((await config({ ...defaultConfig, aiVoterCount: 4 })).status).toBe(200);
+    const item = await queuedCase();
+    const row = await db.prepare("SELECT context FROM cases WHERE uuid=?").bind(item.uuid).first<{ context: string }>();
+    const snapshot = JSON.parse(row!.context);
+    expect(snapshot.config.aiVoterCount).toBe(4);
+    expect(snapshot.characters.map((c: { id: string }) => c.id)).toEqual(["trend", "structure", "volume", "derivatives", "risk", "boss"]);
+    expect((await config({ ...defaultConfig, aiVoterCount: 8 })).status).toBe(200);
+    expect((await activeConfig()).config.aiVoterCount).toBe(8);
+    await db.prepare("UPDATE cases SET status='AI_ANALYSIS' WHERE uuid=?").bind(item.uuid).run();
+    const state = await (await call("/office/state", undefined, "GET", false)).json();
+    expect(state).toMatchObject({ ai_voter_count: 8, active: { id: item.id, participants: ["trend", "structure", "volume", "derivatives", "risk", "boss"] } });
+    expect(JSON.stringify(state)).not.toContain("primary_provider");
+    expect(JSON.stringify(state)).not.toContain('"context"');
+    const meeting = await (await call(`/office/meeting?current=${item.id}`, undefined, "GET", false)).json();
+    expect(meeting).toMatchObject({ requested_meeting: { participants: ["trend", "structure", "volume", "derivatives", "risk", "boss"] } });
+  });
   it("stores Admin API keys without echoing them and enforces authorization, origin and version conflicts", async () => {
     const key = "fixture-only-admin-provider-key";
     const payload = { id: "openrouter", action: "SAVE", key, expectedVersion: null };
