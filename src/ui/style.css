@@ -71,6 +71,23 @@ select:focus-visible {
   min-width: 0;
   padding-bottom: 24px;
 }
+.provider-key-editor {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 24px;
+  margin-bottom: 24px;
+}
+.provider-key-editor p {
+  font-size: 12px;
+  line-height: 1.7;
+}
+.credential-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.credential-actions button {
+  min-height: 42px;
+}
 .chart-toolbar {
   display: flex;
   align-items: center;

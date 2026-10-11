@@ -1,4 +1,5 @@
 import { ScannerSettings } from "./scanner-settings";
+import { ProviderKeys } from "./provider-keys";
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -706,6 +707,7 @@ function Providers() {
   const [message, setMessage] = useState("");
   return (
     <section className="panel">
+      <ProviderKeys onSaved={() => { health.retry(); d.retry(); }} />
       <h2>Provider health</h2>
       <p>Health pasif dan tes manual. Tidak ada polling AI berbayar.</p>
       <Notice error={d.error} />

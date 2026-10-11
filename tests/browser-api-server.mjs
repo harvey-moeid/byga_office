@@ -49,6 +49,7 @@ const mf = new Miniflare(
       APP_ENV: "test",
       PUBLIC_ORIGIN: origin,
       ADMIN_PASSWORD_HASH: hash,
+      PROVIDER_KEYS_ENCRYPTION_KEY: "a".repeat(64),
       CHART_SCHEMA: JSON.stringify({
         table: "candles",
         market: "symbol",
@@ -123,6 +124,7 @@ async function reset() {
       "sessions",
       "login_limits",
       "api_limits",
+      "provider_credentials",
     ].map((table) => db.prepare(`DELETE FROM ${table}`)),
   );
   const response = await live.fetch("https://internal/config", {

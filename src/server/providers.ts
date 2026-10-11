@@ -9,6 +9,7 @@ import {
 } from "../core/contracts";
 import { semanticErrors } from "../core/engine";
 import type { Env } from "./env";
+import { providerKeyBindings, resolveProviderEnv } from "./credentials";
 export interface ProviderPolicy {
   retries: number;
   jitter: boolean;
@@ -25,6 +26,15 @@ export interface Circuit {
   failures: number;
   openedAt: number;
   probeUntil?: number;
+  credentialVersion?: string | null;
+}
+export function circuitForCredential(
+  c: Circuit | undefined,
+  version: string | null,
+): Circuit {
+  return c && (c.credentialVersion ?? null) === version
+    ? c
+    : { failures: 0, openedAt: 0, credentialVersion: version };
 }
 export function circuitState(c: Circuit, now = Date.now(), cooldown = 300000) {
   return !c.openedAt
@@ -53,42 +63,42 @@ const api: Record<
   openai: {
     url: "https://api.openai.com/v1/chat/completions",
     models: "https://api.openai.com/v1/models",
-    key: "OPENAI_API_KEY",
+    key: providerKeyBindings.openai,
   },
   gemini: {
     url: "https://generativelanguage.googleapis.com/v1beta/models",
     models: "https://generativelanguage.googleapis.com/v1beta/models",
-    key: "GEMINI_API_KEY",
+    key: providerKeyBindings.gemini,
   },
   groq: {
     url: "https://api.groq.com/openai/v1/chat/completions",
     models: "https://api.groq.com/openai/v1/models",
-    key: "GROQ_API_KEY",
+    key: providerKeyBindings.groq,
   },
   openrouter: {
     url: "https://openrouter.ai/api/v1/chat/completions",
     models: "https://openrouter.ai/api/v1/models",
-    key: "OPENROUTER_API_KEY",
+    key: providerKeyBindings.openrouter,
   },
   mistral: {
     url: "https://api.mistral.ai/v1/chat/completions",
     models: "https://api.mistral.ai/v1/models",
-    key: "MISTRAL_API_KEY",
+    key: providerKeyBindings.mistral,
   },
   huggingface: {
     url: "https://router.huggingface.co/v1/chat/completions",
     models: "https://router.huggingface.co/v1/models",
-    key: "HF_TOKEN",
+    key: providerKeyBindings.huggingface,
   },
   cohere: {
     url: "https://api.cohere.com/v2/chat",
     models: "https://api.cohere.com/v1/models",
-    key: "COHERE_API_KEY",
+    key: providerKeyBindings.cohere,
   },
   nvidia: {
     url: "https://integrate.api.nvidia.com/v1/chat/completions",
     models: "https://integrate.api.nvidia.com/v1/models",
-    key: "NVIDIA_API_KEY",
+    key: providerKeyBindings.nvidia,
   },
 };
 export function isProviderConfigured(env: Env, provider: Provider) {
@@ -148,10 +158,17 @@ export function redact(s: string, env: Env) {
   let value = s;
   for (const { key } of Object.values(api)) {
     const secret = env[key];
-    if (typeof secret === "string" && secret)
+    if (typeof secret === "string" && secret) {
       value = value.replaceAll(secret, "[REDACTED]");
+      value = value.replaceAll(
+        JSON.stringify(secret).slice(1, -1),
+        "[REDACTED]",
+      );
+      value = value.replaceAll(encodeURIComponent(secret), "[REDACTED]");
+    }
   }
   for (const key of [
+    "PROVIDER_KEYS_ENCRYPTION_KEY",
     "DISCORD_MEETING_WEBHOOK",
     "DISCORD_SIGNAL_WEBHOOK",
   ] as const)
@@ -179,6 +196,7 @@ export async function requestAI(
   timeout: number,
   fetcher: typeof fetch = fetch,
 ) {
+  env = await resolveProviderEnv(env);
   if (provider === "workers-ai") {
     if (!env.AI) throw new Error("PROVIDER_NOT_CONFIGURED");
     const payload = await env.AI.run(
@@ -307,6 +325,7 @@ export async function discoverModels(
   provider: Provider,
   fetcher: typeof fetch = fetch,
 ) {
+  env = await resolveProviderEnv(env);
   if (provider === "workers-ai") {
     if (!env.AI || typeof env.AI.run !== "function")
       throw new Error("PROVIDER_NOT_CONFIGURED");
@@ -373,7 +392,8 @@ export async function discoverModels(
     body.models?.map((x) => x.name ?? x.id!) ??
     []
   )
-    .filter(Boolean)
+    .filter((value): value is string => typeof value === "string" && !!value)
+    .map((value) => redact(value, env))
     .slice(0, 500);
 }
 export const coreRoles: Record<CharacterId, string> = {
@@ -583,6 +603,7 @@ export async function runCharacter(
   fetcher: typeof fetch = fetch,
   sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms)),
 ): Promise<AnalystResult> {
+  env = await resolveProviderEnv(env);
   const prompt = renderPrompt(c, context);
   let last: Analysis | undefined;
   const errors: string[] = [];
@@ -667,8 +688,10 @@ export async function runCharacter(
           prompt_version: c.prompt_version,
         };
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : "PROVIDER_FAILED";
+        const message = redact(
+          error instanceof Error ? error.message : "PROVIDER_FAILED",
+          env,
+        );
         timedOut = message.includes("timeout") || message.includes("aborted");
         if (message !== "SEMANTIC_INVALID") {
           errors.push(message);

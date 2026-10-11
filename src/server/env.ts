@@ -8,6 +8,7 @@ export interface Env {
   PUBLIC_ORIGIN: string;
   CHART_SCHEMA: string;
   ADMIN_PASSWORD_HASH?: string;
+  PROVIDER_KEYS_ENCRYPTION_KEY?: string;
   OPENAI_API_KEY?: string;
   GEMINI_API_KEY?: string;
   GROQ_API_KEY?: string;

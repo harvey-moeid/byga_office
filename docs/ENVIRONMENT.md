@@ -52,6 +52,8 @@ Workflow selalu memasang hash password Admin, OpenRouter, dan Gemini. Optional p
 
 Jika menggunakan workflow, tidak perlu membuat `ADMIN_PASSWORD_HASH` secara manual di GitHub. Worker membaca hash, bukan plaintext `ADMIN_PASSWORD`.
 
+Workflow juga membuat `PROVIDER_KEYS_ENCRYPTION_KEY` sekali sebagai Worker Secret dan mempertahankannya saat deploy ulang. Root ini mengenkripsi API key yang dimasukkan melalui **Admin → Providers**; tidak perlu dimasukkan ke GitHub untuk workflow tersebut. Key UI diprioritaskan pada runtime, sedangkan secret provider GitHub tetap dipakai untuk probe CI. Lihat [panduan input API key](PROVIDER_API_KEYS.md) untuk setup lokal, migrasi aplikasi, dan pemulihan root.
+
 ## 4. Variables konfigurasi deployment
 
 Buka **Settings → Environments → production → Environment variables** untuk melakukan override. Ini adalah **Variables**, bukan Secrets.

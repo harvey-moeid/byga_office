@@ -17,6 +17,7 @@
     "check": "npm run typecheck && npm run lint && npm test && npm run build",
     "deploy": "npm run build && node scripts/deploy.mjs",
     "password:hash": "node scripts/password.mjs",
+    "credentials:setup": "node scripts/credentials-key.mjs",
     "test:browser": "playwright test",
     "deploy:check": "node scripts/wrangler.mjs deploy --dry-run",
     "test:browser:integration": "playwright test --config playwright.integration.config.ts"

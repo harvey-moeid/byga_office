@@ -159,9 +159,10 @@ jobs:
           JS
           node scripts/wrangler.mjs secret bulk .wrangler/runtime-secrets.json --config "$BYGA_DEPLOY_CONFIG"
       - name: Inventory runtime secret bindings
-        # Names/types only; secret values are never printed. Omitted optional
-        # secrets remain Cloudflare-managed instead of being silently deleted.
-        run: node scripts/wrangler.mjs secret list --config "$BYGA_DEPLOY_CONFIG"
+        # The encryption root is initialized only if absent, never rotated on redeploy.
+        run: |
+          node scripts/credentials-key.mjs --config "$BYGA_DEPLOY_CONFIG"
+          node scripts/wrangler.mjs secret list --config "$BYGA_DEPLOY_CONFIG"
       - name: Verify deployed frontend, D1, Durable Object and Admin session
         run: node scripts/smoke.mjs
       - name: Restore scheduled production pipeline

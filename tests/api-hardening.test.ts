@@ -117,6 +117,7 @@ beforeAll(async () => {
         PUBLIC_ORIGIN: origin,
         CHART_SCHEMA: JSON.stringify(schema),
         ADMIN_PASSWORD_HASH: hash,
+        PROVIDER_KEYS_ENCRYPTION_KEY: "a".repeat(64),
         OPENROUTER_API_KEY: "fixture-only-key",
       },
       serviceBindings: { ASSETS: async () => new MFResponse("Fixture") },
@@ -189,6 +190,7 @@ beforeEach(async () => {
       "cases",
       "login_limits",
       "api_limits",
+      "provider_credentials",
     ].map((table) => db.prepare(`DELETE FROM ${table}`)),
   );
   expect((await config()).status).toBe(200);
@@ -202,6 +204,45 @@ afterAll(async () => {
 });
 
 describe.sequential("Backend/API audit regressions", () => {
+  it("stores Admin API keys without echoing them and enforces authorization, origin and version conflicts", async () => {
+    const key = "fixture-only-admin-provider-key";
+    const payload = { id: "openrouter", action: "SAVE", key, expectedVersion: null };
+    expect((await call("/admin/credentials", payload, "POST", false)).status).toBe(401);
+    expect((await call("/admin/credentials", payload, "POST", true, { Origin: "https://evil.test" })).status).toBe(403);
+    expect((await call("/admin/credentials", { ...payload, id: "workers-ai" })).status).toBe(400);
+    const response = await call("/admin/credentials", payload);
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    expect(text).not.toContain(key);
+    expect(text).not.toContain("encrypted");
+    const body = JSON.parse(text) as { items: { id: string; version: string; source: string }[] };
+    const status = body.items.find(item => item.id === "openrouter")!;
+    expect(status.source).toBe("UI");
+    expect((await call("/admin/credentials", payload)).status).toBe(409);
+    expect((await call("/admin/credentials", { id: "openrouter", action: "DELETE", expectedVersion: status.version, confirmed: false })).status).toBe(400);
+    expect((await call("/admin/credentials", { id: "openrouter", action: "DELETE", expectedVersion: crypto.randomUUID(), confirmed: true })).status).toBe(409);
+    const stored = await db.prepare("SELECT encrypted FROM provider_credentials").first<{ encrypted: string }>();
+    expect(stored?.encrypted).not.toContain(key);
+    const discovery = await call("/admin/models", { id: "openrouter" });
+    expect(discovery.status).toBe(200);
+    const removed = await call("/admin/credentials", { id: "openrouter", action: "DELETE", expectedVersion: status.version, confirmed: true });
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toMatchObject({ items: expect.arrayContaining([expect.objectContaining({ id: "openrouter", source: "RUNTIME", version: null })]) });
+    expect(await db.prepare("SELECT COUNT(*) n FROM ai_runs").first()).toEqual({ n: 0 });
+  });
+  it("rejects a model catalog response obtained with a key that changed while discovery was running", async () => {
+    const first = await call("/admin/credentials", { id: "openrouter", action: "SAVE", key: "fixture-first-key", expectedVersion: null });
+    const body = await first.json() as { items: { id: string; version: string }[] };
+    const version = body.items.find(item => item.id === "openrouter")!.version;
+    const entered = new Promise<void>(resolve => { modelsEntered = resolve; });
+    modelGate = new Promise<void>(resolve => { releaseModels = resolve; });
+    const discovery = call("/admin/models", { id: "openrouter" });
+    await entered;
+    expect((await call("/admin/credentials", { id: "openrouter", action: "SAVE", key: "fixture-second-key", expectedVersion: version })).status).toBe(200);
+    releaseModels!();
+    expect((await discovery).status).toBe(409);
+    expect((await call("/admin/models", { id: "openrouter" })).status).toBe(200);
+  });
   it("serves bounded public chart snapshots and exclusive deltas without starting AI or changing market rows", async () => {
     const before = await chart.prepare("SELECT COUNT(*) n FROM candles").first<{ n: number }>();
     for (const timeframe of ["M5", "M15", "H1"]) {
@@ -234,6 +275,7 @@ describe.sequential("Backend/API audit regressions", () => {
       "/characters",
       "/prompts",
       "/providers",
+      "/credentials",
       "/models",
       "/test-provider",
       "/rollback",

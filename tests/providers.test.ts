@@ -7,6 +7,7 @@ import {
 } from "../src/core/contracts";
 import {
   circuitResult,
+  circuitForCredential,
   circuitState,
   defaultPolicy,
   parseOutput,
@@ -70,6 +71,28 @@ function runtime() {
   return { r, audit, circuits };
 }
 describe("Provider adapters", () => {
+  it("keeps circuits for the current key and discards failures and probe leases from older credentials", () => {
+    const old = {
+      failures: 4,
+      openedAt: Date.now(),
+      probeUntil: Date.now() + 10000,
+      credentialVersion: "old-key-version",
+    };
+    expect(circuitForCredential(old, "new-key-version")).toEqual({
+      failures: 0,
+      openedAt: 0,
+      credentialVersion: "new-key-version",
+    });
+    expect(circuitForCredential(old, null)).toEqual({
+      failures: 0,
+      openedAt: 0,
+      credentialVersion: null,
+    });
+    expect(circuitForCredential(old, "old-key-version")).toBe(old);
+    const legacy = { failures: 4, openedAt: Date.now() };
+    expect(circuitForCredential(legacy, null)).toBe(legacy);
+    expect(circuitForCredential(legacy, "first-ui-key").failures).toBe(0);
+  });
   it("falls back to the pinned Workers AI model when catalog discovery stalls", async () => {
     vi.useFakeTimers();
     try {

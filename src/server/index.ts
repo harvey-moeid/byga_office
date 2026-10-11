@@ -14,6 +14,7 @@ import { consumeApiLimit, limitHeaders, limitedResponse } from "./rate-limit";
 import { isAdmin, json, login, logout, sameOrigin } from "./auth";
 import type { Env } from "./env";
 import { isProviderConfigured } from "./providers";
+import { credentialInventory, resolveProviderEnv } from "./credentials";
 import { chartSchema, readMarket } from "./market";
 import { chartQuery, readChart } from "./chart";
 import type { CaseRow } from "./office";
@@ -32,6 +33,7 @@ const adminMethods: Record<string, string[]> = {
   "/config": ["GET", "POST"],
   "/characters": ["GET", "POST"],
   "/providers": ["GET", "POST"],
+  "/credentials": ["GET", "POST"],
   "/prompts": ["GET"],
   "/rollback": ["POST"],
   "/models": ["POST"],
@@ -250,6 +252,7 @@ async function route(request: Request, env: Env): Promise<Response> {
       "/prompts",
       "/rollback",
       "/providers",
+      "/credentials",
       "/models",
       "/test-provider",
       "/emergency",
@@ -322,10 +325,9 @@ async function route(request: Request, env: Env): Promise<Response> {
         discordMeeting: !!env.DISCORD_MEETING_WEBHOOK,
         discordSignal: !!env.DISCORD_SIGNAL_WEBHOOK,
         office: await (await office(env, "/diagnostics")).json(),
-        configured: providers.map((id) => ({
-          id,
-          configured: isProviderConfigured(env, id),
-        })),
+        configured: (await credentialInventory(env)).items.map(
+          ({ id, configured }) => ({ id, configured }),
+        ),
       });
     return json({ error: "Not found" }, 404);
   }
@@ -350,8 +352,9 @@ async function route(request: Request, env: Env): Promise<Response> {
       state: string;
       failures: number;
     }[];
+    const providerEnv = await resolveProviderEnv(env);
     const configured = providers.filter((id) =>
-      isProviderConfigured(env, id),
+      isProviderConfigured(providerEnv, id),
     ).length;
     return json({
       chart_db: chart,
@@ -378,7 +381,9 @@ async function route(request: Request, env: Env): Promise<Response> {
     const { config } = (await (await office(env, "/config")).json()) as {
       config: { publicSignals: boolean };
     };
-    return json(await readOfficeMeetings(env, admin || config.publicSignals, requested));
+    return json(
+      await readOfficeMeetings(env, admin || config.publicSignals, requested),
+    );
   }
   if (path === "/api/v1/scanners") {
     const state = (await (await office(env, "/state")).json()) as {
@@ -456,10 +461,21 @@ async function route(request: Request, env: Env): Promise<Response> {
     const now = Date.now();
     const query = chartQuery(url.searchParams, now);
     try {
-      return json(await readChart(env, query, now, await marketProcessingDelay(env)));
+      return json(
+        await readChart(env, query, now, await marketProcessingDelay(env)),
+      );
     } catch (error) {
-      console.error("chart_unavailable", error instanceof Error ? error.message : String(error));
-      return json({ error: "Data chart belum tersedia. Coba lagi nanti.", code: "CHART_UNAVAILABLE" }, 503);
+      console.error(
+        "chart_unavailable",
+        error instanceof Error ? error.message : String(error),
+      );
+      return json(
+        {
+          error: "Data chart belum tersedia. Coba lagi nanti.",
+          code: "CHART_UNAVAILABLE",
+        },
+        503,
+      );
     }
   }
   if (path === "/api/v1/market/status") {

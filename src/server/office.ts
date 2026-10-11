@@ -17,6 +17,7 @@ import {
   type Direction,
   type GroupSnapshot,
   type MarketContext,
+  type Provider,
   type ScannerOutput,
   type Signal,
   type TradeDirection,
@@ -41,6 +42,12 @@ import {
 import { digest, json } from "./auth";
 import { CRON_INTERVAL_MS, type ScannerReview } from "../core/scanner-meeting";
 import { configWriteSchema, type ConfigWriteResult } from "../core/api";
+import { credentialWriteSchema } from "../core/credentials";
+import {
+  credentialInventory,
+  resolveProviderEnv,
+  writeCredential,
+} from "./credentials";
 import {
   errorResponse,
   HttpError,
@@ -51,6 +58,7 @@ import type { Env } from "./env";
 import { chartSchema, readDerivatives, readMarket } from "./market";
 import {
   circuitResult,
+  circuitForCredential,
   characterSemanticErrors,
   circuitState,
   defaultPolicy,
@@ -220,6 +228,7 @@ export class Office extends DurableObject<Env> {
             "/config",
             "/characters",
             "/providers",
+            "/credentials",
             "/prompts",
             "/diagnostics",
           ].includes(path)) ||
@@ -252,6 +261,7 @@ export class Office extends DurableObject<Env> {
         "/config",
         "/characters",
         "/rollback",
+        "/credentials",
       ].includes(path) &&
         (request.method !== "GET" ||
           ["/tick", "/schedule", "/emergency"].includes(path)) &&
@@ -510,6 +520,24 @@ export class Office extends DurableObject<Env> {
         .run();
       return json({ ok: true });
     }
+    if (path === "/credentials") {
+      if (request.method === "POST") {
+        const body = credentialWriteSchema.parse(await readJsonObject(request));
+        await writeCredential(this.env, body);
+        // The new account must not reuse the old model catalog or circuit state.
+        await this.ctx.storage.delete(`models:${body.id}`);
+        await this.ctx.storage.put(`circuit:${body.id}`, {
+          failures: 0,
+          openedAt: 0,
+          credentialVersion:
+            (await credentialInventory(this.env)).items.find(
+              (item) => item.id === body.id,
+            )?.version ?? null,
+        });
+      } else if (request.method !== "GET")
+        return methodNotAllowed(["GET", "POST"]);
+      return json(await credentialInventory(this.env));
+    }
     if (path === "/providers" && request.method === "POST") {
       const body = z
         .object({
@@ -530,12 +558,13 @@ export class Office extends DurableObject<Env> {
       return json({ ok: true });
     }
     if (path === "/providers") {
+      const credentials = await credentialInventory(this.env);
       const result = await Promise.all(
         providers.map(async (id) => {
-          const c = (await this.ctx.storage.get<Circuit>(`circuit:${id}`)) ?? {
-            failures: 0,
-            openedAt: 0,
-          };
+          const c = circuitForCredential(
+            await this.ctx.storage.get<Circuit>(`circuit:${id}`),
+            credentials.items.find((item) => item.id === id)?.version ?? null,
+          );
           const policy = await this.policy(id);
           return {
             id,
@@ -551,21 +580,30 @@ export class Office extends DurableObject<Env> {
       const { id } = z
         .object({ id: z.enum(providers) })
         .parse(await readJsonObject(request));
+      const providerEnv = await resolveProviderEnv(this.env);
+      const credentialVersion =
+        (await credentialInventory(providerEnv)).items.find(
+          (item) => item.id === id,
+        )?.version ?? null;
       try {
         const cache = await this.ctx.storage.get<{
           at: number;
           models: string[];
+          credentialVersion?: string | null;
         }>(`models:${id}`);
         const models =
           path === "/test-provider" && id === "workers-ai"
             ? [workersAIModel]
-            : path === "/models" && cache && Date.now() - cache.at < 3600000
+            : path === "/models" &&
+                cache &&
+                cache.credentialVersion === credentialVersion &&
+                Date.now() - cache.at < 3600000
               ? cache.models
-              : await discoverModels(this.env, id);
+              : await discoverModels(providerEnv, id);
         let inference: "PASS" | undefined;
         if (path === "/test-provider" && id === "workers-ai") {
           const response = await requestAI(
-            this.env,
+            providerEnv,
             id,
             workersAIModel,
             "Synthetic connection test only. Return JSON: vote BUY, confidence 0, summary Connectivity verified, reasoning Synthetic probe only, evidence [], risk_flags [CONNECTIVITY_TEST], price_levels null. Do not analyze markets or create a trading signal.",
@@ -585,14 +623,26 @@ export class Office extends DurableObject<Env> {
           inference = "PASS";
         }
         await this.serial(async () => {
+          const current =
+            (await credentialInventory(this.env)).items.find(
+              (item) => item.id === id,
+            )?.version ?? null;
+          if (current !== credentialVersion)
+            throw new HttpError(
+              409,
+              "API key berubah selama tes. Ulangi dengan key terbaru.",
+              "CREDENTIAL_CONFLICT",
+            );
           await this.ctx.storage.put(`models:${id}`, {
             at: Date.now(),
             models,
+            credentialVersion,
           });
           if (path === "/test-provider")
             await this.ctx.storage.put(`circuit:${id}`, {
               failures: 0,
               openedAt: 0,
+              credentialVersion,
             });
         });
         return json({
@@ -601,10 +651,13 @@ export class Office extends DurableObject<Env> {
           ...(inference ? { inference, model: workersAIModel } : {}),
         });
       } catch (error) {
+        if (error instanceof HttpError) return errorResponse(error);
         return json(
           {
-            error:
+            error: redact(
               error instanceof Error ? error.message : "Provider unavailable",
+              providerEnv,
+            ),
           },
           503,
         );
@@ -1425,37 +1478,56 @@ export class Office extends DurableObject<Env> {
     row: CaseRow,
     c: CharacterConfig,
     config: TradingConfig,
+    providerEnv: Env = this.env,
   ): AIRuntime {
     let reserved = 0;
+    const version = async (p: Provider) =>
+      (await credentialInventory(providerEnv)).items.find(
+        (item) => item.id === p,
+      )?.version ?? null;
     return {
       getCircuit: async (p) =>
-        (await this.ctx.storage.get<Circuit>(`circuit:${p}`)) ?? {
-          failures: 0,
-          openedAt: 0,
-        },
+        circuitForCredential(
+          await this.ctx.storage.get<Circuit>(`circuit:${p}`),
+          await version(p),
+        ),
       setCircuit: async (p, value) => {
-        await this.ctx.storage.transaction(async (t) => {
-          const key = `circuit:${p}`,
-            current = (await t.get<Circuit>(key)) ?? {
-              failures: 0,
-              openedAt: 0,
-            };
-          await t.put(
-            key,
-            value.failures === 0
-              ? value
-              : circuitResult(current, false, await this.policy(p)),
-          );
+        await this.serial(async () => {
+          const expected =
+            (await credentialInventory(providerEnv)).items.find(
+              (item) => item.id === p,
+            )?.version ?? null;
+          const current = await this.env.DB.prepare(
+            "SELECT version FROM provider_credentials WHERE provider=?",
+          )
+            .bind(p)
+            .first<{ version: string }>();
+          // A request started with an older key must not reopen the new account's circuit.
+          if ((current?.version ?? null) !== expected) return;
+          await this.ctx.storage.transaction(async (t) => {
+            const key = `circuit:${p}`,
+              current = circuitForCredential(
+                await t.get<Circuit>(key),
+                expected,
+              );
+            await t.put(key, {
+              ...(value.failures === 0
+                ? value
+                : circuitResult(current, false, await this.policy(p))),
+              credentialVersion: expected,
+            });
+          });
         });
       },
       policy: (p) => this.policy(p),
-      acquireCircuit: async (p, policy) =>
-        this.ctx.storage.transaction(async (t) => {
+      acquireCircuit: async (p, policy) => {
+        const expected = await version(p);
+        return this.ctx.storage.transaction(async (t) => {
           const key = `circuit:${p}`;
-          const value = (await t.get<Circuit>(key)) ?? {
-            failures: 0,
-            openedAt: 0,
-          };
+          const value = circuitForCredential(
+            await t.get<Circuit>(key),
+            expected,
+          );
           const state = circuitState(value, Date.now(), policy.cooldownMs);
           if (
             state === "OPEN" ||
@@ -1465,7 +1537,8 @@ export class Office extends DurableObject<Env> {
           if (state === "HALF_OPEN")
             await t.put(key, { ...value, probeUntil: Date.now() + 180000 });
           return true;
-        }),
+        });
+      },
       beforeCall: async (estimate = c.max_output_tokens) => {
         await this.ctx.storage.transaction(async (t) => {
           const key = `calls:${row.uuid}`,
@@ -1499,7 +1572,7 @@ export class Office extends DurableObject<Env> {
             e.status,
             e.tokens,
             e.raw ?? null,
-            redact(e.prompt, this.env),
+            redact(e.prompt, providerEnv),
             Date.now(),
           ),
           this.env.DB.prepare(
@@ -1565,11 +1638,12 @@ export class Office extends DurableObject<Env> {
         .run();
       return invalid;
     }
+    const providerEnv = await resolveProviderEnv(this.env);
     const output = await runCharacter(
-      this.env,
+      providerEnv,
       c,
       context,
-      this.runtime(row, c, config),
+      this.runtime(row, c, config, providerEnv),
     );
     await this.env.DB.prepare(
       "INSERT OR IGNORE INTO ai_character_outputs VALUES (?,?,?)",

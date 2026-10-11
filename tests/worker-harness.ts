@@ -26,6 +26,13 @@ export class Office extends ProductionOffice {
       await this.ctx.storage.deleteAlarm();
       return Response.json({ ok: true });
     }
+    if (path === "/__test/old-key-circuit") {
+      await this.ctx.storage.put("circuit:openrouter", {
+        failures: 5, openedAt: Date.now(), probeUntil: Date.now() + 180000,
+        credentialVersion: "fixture-retired-key-version",
+      });
+      return Response.json({ ok: true });
+    }
     if (path === "/__test/tick-due") {
       await this.ctx.storage.put("pending_tick", Date.now() - 1);
       return Response.json({ ok: true });
