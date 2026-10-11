@@ -25,6 +25,7 @@ let release: (() => void) | undefined;
 let gate: Promise<void> | undefined;
 let requests = 0;
 let aiRequests = 0;
+const aiAuthorizations: { host: string; authorization: string | null }[] = [];
 let discordStatus: number | "timeout" = 204;
 const discordMessages: {
   content: string;
@@ -106,6 +107,7 @@ beforeAll(async () => {
         PUBLIC_ORIGIN: origin,
         CHART_SCHEMA: JSON.stringify(chart),
         ADMIN_PASSWORD_HASH: encoded,
+        PROVIDER_KEYS_ENCRYPTION_KEY: "a".repeat(64),
         OPENAI_API_KEY: "fixture-only-ai-key",
         OPENROUTER_API_KEY: "fixture-only-openrouter",
         GEMINI_API_KEY: "fixture-only-gemini",
@@ -137,6 +139,10 @@ beforeAll(async () => {
         if (u.pathname.endsWith("/models"))
           return MFResponse.json({ data: [{ id: "fixture" }] });
         aiRequests++;
+        aiAuthorizations.push({
+          host: u.hostname,
+          authorization: request.headers.get("Authorization"),
+        });
         if (gate) await gate;
         if (
           failure === "all" ||
@@ -153,7 +159,9 @@ beforeAll(async () => {
           "";
         const vote =
           scenario === "TIE"
-            ? /^(Liquidity|Volume|Quant|Market Positioning) Analyst/.test(prompt)
+            ? /^(Liquidity|Volume|Quant|Market Positioning) Analyst/.test(
+                prompt,
+              )
               ? "SELL"
               : "BUY"
             : scenario === "BOSS_REVERSE"
@@ -251,16 +259,7 @@ beforeAll(async () => {
         ),
       market
         .prepare("INSERT INTO derivative_metrics VALUES (?,?,?,?,?,?,?,?)")
-        .bind(
-          "BTCUSDT",
-          "long_short_ratio",
-          "M5",
-          ts,
-          1,
-          0.5,
-          0.5,
-          "fixture",
-        ),
+        .bind("BTCUSDT", "long_short_ratio", "M5", ts, 1, 0.5, 0.5, "fixture"),
     );
   }
   derivativeRows.push(
@@ -297,6 +296,8 @@ beforeEach(async () => {
   release = undefined;
   gate = undefined;
   await (await mf.getD1Database("DB")).exec("DELETE FROM api_limits");
+  await (await mf.getD1Database("DB")).exec("DELETE FROM provider_credentials");
+  aiAuthorizations.length = 0;
 });
 afterAll(async () => {
   await mf?.dispose();
@@ -434,7 +435,9 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     try {
       for (const row of rows.results)
         await chartDb
-          .prepare("UPDATE candles SET is_closed=0 WHERE timeframe='M5' AND open_time=?")
+          .prepare(
+            "UPDATE candles SET is_closed=0 WHERE timeframe='M5' AND open_time=?",
+          )
           .bind(row.open_time)
           .run();
       const health = await call("/health");
@@ -448,7 +451,9 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     } finally {
       for (const row of rows.results)
         await chartDb
-          .prepare("UPDATE candles SET is_closed=? WHERE timeframe='M5' AND open_time=?")
+          .prepare(
+            "UPDATE candles SET is_closed=? WHERE timeframe='M5' AND open_time=?",
+          )
           .bind(row.is_closed, row.open_time)
           .run();
     }
@@ -631,6 +636,17 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
   });
   it("emergency BUY pipeline persists analysts/risk/boss/signal and deduplicates retry", async () => {
     scenario = "BUY";
+    const uiKey = "fixture-only-full-pipeline-ui-key";
+    expect(
+      (
+        await call("/admin/credentials", {
+          id: "openrouter",
+          action: "SAVE",
+          key: uiKey,
+          expectedVersion: null,
+        })
+      ).status,
+    ).toBe(200);
     const body = {
       focus: "NONE",
       sendDiscord: false,
@@ -649,7 +665,20 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     expect(c.result.signal?.market).toBe("BTCUSDT.P");
     expect(c.result.signal?.group_composition).toBeTruthy();
     expect(c.result.signal?.flags).toContain("EMERGENCY");
+    const primaryRequests = aiAuthorizations.filter(
+      (item) => item.host === "openrouter.ai",
+    );
+    expect(primaryRequests.length).toBeGreaterThan(0);
+    expect(
+      primaryRequests.every((item) => item.authorization === `Bearer ${uiKey}`),
+    ).toBe(true);
+    expect(JSON.stringify(c)).not.toContain(uiKey);
     const db = await mf.getD1Database("DB");
+    const audits = await db
+      .prepare("SELECT * FROM ai_runs WHERE case_uuid=?")
+      .bind(item.uuid)
+      .all();
+    expect(JSON.stringify(audits.results)).not.toContain(uiKey);
     expect(
       (await db
         .prepare("SELECT COUNT(*) AS n FROM signals WHERE case_uuid=?")
@@ -789,6 +818,10 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
 
   it("simulation writes result only to simulation history, never live signals", async () => {
     scenario = "BUY";
+    const uiKey = "fixture-only-simulation-ui-key";
+    expect((await call("/admin/credentials", { id: "openrouter", action: "SAVE", key: uiKey, expectedVersion: null })).status).toBe(200);
+    const namespace = await mf.getDurableObjectNamespace("OFFICE");
+    await namespace.get(namespace.idFromName("BTCUSDT.P:simulation")).fetch("https://test/__test/old-key-circuit");
     const db = await mf.getD1Database("DB");
     const before = (await db
       .prepare("SELECT COUNT(*) AS n FROM signals")
@@ -804,6 +837,9 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     expect(item.id).toMatch(/^CASE-/);
     const c = await done(item.id);
     expect(c.status, JSON.stringify(c.result)).toBe("COMPLETED");
+    const primary = aiAuthorizations.filter(request => request.host === "openrouter.ai");
+    expect(primary.length).toBeGreaterThan(0);
+    expect(primary.every(request => request.authorization === `Bearer ${uiKey}`)).toBe(true);
     const liveMeeting = (await (
       await call("/office/meeting", undefined, false)
     ).json()) as { meeting: { case_id: string } | null };

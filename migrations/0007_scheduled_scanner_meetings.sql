@@ -1,0 +1,4 @@
+CREATE TABLE scanner_meetings (id TEXT PRIMARY KEY, scheduled_at INTEGER NOT NULL UNIQUE, snapshot TEXT NOT NULL CHECK(json_valid(snapshot)), case_uuid TEXT REFERENCES cases(uuid) ON DELETE SET NULL, created_at INTEGER NOT NULL);
+CREATE INDEX scanner_meetings_case ON scanner_meetings(case_uuid);
+INSERT INTO trading_config_versions(id,version,snapshot,created_at) SELECT 'TRADING-CONFIG-cron-meeting-v1', (SELECT COALESCE(MAX(version),0)+1 FROM trading_config_versions), json_set(snapshot,'$.scannerConsensusMin',2,'$.cooldownMinutes',0), CAST(strftime('%s','now') AS INTEGER)*1000 FROM trading_config_versions WHERE id=(SELECT value FROM system_state WHERE key='active_config');
+UPDATE system_state SET value='TRADING-CONFIG-cron-meeting-v1' WHERE key='active_config' AND EXISTS (SELECT 1 FROM trading_config_versions WHERE id='TRADING-CONFIG-cron-meeting-v1');

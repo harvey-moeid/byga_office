@@ -117,6 +117,7 @@ beforeAll(async () => {
         PUBLIC_ORIGIN: origin,
         CHART_SCHEMA: JSON.stringify(schema),
         ADMIN_PASSWORD_HASH: hash,
+        PROVIDER_KEYS_ENCRYPTION_KEY: "a".repeat(64),
         OPENROUTER_API_KEY: "fixture-only-key",
       },
       serviceBindings: { ASSETS: async () => new MFResponse("Fixture") },
@@ -178,6 +179,7 @@ beforeEach(async () => {
   await live.fetch("https://internal/__test/pause");
   await db.batch(
     [
+      "scanner_meetings",
       "signals",
       "ai_character_outputs",
       "risk_runs",
@@ -188,6 +190,7 @@ beforeEach(async () => {
       "cases",
       "login_limits",
       "api_limits",
+      "provider_credentials",
     ].map((table) => db.prepare(`DELETE FROM ${table}`)),
   );
   expect((await config()).status).toBe(200);
@@ -201,12 +204,78 @@ afterAll(async () => {
 });
 
 describe.sequential("Backend/API audit regressions", () => {
+  it("stores Admin API keys without echoing them and enforces authorization, origin and version conflicts", async () => {
+    const key = "fixture-only-admin-provider-key";
+    const payload = { id: "openrouter", action: "SAVE", key, expectedVersion: null };
+    expect((await call("/admin/credentials", payload, "POST", false)).status).toBe(401);
+    expect((await call("/admin/credentials", payload, "POST", true, { Origin: "https://evil.test" })).status).toBe(403);
+    expect((await call("/admin/credentials", { ...payload, id: "workers-ai" })).status).toBe(400);
+    const response = await call("/admin/credentials", payload);
+    expect(response.status).toBe(200);
+    const text = await response.text();
+    expect(text).not.toContain(key);
+    expect(text).not.toContain("encrypted");
+    const body = JSON.parse(text) as { items: { id: string; version: string; source: string }[] };
+    const status = body.items.find(item => item.id === "openrouter")!;
+    expect(status.source).toBe("UI");
+    expect((await call("/admin/credentials", payload)).status).toBe(409);
+    expect((await call("/admin/credentials", { id: "openrouter", action: "DELETE", expectedVersion: status.version, confirmed: false })).status).toBe(400);
+    expect((await call("/admin/credentials", { id: "openrouter", action: "DELETE", expectedVersion: crypto.randomUUID(), confirmed: true })).status).toBe(409);
+    const stored = await db.prepare("SELECT encrypted FROM provider_credentials").first<{ encrypted: string }>();
+    expect(stored?.encrypted).not.toContain(key);
+    const discovery = await call("/admin/models", { id: "openrouter" });
+    expect(discovery.status).toBe(200);
+    const removed = await call("/admin/credentials", { id: "openrouter", action: "DELETE", expectedVersion: status.version, confirmed: true });
+    expect(removed.status).toBe(200);
+    expect(await removed.json()).toMatchObject({ items: expect.arrayContaining([expect.objectContaining({ id: "openrouter", source: "RUNTIME", version: null })]) });
+    expect(await db.prepare("SELECT COUNT(*) n FROM ai_runs").first()).toEqual({ n: 0 });
+  });
+  it("rejects a model catalog response obtained with a key that changed while discovery was running", async () => {
+    const first = await call("/admin/credentials", { id: "openrouter", action: "SAVE", key: "fixture-first-key", expectedVersion: null });
+    const body = await first.json() as { items: { id: string; version: string }[] };
+    const version = body.items.find(item => item.id === "openrouter")!.version;
+    const entered = new Promise<void>(resolve => { modelsEntered = resolve; });
+    modelGate = new Promise<void>(resolve => { releaseModels = resolve; });
+    const discovery = call("/admin/models", { id: "openrouter" });
+    await entered;
+    expect((await call("/admin/credentials", { id: "openrouter", action: "SAVE", key: "fixture-second-key", expectedVersion: version })).status).toBe(200);
+    releaseModels!();
+    expect((await discovery).status).toBe(409);
+    expect((await call("/admin/models", { id: "openrouter" })).status).toBe(200);
+  });
+  it("serves bounded public chart snapshots and exclusive deltas without starting AI or changing market rows", async () => {
+    const before = await chart.prepare("SELECT COUNT(*) n FROM candles").first<{ n: number }>();
+    for (const timeframe of ["M5", "M15", "H1"]) {
+      const response = await call(`/market/candles?timeframe=${timeframe}&limit=10`, undefined, "GET", false);
+      expect(response.status).toBe(200);
+      const body = await response.json() as { candles: { timestamp: number; close: number }[]; status: string; market: string; latest_timestamp: number };
+      expect(body.market).toBe("BTCUSDT.P");
+      expect(body.candles).toHaveLength(10);
+      expect(body.status).toBe("OK");
+      expect(body.latest_timestamp).toBe(body.candles[9].timestamp);
+      const delta = await call(`/market/candles?timeframe=${timeframe}&after=${body.candles[8].timestamp}`, undefined, "GET", false);
+      const result = await delta.json() as { candles: unknown[]; has_more: boolean };
+      expect(result.candles).toEqual([body.candles[9]]);
+      expect(result.has_more).toBe(false);
+      const unchanged = await call(`/market/candles?timeframe=${timeframe}&after=${body.latest_timestamp}`, undefined, "GET", false);
+      expect(await unchanged.json()).toMatchObject({ candles: [], status: "OK", latest_timestamp: body.latest_timestamp });
+      const backlog = await call(`/market/candles?timeframe=${timeframe}&after=0&limit=10`, undefined, "GET", false);
+      expect(await backlog.json()).toMatchObject({ has_more: true, latest_timestamp: body.latest_timestamp });
+    }
+    for (const query of ["timeframe=D1", "limit=1001", "after=-1", "market=ETHUSDT", "limit=10&limit=20"])
+      expect((await call(`/market/candles?${query}`, undefined, "GET", false)).status).toBe(400);
+    expect((await call("/market/candles", {}, "POST", false)).status).toBe(405);
+    expect(await chart.prepare("SELECT COUNT(*) n FROM candles").first()).toEqual(before);
+    expect(await db.prepare("SELECT COUNT(*) n FROM ai_runs").first()).toEqual({ n: 0 });
+    expect(await db.prepare("SELECT COUNT(*) n FROM cases").first()).toEqual({ n: 0 });
+  });
   it("rejects unauthenticated routes and unsupported methods before any mutation", async () => {
     for (const path of [
       "/config",
       "/characters",
       "/prompts",
       "/providers",
+      "/credentials",
       "/models",
       "/test-provider",
       "/rollback",
@@ -365,18 +434,16 @@ describe.sequential("Backend/API audit regressions", () => {
           "UPDATE cases SET status='COMPLETED',updated_at=? WHERE uuid=?",
         )
         .bind(Date.now(), c.uuid),
-      db
-        .prepare("INSERT INTO ai_character_outputs VALUES (?,?,?)")
-        .bind(
-          c.uuid,
-          "risk",
-          JSON.stringify({
-            id: "risk",
-            status: "SUCCESS",
-            output: analysis,
-            flags: [],
-          }),
-        ),
+      db.prepare("INSERT INTO ai_character_outputs VALUES (?,?,?)").bind(
+        c.uuid,
+        "risk",
+        JSON.stringify({
+          id: "risk",
+          status: "SUCCESS",
+          output: analysis,
+          flags: [],
+        }),
+      ),
     ]);
     for (const path of [
       "/office/meeting",
@@ -408,6 +475,95 @@ describe.sequential("Backend/API audit regressions", () => {
         await (await call("/office/meeting", undefined, "GET", false)).json(),
       ),
     ).toContain("96.78");
+  });
+  it("returns the latest scanner review alongside fresh, redacted updates for a held AI case", async () => {
+    const c = await queuedCase();
+    const output = {
+      vote: "BUY",
+      confidence: 70,
+      summary: "Entry 12345.67",
+      reasoning: "SL 12000.11",
+      evidence: [],
+      risk_flags: [],
+      price_levels: {
+        entry: 12345.67,
+        stop_loss: 12000.11,
+        take_profit: 13000.99,
+      },
+    };
+    await db.batch([
+      db
+        .prepare(
+          "UPDATE cases SET status='COMPLETED',created_at=?,updated_at=? WHERE uuid=?",
+        )
+        .bind(Date.now() - 10000, Date.now(), c.uuid),
+      db
+        .prepare("INSERT INTO ai_character_outputs VALUES (?,?,?)")
+        .bind(
+          c.uuid,
+          "trend",
+          JSON.stringify({ id: "trend", status: "SUCCESS", output }),
+        ),
+      db
+        .prepare("INSERT INTO scanner_meetings VALUES (?,?,?,?,?)")
+        .bind(
+          "SCANNER-latest",
+          Date.now(),
+          JSON.stringify({
+            id: "SCANNER-latest",
+            scheduled_at: Date.now(),
+            candle_timestamp: null,
+            minimum: 2,
+            direction: null,
+            reason: "MARKET_UNAVAILABLE",
+            groups: [],
+          }),
+          null,
+          Date.now(),
+        ),
+    ]);
+    const path = "/office/meeting?current=" + encodeURIComponent(c.id);
+    const response = await call(path, undefined, "GET", false);
+    const publicResult = (await response.json()) as {
+      meeting: { case_id: string; kind: string };
+      requested_meeting: {
+        case_id: string;
+        finished: boolean;
+        turns: { analysis: typeof output }[];
+      };
+    };
+    expect(publicResult.meeting).toMatchObject({
+      case_id: "SCANNER-latest",
+      kind: "SCANNER",
+    });
+    expect(publicResult.requested_meeting).toMatchObject({
+      case_id: c.id,
+      finished: true,
+    });
+    expect(
+      publicResult.requested_meeting.turns[0].analysis.price_levels,
+    ).toBeNull();
+    expect(JSON.stringify(publicResult)).not.toContain("12345.67");
+    expect(JSON.stringify(await (await call(path)).json())).toContain(
+      "12345.67",
+    );
+    await db
+      .prepare("UPDATE cases SET status='STALE' WHERE uuid=?")
+      .bind(c.uuid)
+      .run();
+    expect(await (await call(path)).json()).toMatchObject({
+      requested_meeting: { cancelled: true, finished: true },
+    });
+    await db
+      .prepare("UPDATE cases SET mode='SIMULATION' WHERE uuid=?")
+      .bind(c.uuid)
+      .run();
+    expect(await (await call(path)).json()).toMatchObject({
+      requested_meeting: null,
+    });
+    expect((await call("/office/meeting?current=invalid%2Fid")).status).toBe(
+      400,
+    );
   });
   it("keeps config and old case intact when APPLY NOW hits quota", async () => {
     const c = await queuedCase(),

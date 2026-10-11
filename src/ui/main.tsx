@@ -48,6 +48,7 @@ import {
   supportsWebGL,
 } from "./shared";
 const Admin = lazy(() => import("./admin"));
+const ChartPage = lazy(() => import("./chart"));
 const Simulation = lazy(() => import("./simulation"));
 const SimulationHistory = lazy(() =>
   import("./simulation").then((m) => ({ default: m.SimulationHistory })),
@@ -152,6 +153,7 @@ function AppLayout() {
               ["/", "◈", "Home"],
               ["/operations", "▤", "Operations"],
               ["/scanners", "▦", "Scanners"],
+              ["/chart", "▥", "Chart"],
               ["/signals", "↗", "Signals"],
               ["/cases", "▤", "Cases"],
               ["/characters", "◎", "AI Team"],
@@ -207,6 +209,7 @@ function AppLayout() {
             <Route path="/office" element={<Navigate to="/" replace />} />
             <Route path="/operations" element={<Dashboard />} />
             <Route path="/scanners" element={<Scanners />} />
+            <Route path="/chart" element={<ChartPage />} />
             <Route path="/scanners/:id" element={<ScannerDetail />} />
             <Route path="/signals" element={<Signals />} />
             <Route path="/signals/:id" element={<SignalDetail />} />
@@ -598,16 +601,26 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
               </div>
               {selectedTurn && (
                 <p className="character-live-vote">
-                  <Badge value={selectedTurn.analysis.vote} />
+                  <Badge
+                    value={
+                      "scanner" in selectedTurn
+                        ? selectedTurn.scanner.direction
+                        : selectedTurn.analysis.vote
+                    }
+                  />
                   <strong>
-                    Confidence {selectedTurn.analysis.confidence}%
+                    {"scanner" in selectedTurn
+                      ? "Scanner · tanpa AI"
+                      : `Confidence ${selectedTurn.analysis.confidence}%`}
                   </strong>
                 </p>
               )}
               <p>
                 {meeting.active
                   ? presenceFor(selectedCharacter) === "SPEAKING"
-                    ? "Sedang menyampaikan hasil AI case aktif di ruang meeting."
+                    ? meeting.snapshot?.kind === "SCANNER"
+                      ? "Sedang menjelaskan hasil scanner tanpa panggilan AI."
+                      : "Sedang menyampaikan hasil AI case aktif di ruang meeting."
                     : presenceFor(selectedCharacter) === "OUTPUT UNAVAILABLE"
                       ? "Output karakter tidak lolos validasi atau tidak tersedia untuk case aktif."
                       : "Status ini mengikuti posisi dan tahap karakter pada meeting aktif."

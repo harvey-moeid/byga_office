@@ -34,6 +34,15 @@ test("real auth, versioned config, scanner mutation and logout agree with the UI
   )) as { id: string };
   await page.getByLabel("minRR", { exact: true }).fill("2");
   await page
+    .getByText("Scanner, context, dan budget settings", { exact: true })
+    .click();
+  await page
+    .getByRole("spinbutton", { name: "EMA cepat", exact: true })
+    .fill("12");
+  await page
+    .getByRole("spinbutton", { name: "Rasio volume minimum", exact: true })
+    .fill("1.15");
+  await page
     .getByRole("button", { name: "Save new version", exact: true })
     .click();
   await expect(page.getByRole("status")).toContainText(
@@ -41,9 +50,14 @@ test("real auth, versioned config, scanner mutation and logout agree with the UI
   );
   const current = (await browserGet(page, "/api/v1/admin/config").then(
     (r) => r.body,
-  )) as { id: string; config: { minRR: number } };
+  )) as {
+    id: string;
+    config: { minRR: number; scanner: { ema: number[]; volumeRatio: number } };
+  };
   expect(current.id).not.toBe(previous.id);
   expect(current.config.minRR).toBe(2);
+  expect(current.config.scanner.ema).toEqual([12, 50, 200]);
+  expect(current.config.scanner.volumeRatio).toBe(1.15);
   await page.reload();
   await expect(page.getByLabel("minRR", { exact: true })).toHaveValue("2");
   expect((await browserGet(page, "/api/v1/admin/scan")).status).toBe(405);
@@ -300,3 +314,46 @@ for (const kind of ["emergency", "simulation", "config"] as const) {
     expect(stats.outboundCalls).toBe(0);
   });
 }
+
+test("real scanner review reaches the visual meeting without an external AI call", async ({
+  page,
+}) => {
+  await login(page);
+  await page
+    .getByRole("combobox", { name: "Minimal Group Consensus" })
+    .selectOption("4");
+  await page
+    .getByRole("button", { name: "Save new version", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("Tersimpan:");
+  await page.getByRole("button", { name: "Emergency", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Run scanner check", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("Scan diminta");
+  const result = (await (
+    await page.request.get("/api/v1/office/meeting")
+  ).json()) as {
+    meeting: {
+      case_id: string;
+      kind: string;
+      scan: { groups: { direction: string }[] };
+      turns: unknown[];
+    };
+  };
+  expect(result.meeting.kind).toBe("SCANNER");
+  expect(result.meeting.scan.groups).toHaveLength(4);
+  expect(result.meeting.turns).toHaveLength(6);
+  await page.goto("/");
+  await expect(page.locator(".meeting-status")).toHaveAttribute(
+    "data-case-id",
+    result.meeting.case_id,
+  );
+  await expect(page.locator(".meeting-status")).toContainText(
+    "Review scanner · tanpa AI",
+  );
+  const stats = (await (
+    await page.request.get("http://127.0.0.1:8788/__test/stats")
+  ).json()) as { outboundCalls: number };
+  expect(stats.outboundCalls).toBe(0);
+});

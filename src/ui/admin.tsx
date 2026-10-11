@@ -1,3 +1,5 @@
+import { ScannerSettings } from "./scanner-settings";
+import { ProviderKeys } from "./provider-keys";
 import React, { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -263,8 +265,9 @@ function ConfigEditor() {
                 <small id="scanner-consensus-help" className="muted">
                   Konsensus deterministik SMC/ICT, Indikator, Volume, dan
                   Derivatives / Market Positioning. Minimal 2 dari 4 group harus
-                  searah untuk memicu analisis otomatis. Scanner tetap aktif
-                  sebagai telemetry. Default: 2 dari 4.
+                  searah dan jumlahnya lebih besar daripada arah lawan untuk
+                  memicu AI. Cron setiap 5 menit; 2 BUY dan 2 SELL tetap meeting
+                  visual tanpa AI. Default: 2 dari 4, cooldown 0 menit.
                 </small>
               </label>
               {(
@@ -288,6 +291,12 @@ function ConfigEditor() {
                     value={draft[k]}
                     onChange={(e) => update(k, Number(e.target.value))}
                   />
+                  {k === "cooldownMinutes" && (
+                    <small className="muted">
+                      0: AI boleh berjalan pada setiap cron yang memenuhi syarat
+                      dan memiliki candle M5 baru.
+                    </small>
+                  )}
                 </label>
               ))}
               <label>
@@ -347,7 +356,11 @@ function ConfigEditor() {
             ))}
             <details>
               <summary>Scanner, context, dan budget settings</summary>
-              {(["scanner", "context", "budgets"] as const).map((k) => (
+              <ScannerSettings
+                value={draft.scanner}
+                onChange={(value) => update("scanner", value)}
+              />
+              {(["context", "budgets"] as const).map((k) => (
                 <JsonField
                   key={`${k}:${baseVersion.current}:${editorRevision}`}
                   label={k}
@@ -694,6 +707,7 @@ function Providers() {
   const [message, setMessage] = useState("");
   return (
     <section className="panel">
+      <ProviderKeys onSaved={() => { health.retry(); d.retry(); }} />
       <h2>Provider health</h2>
       <p>Health pasif dan tes manual. Tidak ada polling AI berbayar.</p>
       <Notice error={d.error} />

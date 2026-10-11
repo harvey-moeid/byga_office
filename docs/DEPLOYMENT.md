@@ -56,7 +56,9 @@ No full live-case AI/failover/simulation acceptance or real Discord delivery is 
 
 ## Secrets
 
-Use Cloudflare Worker Secrets for `ADMIN_PASSWORD_HASH`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `MISTRAL_API_KEY`, `HF_TOKEN`, `COHERE_API_KEY`, `NVIDIA_API_KEY`, `DISCORD_MEETING_WEBHOOK`, and `DISCORD_SIGNAL_WEBHOOK`. These are Worker runtime secrets, not frontend values or D1 rows. Configure only the providers you have access to; primary/fallback choices must refer to models available to your accounts.
+Use Cloudflare Worker Secrets for `ADMIN_PASSWORD_HASH`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `MISTRAL_API_KEY`, `HF_TOKEN`, `COHERE_API_KEY`, `NVIDIA_API_KEY`, `DISCORD_MEETING_WEBHOOK`, and `DISCORD_SIGNAL_WEBHOOK`. These runtime bindings remain server secrets. Admin can additionally save encrypted provider-key overrides in application D1; plaintext keys never become frontend configuration. Configure only the providers you have access to; primary/fallback choices must refer to models available to your accounts.
+
+Apply `0008_provider_credentials.sql` to the application database before publishing this feature. The deployment workflow initializes `PROVIDER_KEYS_ENCRYPTION_KEY` as a Worker Secret only when absent and preserves it thereafter. Local setup uses `npm run credentials:setup`; manual remote setup uses `node scripts/credentials-key.mjs --config "$BYGA_DEPLOY_CONFIG"` after the target Worker exists. Preserve the encryption root when restoring backups or redeploying. See [API key storage and recovery](PROVIDER_API_KEYS.md). No remote migration or root initialization is implied by local tests.
 
 `CLOUDFLARE_API_TOKEN` is for deployment tooling, not an AI Worker secret. Supply credentials securely through environment settings/Cloudflare; never via chat or tracked files. Cloud environment proxy-secret target names beginning `OPENAI_` are reserved, so `OPENAI_API_KEY` cannot be registered through that draft tool. The application still uses the PRD name inside Cloudflare Worker Secrets, where it is supported.
 

@@ -17,6 +17,7 @@ import {
   type Direction,
   type GroupSnapshot,
   type MarketContext,
+  type Provider,
   type ScannerOutput,
   type Signal,
   type TradeDirection,
@@ -39,7 +40,14 @@ import {
   voting,
 } from "../core/engine";
 import { digest, json } from "./auth";
+import { CRON_INTERVAL_MS, type ScannerReview } from "../core/scanner-meeting";
 import { configWriteSchema, type ConfigWriteResult } from "../core/api";
+import { credentialWriteSchema } from "../core/credentials";
+import {
+  credentialInventory,
+  resolveProviderEnv,
+  writeCredential,
+} from "./credentials";
 import {
   errorResponse,
   HttpError,
@@ -50,6 +58,7 @@ import type { Env } from "./env";
 import { chartSchema, readDerivatives, readMarket } from "./market";
 import {
   circuitResult,
+  circuitForCredential,
   characterSemanticErrors,
   circuitState,
   defaultPolicy,
@@ -219,6 +228,7 @@ export class Office extends DurableObject<Env> {
             "/config",
             "/characters",
             "/providers",
+            "/credentials",
             "/prompts",
             "/diagnostics",
           ].includes(path)) ||
@@ -251,6 +261,7 @@ export class Office extends DurableObject<Env> {
         "/config",
         "/characters",
         "/rollback",
+        "/credentials",
       ].includes(path) &&
         (request.method !== "GET" ||
           ["/tick", "/schedule", "/emergency"].includes(path)) &&
@@ -276,11 +287,19 @@ export class Office extends DurableObject<Env> {
         scheduledTime + config.processingDelaySeconds * 1000,
       );
       const pending = await this.ctx.storage.get<number>("pending_tick");
-      // Retain the earliest unconsumed event when cron delivery is repeated.
-      await this.ctx.storage.put(
-        "pending_tick",
-        Math.min(pending ?? Infinity, due),
-      );
+      const pendingSlot =
+        await this.ctx.storage.get<number>("pending_tick_slot");
+      // A delayed actor scans the most recent cron event. Replays cannot replace
+      // a newer pending event or postpone another delivery of the same event.
+      if (pendingSlot === undefined || scheduledTime >= pendingSlot) {
+        await this.ctx.storage.put({
+          pending_tick:
+            scheduledTime === pendingSlot
+              ? Math.min(pending ?? Infinity, due)
+              : due,
+          pending_tick_slot: scheduledTime,
+        });
+      }
       const currentAlarm = await this.ctx.storage.getAlarm();
       await this.scheduleAlarm(Math.min(currentAlarm ?? Infinity, due));
       return json({ ok: true, scan_after: due });
@@ -501,6 +520,24 @@ export class Office extends DurableObject<Env> {
         .run();
       return json({ ok: true });
     }
+    if (path === "/credentials") {
+      if (request.method === "POST") {
+        const body = credentialWriteSchema.parse(await readJsonObject(request));
+        await writeCredential(this.env, body);
+        // The new account must not reuse the old model catalog or circuit state.
+        await this.ctx.storage.delete(`models:${body.id}`);
+        await this.ctx.storage.put(`circuit:${body.id}`, {
+          failures: 0,
+          openedAt: 0,
+          credentialVersion:
+            (await credentialInventory(this.env)).items.find(
+              (item) => item.id === body.id,
+            )?.version ?? null,
+        });
+      } else if (request.method !== "GET")
+        return methodNotAllowed(["GET", "POST"]);
+      return json(await credentialInventory(this.env));
+    }
     if (path === "/providers" && request.method === "POST") {
       const body = z
         .object({
@@ -521,12 +558,13 @@ export class Office extends DurableObject<Env> {
       return json({ ok: true });
     }
     if (path === "/providers") {
+      const credentials = await credentialInventory(this.env);
       const result = await Promise.all(
         providers.map(async (id) => {
-          const c = (await this.ctx.storage.get<Circuit>(`circuit:${id}`)) ?? {
-            failures: 0,
-            openedAt: 0,
-          };
+          const c = circuitForCredential(
+            await this.ctx.storage.get<Circuit>(`circuit:${id}`),
+            credentials.items.find((item) => item.id === id)?.version ?? null,
+          );
           const policy = await this.policy(id);
           return {
             id,
@@ -542,21 +580,30 @@ export class Office extends DurableObject<Env> {
       const { id } = z
         .object({ id: z.enum(providers) })
         .parse(await readJsonObject(request));
+      const providerEnv = await resolveProviderEnv(this.env);
+      const credentialVersion =
+        (await credentialInventory(providerEnv)).items.find(
+          (item) => item.id === id,
+        )?.version ?? null;
       try {
         const cache = await this.ctx.storage.get<{
           at: number;
           models: string[];
+          credentialVersion?: string | null;
         }>(`models:${id}`);
         const models =
           path === "/test-provider" && id === "workers-ai"
             ? [workersAIModel]
-            : path === "/models" && cache && Date.now() - cache.at < 3600000
+            : path === "/models" &&
+                cache &&
+                cache.credentialVersion === credentialVersion &&
+                Date.now() - cache.at < 3600000
               ? cache.models
-              : await discoverModels(this.env, id);
+              : await discoverModels(providerEnv, id);
         let inference: "PASS" | undefined;
         if (path === "/test-provider" && id === "workers-ai") {
           const response = await requestAI(
-            this.env,
+            providerEnv,
             id,
             workersAIModel,
             "Synthetic connection test only. Return JSON: vote BUY, confidence 0, summary Connectivity verified, reasoning Synthetic probe only, evidence [], risk_flags [CONNECTIVITY_TEST], price_levels null. Do not analyze markets or create a trading signal.",
@@ -576,14 +623,26 @@ export class Office extends DurableObject<Env> {
           inference = "PASS";
         }
         await this.serial(async () => {
+          const current =
+            (await credentialInventory(this.env)).items.find(
+              (item) => item.id === id,
+            )?.version ?? null;
+          if (current !== credentialVersion)
+            throw new HttpError(
+              409,
+              "API key berubah selama tes. Ulangi dengan key terbaru.",
+              "CREDENTIAL_CONFLICT",
+            );
           await this.ctx.storage.put(`models:${id}`, {
             at: Date.now(),
             models,
+            credentialVersion,
           });
           if (path === "/test-provider")
             await this.ctx.storage.put(`circuit:${id}`, {
               failures: 0,
               openedAt: 0,
+              credentialVersion,
             });
         });
         return json({
@@ -592,10 +651,13 @@ export class Office extends DurableObject<Env> {
           ...(inference ? { inference, model: workersAIModel } : {}),
         });
       } catch (error) {
+        if (error instanceof HttpError) return errorResponse(error);
         return json(
           {
-            error:
+            error: redact(
               error instanceof Error ? error.message : "Provider unavailable",
+              providerEnv,
+            ),
           },
           503,
         );
@@ -723,18 +785,36 @@ export class Office extends DurableObject<Env> {
     }
     return json({ error: "Unknown action" }, 404);
   }
-  private async tick() {
-    // An idle office still needs scheduled retention and outbox maintenance.
+  private async tick(scheduledAt = Date.now()) {
     if ((await this.ctx.storage.getAlarm()) === null)
       await this.scheduleAlarm(Date.now() + 1000);
     await retryDeliveries(this.env);
+    const slot = Math.floor(scheduledAt / CRON_INTERVAL_MS) * CRON_INTERVAL_MS;
+    const reviewId = `SCANNER-${slot}`;
+    if (
+      await this.env.DB.prepare("SELECT id FROM scanner_meetings WHERE id=?")
+        .bind(reviewId)
+        .first()
+    )
+      return;
     const { id, config } = await this.config();
+    let review: ScannerReview = {
+      id: reviewId,
+      scheduled_at: slot,
+      candle_timestamp: null,
+      minimum: config.scannerConsensusMin,
+      direction: null,
+      reason: "MARKET_UNAVAILABLE",
+      groups: [],
+    };
+    let aiCase: CaseRow | undefined;
+    let scannedCandle: number | undefined;
     try {
       const { market, derivatives } = await this.marketData(config);
       await this.ctx.storage.delete("market_error");
       const candle = market.M5.at(-1)!.timestamp;
-      if (candle === (await this.ctx.storage.get("last_processed_candle")))
-        return;
+      const unchanged =
+        candle === (await this.ctx.storage.get("last_processed_candle"));
       const scanners = scan(market, config, id);
       const groups = analyzeGroups(
         market,
@@ -744,54 +824,117 @@ export class Office extends DurableObject<Env> {
         Date.now(),
         derivatives,
       );
-      await this.ctx.storage.put("scanners", scanners);
-      await this.ctx.storage.put("groups", groups);
+      await this.ctx.storage.put({ scanners, groups });
       const run = crypto.randomUUID();
       await this.env.DB.batch([
         this.env.DB.prepare(
           "INSERT OR IGNORE INTO scanner_runs VALUES (?,?,?,?,?)",
         ).bind(run, candle, id, "LIVE", Date.now()),
-        ...scanners.map((s) =>
+        ...scanners.map((scanner) =>
           this.env.DB.prepare(
             "INSERT OR IGNORE INTO scanner_outputs SELECT uuid,?,? FROM scanner_runs WHERE candle_timestamp=? AND config_version=? AND mode=?",
-          ).bind(s.name, JSON.stringify(s), candle, id, "LIVE"),
+          ).bind(scanner.name, JSON.stringify(scanner), candle, id, "LIVE"),
         ),
       ]);
       const direction = groupTrigger(groups, config.scannerConsensusMin);
-      if (direction) {
+      const counts = groupComposition(groups);
+      review = {
+        ...review,
+        candle_timestamp: candle,
+        direction,
+        groups: groups.map(({ group, direction, strength, reasons }) => ({
+          group,
+          direction,
+          strength,
+          reasons,
+        })),
+        reason: unchanged
+          ? "CANDLE_UNCHANGED"
+          : direction
+            ? "AI_QUEUED"
+            : counts.BUY > 0 && counts.BUY === counts.SELL
+              ? "DIRECTION_CONFLICT"
+              : "NO_CONSENSUS",
+      };
+      if (direction && !unchanged) {
         const { time: last } = await this.cooldownAnchor(config, direction);
-        if (Date.now() - last >= config.cooldownMinutes * 60000) {
-          await this.createCase(
-            market,
-            scanners,
-            groups,
-            config,
-            id,
-            "LIVE",
-            "AUTO",
-            direction,
-            `${MARKET}:${candle}:LIVE`,
-            true,
-            "NONE",
-          );
-          if (!(await this.ctx.storage.get("active")))
-            await this.ctx.storage.put("office", "TRIGGERED");
+        if (Date.now() - last < config.cooldownMinutes * 60000)
+          review.reason = "COOLDOWN";
+        else {
+          try {
+            aiCase = await this.createCase(
+              market,
+              scanners,
+              groups,
+              config,
+              id,
+              "LIVE",
+              "AUTO",
+              direction,
+              `${MARKET}:${candle}:LIVE`,
+              true,
+              "NONE",
+            );
+            if (!(await this.ctx.storage.get("active")))
+              await this.ctx.storage.put("office", "TRIGGERED");
+          } catch (error) {
+            review.reason =
+              error instanceof Error &&
+              error.message === "Daily AI case budget reached"
+                ? "AI_BUDGET"
+                : "AI_START_FAILED";
+            if (review.reason === "AI_START_FAILED") throw error;
+          }
         }
-      } else if (!(await this.ctx.storage.get("active")))
+      }
+      if (!aiCase && !(await this.ctx.storage.get("active")))
         await this.ctx.storage.put(
           "office",
-          scanners.some((s) => s.direction !== "NONE")
+          scanners.some((scanner) => scanner.direction !== "NONE")
             ? "WATCHING"
             : "MONITORING",
         );
-      await this.ctx.storage.put("last_processed_candle", candle);
-      await this.scheduleAlarm(Date.now() + 1000);
+      scannedCandle = candle;
     } catch (error) {
       await this.ctx.storage.put(
         "market_error",
         error instanceof Error ? error.message : "Market unavailable",
       );
     }
+    if (
+      review.reason === "AI_START_FAILED" &&
+      review.candle_timestamp !== null
+    ) {
+      // Recover a case committed before an actor/storage interruption. Its
+      // idempotency key owns the operation even when the response was lost.
+      aiCase ??=
+        (await this.env.DB.prepare(
+          "SELECT * FROM cases WHERE idempotency_key=?",
+        )
+          .bind(`${MARKET}:${review.candle_timestamp}:LIVE`)
+          .first<CaseRow>()) ?? undefined;
+      if (aiCase) {
+        review.reason = "AI_QUEUED";
+        scannedCandle = review.candle_timestamp;
+        await this.ctx.storage.delete("market_error");
+      }
+    }
+    // Persist every cron review, including neutral/conflicting/missing data,
+    // separately from trading cases. These rows never enter the AI queue.
+    await this.env.DB.prepare(
+      "INSERT OR IGNORE INTO scanner_meetings(id,scheduled_at,snapshot,case_uuid,created_at) VALUES (?,?,?,?,?)",
+    )
+      .bind(
+        review.id,
+        slot,
+        JSON.stringify(review),
+        aiCase?.uuid ?? null,
+        Date.now(),
+      )
+      .run();
+    if (scannedCandle !== undefined)
+      await this.ctx.storage.put("last_processed_candle", scannedCandle);
+    await this.scheduleAlarm(Date.now() + 1000);
   }
   private async repeatCase(key: string, request: unknown) {
     const existing = await this.env.DB.prepare(
@@ -1127,10 +1270,14 @@ export class Office extends DurableObject<Env> {
       pending !== undefined &&
       pending <= Date.now()
     ) {
-      await this.tick();
+      const slot = await this.ctx.storage.get<number>("pending_tick_slot");
+      await this.tick(slot);
       // Keep the event until the scan returns, so a restart can retry it.
-      if ((await this.ctx.storage.get<number>("pending_tick")) === pending)
-        await this.ctx.storage.delete("pending_tick");
+      if (
+        (await this.ctx.storage.get<number>("pending_tick")) === pending &&
+        (await this.ctx.storage.get<number>("pending_tick_slot")) === slot
+      )
+        await this.ctx.storage.delete(["pending_tick", "pending_tick_slot"]);
     }
     await retryDeliveries(this.env);
     // Each canonical actor owns one mode; resume its in-flight work first.
@@ -1331,37 +1478,56 @@ export class Office extends DurableObject<Env> {
     row: CaseRow,
     c: CharacterConfig,
     config: TradingConfig,
+    providerEnv: Env = this.env,
   ): AIRuntime {
     let reserved = 0;
+    const version = async (p: Provider) =>
+      (await credentialInventory(providerEnv)).items.find(
+        (item) => item.id === p,
+      )?.version ?? null;
     return {
       getCircuit: async (p) =>
-        (await this.ctx.storage.get<Circuit>(`circuit:${p}`)) ?? {
-          failures: 0,
-          openedAt: 0,
-        },
+        circuitForCredential(
+          await this.ctx.storage.get<Circuit>(`circuit:${p}`),
+          await version(p),
+        ),
       setCircuit: async (p, value) => {
-        await this.ctx.storage.transaction(async (t) => {
-          const key = `circuit:${p}`,
-            current = (await t.get<Circuit>(key)) ?? {
-              failures: 0,
-              openedAt: 0,
-            };
-          await t.put(
-            key,
-            value.failures === 0
-              ? value
-              : circuitResult(current, false, await this.policy(p)),
-          );
+        await this.serial(async () => {
+          const expected =
+            (await credentialInventory(providerEnv)).items.find(
+              (item) => item.id === p,
+            )?.version ?? null;
+          const current = await this.env.DB.prepare(
+            "SELECT version FROM provider_credentials WHERE provider=?",
+          )
+            .bind(p)
+            .first<{ version: string }>();
+          // A request started with an older key must not reopen the new account's circuit.
+          if ((current?.version ?? null) !== expected) return;
+          await this.ctx.storage.transaction(async (t) => {
+            const key = `circuit:${p}`,
+              current = circuitForCredential(
+                await t.get<Circuit>(key),
+                expected,
+              );
+            await t.put(key, {
+              ...(value.failures === 0
+                ? value
+                : circuitResult(current, false, await this.policy(p))),
+              credentialVersion: expected,
+            });
+          });
         });
       },
       policy: (p) => this.policy(p),
-      acquireCircuit: async (p, policy) =>
-        this.ctx.storage.transaction(async (t) => {
+      acquireCircuit: async (p, policy) => {
+        const expected = await version(p);
+        return this.ctx.storage.transaction(async (t) => {
           const key = `circuit:${p}`;
-          const value = (await t.get<Circuit>(key)) ?? {
-            failures: 0,
-            openedAt: 0,
-          };
+          const value = circuitForCredential(
+            await t.get<Circuit>(key),
+            expected,
+          );
           const state = circuitState(value, Date.now(), policy.cooldownMs);
           if (
             state === "OPEN" ||
@@ -1371,7 +1537,8 @@ export class Office extends DurableObject<Env> {
           if (state === "HALF_OPEN")
             await t.put(key, { ...value, probeUntil: Date.now() + 180000 });
           return true;
-        }),
+        });
+      },
       beforeCall: async (estimate = c.max_output_tokens) => {
         await this.ctx.storage.transaction(async (t) => {
           const key = `calls:${row.uuid}`,
@@ -1405,7 +1572,7 @@ export class Office extends DurableObject<Env> {
             e.status,
             e.tokens,
             e.raw ?? null,
-            redact(e.prompt, this.env),
+            redact(e.prompt, providerEnv),
             Date.now(),
           ),
           this.env.DB.prepare(
@@ -1471,11 +1638,12 @@ export class Office extends DurableObject<Env> {
         .run();
       return invalid;
     }
+    const providerEnv = await resolveProviderEnv(this.env);
     const output = await runCharacter(
-      this.env,
+      providerEnv,
       c,
       context,
-      this.runtime(row, c, config),
+      this.runtime(row, c, config, providerEnv),
     );
     await this.env.DB.prepare(
       "INSERT OR IGNORE INTO ai_character_outputs VALUES (?,?,?)",
@@ -1726,6 +1894,9 @@ export class Office extends DurableObject<Env> {
   private async cleanup() {
     const { config } = await this.config();
     await this.env.DB.batch([
+      this.env.DB.prepare(
+        "DELETE FROM scanner_meetings WHERE created_at<?",
+      ).bind(Date.now() - config.retentionDays * 86400000),
       this.env.DB.prepare(
         "UPDATE ai_runs SET raw=NULL,rendered_prompt=NULL WHERE created_at<? AND (raw IS NOT NULL OR rendered_prompt IS NOT NULL)",
       ).bind(Date.now() - config.retentionDays * 86400000),

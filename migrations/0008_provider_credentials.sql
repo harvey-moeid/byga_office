@@ -1,0 +1,1 @@
+CREATE TABLE provider_credentials (provider TEXT PRIMARY KEY CHECK(provider IN ('openai','gemini','groq','openrouter','mistral','huggingface','cohere','nvidia')), encrypted TEXT NOT NULL CHECK(json_valid(encrypted)), version TEXT NOT NULL, updated_at INTEGER NOT NULL);

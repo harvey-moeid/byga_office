@@ -51,6 +51,7 @@ export const meetingSeats: { position: Point; facing: number }[] = [
 ];
 export function isMeeting(state: string) {
   return [
+    "SCANNER_REVIEW",
     "TRIGGERED",
     "AI_ANALYSIS",
     "AI_DEGRADED",

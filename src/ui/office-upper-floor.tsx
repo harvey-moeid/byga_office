@@ -107,7 +107,8 @@ function buildUpperFloor(detail: boolean): Part[] {
   deck([7.635, UPPER_Y, -2.45], [1.23, 0.18, 7.6]);
   deck([7.635, UPPER_Y, 6.85], [1.23, 0.18, 0.6]);
 
-  box([UPPER_EAST_WALL_X, UPPER_Y + 1.48, 0.45], [0.14, 2.96, 13.25], "darkWood");
+  // A low cutaway wall exposes the stairwell and upstairs furniture.
+  box([UPPER_EAST_WALL_X, UPPER_Y + 0.45, 0.45], [0.14, 0.9, 13.25], "darkWood");
   box([5.0, UPPER_Y + 1.48, -6.1], [6.45, 2.96, 0.14], "darkWood");
 
   // Internal staircase occupies the former floor-one Boss Office edge. It is

@@ -1,23 +1,56 @@
+import { characterIdentity } from "./group-identity";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CharacterId } from "../core/contracts";
-import type { MeetingSnapshot, MeetingTurn } from "../core/meeting";
+import type {
+  MeetingSnapshot,
+  PresentationTurn as MeetingTurn,
+} from "../core/meeting";
 import { Link } from "react-router-dom";
 import { authExpiredEvent, useData } from "./data";
-import { advanceMeeting, speechExcerpt, type MeetingPlayback } from "./meeting";
+import {
+  advanceMeeting,
+  holdMeeting,
+  speechExcerpt,
+  type MeetingPlayback,
+} from "./meeting";
+import {
+  scannerGroupLabels,
+  scannerReviewSummary,
+} from "../core/scanner-meeting";
 import { roles } from "./shared";
 import { characterPeekCopy, type CharacterPresence } from "./character-state";
 import type { CharacterMotion } from "./character-motion";
 
 export function useMeetingPresentation(render3D: boolean) {
-  const data = useData<{ meeting: MeetingSnapshot | null }>(
-    "/office/meeting",
+  const [snapshot, setSnapshot] = useState<MeetingSnapshot | null>(null);
+  const [playback, setPlayback] = useState<MeetingPlayback>();
+  const currentId =
+    snapshot && playback?.phase !== "done" ? snapshot.case_id : undefined;
+  const data = useData<{
+    meeting: MeetingSnapshot | null;
+    requested_meeting?: MeetingSnapshot | null;
+  }>(
+    `/office/meeting${currentId ? `?current=${encodeURIComponent(currentId)}` : ""}`,
     true,
   );
-  const snapshot = data.data?.meeting ?? null;
-  const [playback, setPlayback] = useState<MeetingPlayback>();
+  useEffect(() => {
+    if (!data.data) return;
+    setSnapshot((previous) =>
+      holdMeeting(
+        previous,
+        playback,
+        data.data!.meeting,
+        data.data!.requested_meeting,
+      ),
+    );
+  }, [data.data, playback]);
   const [detail, setDetail] = useState<MeetingTurn>();
   useEffect(() => {
-    const clearPrivateDetail = () => setDetail(undefined);
+    const clearPrivateDetail = () => {
+      setDetail(undefined);
+      setSnapshot(null);
+      setPlayback(undefined);
+    };
     window.addEventListener(authExpiredEvent, clearPrivateDetail);
     return () =>
       window.removeEventListener(authExpiredEvent, clearPrivateDetail);
@@ -74,6 +107,22 @@ export function useMeetingPresentation(render3D: boolean) {
   };
 }
 
+export function turnCopy(turn: MeetingTurn) {
+  return "scanner" in turn
+    ? {
+        direction: turn.scanner.direction,
+        summary: turn.scanner.summary,
+        reasoning: turn.scanner.reasoning,
+        badge: `${turn.scanner.direction} · Scanner`,
+      }
+    : {
+        direction: turn.analysis.vote,
+        summary: turn.analysis.summary,
+        reasoning: turn.analysis.reasoning,
+        badge: `${turn.analysis.vote} · ${turn.analysis.confidence}%`,
+      };
+}
+
 export function CharacterPeekBubble({
   character,
   presence,
@@ -89,13 +138,14 @@ export function CharacterPeekBubble({
   turn?: MeetingTurn;
   onDetails: () => void;
 }) {
-  const voteClass = turn
-    ? `vote-${turn.analysis.vote.toLowerCase().replaceAll("_", "-")}`
+  const copy = turn ? turnCopy(turn) : undefined;
+  const voteClass = copy
+    ? `vote-${copy.direction.toLowerCase().replaceAll("_", "-")}`
     : "";
   return (
     <button
       className={`meeting-bubble character-peek-bubble${character === "boss" ? " boss-bubble" : ""}`}
-      data-vote={turn?.analysis.vote}
+      data-vote={copy?.direction}
       aria-label={`Buka info ${roles[character]}`}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => {
@@ -112,12 +162,8 @@ export function CharacterPeekBubble({
       <span className="character-peek-group">{group}</span>
       {turn ? (
         <>
-          <span className={`speech-vote ${voteClass}`}>
-            {turn.analysis.vote} · {turn.analysis.confidence}%
-          </span>
-          <span className="speech-text">
-            {speechExcerpt(turn.analysis.summary)}
-          </span>
+          <span className={`speech-vote ${voteClass}`}>{copy!.badge}</span>
+          <span className="speech-text">{speechExcerpt(copy!.summary)}</span>
         </>
       ) : (
         <span className="speech-text">
@@ -136,10 +182,12 @@ export function SpeechBubble({
   turn: MeetingTurn;
   onDetails: (turn: MeetingTurn) => void;
 }) {
+  const copy = turnCopy(turn);
   return (
     <button
       className={`meeting-bubble${turn.character === "boss" ? " boss-bubble" : ""}`}
-      data-vote={turn.analysis.vote}
+      data-vote={copy.direction}
+      data-group={characterIdentity(turn.character).label}
       aria-label={`Baca percakapan ${roles[turn.character]}`}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => {
@@ -150,19 +198,27 @@ export function SpeechBubble({
       <strong>
         {roles[turn.character]}{" "}
         <span
-          className={`speech-vote vote-${turn.analysis.vote
+          className={`speech-vote vote-${copy.direction
             .toLowerCase()
             .replaceAll("_", "-")}`}
         >
-          {turn.analysis.vote} · {turn.analysis.confidence}%
+          {copy.direction}
         </span>
       </strong>
-      <span className="speech-text">
-        {speechExcerpt(turn.analysis.summary)}
+      <span
+        className="speech-group"
+        style={{ color: characterIdentity(turn.character).color }}
+      >
+        {characterIdentity(turn.character).label}
       </span>
+      <span className="speech-text">{speechExcerpt(copy.summary)}</span>
       <small>
-        {turn.character === "boss" ? "Keputusan akhir · " : ""}Ketuk untuk
-        detail
+        {"scanner" in turn
+          ? "Scanner · tanpa AI · "
+          : turn.character === "boss"
+            ? "Keputusan akhir · "
+            : ""}
+        Ketuk untuk detail
       </small>
     </button>
   );
@@ -190,7 +246,9 @@ export function MeetingStatus({
         ? "Tim menuju ruang meeting"
         : current
           ? `${roles[current.character]} sedang berbicara`
-          : "Menunggu hasil AI";
+          : snapshot?.kind === "SCANNER"
+            ? "Membahas hasil scanner tanpa AI"
+            : "Menunggu hasil AI";
   const missing = snapshot?.unavailable ?? [];
   // A completed backend case may still be playing its visual discussion.
   // Compact only when the visual team is actually returning to their desks.
@@ -219,9 +277,27 @@ export function MeetingStatus({
       </div>
       {snapshot && (
         <small className="meeting-status-case">
-          Case · {snapshot.case_id}
+          {snapshot.kind === "SCANNER" ? "Review scanner · tanpa AI" : "Case"} ·{" "}
+          {snapshot.case_id}
           {snapshot.cancelled ? ` · ${snapshot.status}` : ""}
         </small>
+      )}
+      {snapshot?.scan && !showSummary && (
+        <div className="meeting-scanner-summary">
+          <small>
+            Cron ·{" "}
+            {new Date(snapshot.scan.scheduled_at).toLocaleTimeString("id-ID", {
+              timeZone: "Asia/Jakarta",
+            })}{" "}
+            WIB
+          </small>
+          <p>{scannerReviewSummary(snapshot.scan)}</p>
+          {snapshot.scan.groups.map((group) => (
+            <span key={group.group}>
+              {scannerGroupLabels[group.group]} · {group.direction}
+            </span>
+          ))}
+        </div>
       )}
       {missing.length > 0 && (
         <>
@@ -301,39 +377,56 @@ export function MeetingDetail({
           </button>
           <small>{caseId}</small>
           <h2 id="meeting-detail-title">{roles[turn.character]}</h2>
-          <p className="meeting-vote">
-            {turn.analysis.vote} · Confidence {turn.analysis.confidence}%
-          </p>
-          <h3>Ringkasan</h3>
-          <p>{turn.analysis.summary}</p>
-          <h3>Penjelasan AI</h3>
-          <p>{turn.analysis.reasoning}</p>
-          {!!turn.analysis.evidence.length && (
+          {"scanner" in turn ? (
             <>
-              <h3>Evidence</h3>
-              {turn.analysis.evidence.map((e, i) => (
-                <p key={i}>
-                  <strong>
-                    {e.code} · {e.direction}
-                  </strong>
-                  <br />
-                  {e.detail}
+              <p className="meeting-vote">
+                {turn.scanner.direction} · Scanner · tanpa AI
+              </p>
+              {turn.scanner.strength !== undefined && (
+                <p>Skor scanner {turn.scanner.strength}/100</p>
+              )}
+              <h3>Ringkasan scanner</h3>
+              <p>{turn.scanner.summary}</p>
+              <h3>Alasan scanner</h3>
+              <p>{turn.scanner.reasoning}</p>
+            </>
+          ) : (
+            <>
+              <p className="meeting-vote">
+                {turn.analysis.vote} · Confidence {turn.analysis.confidence}%
+              </p>
+              <h3>Ringkasan</h3>
+              <p>{turn.analysis.summary}</p>
+              <h3>Penjelasan AI</h3>
+              <p>{turn.analysis.reasoning}</p>
+              {!!turn.analysis.evidence.length && (
+                <>
+                  <h3>Evidence</h3>
+                  {turn.analysis.evidence.map((e, i) => (
+                    <p key={i}>
+                      <strong>
+                        {e.code} · {e.direction}
+                      </strong>
+                      <br />
+                      {e.detail}
+                    </p>
+                  ))}
+                </>
+              )}
+              {!!turn.analysis.risk_flags.length && (
+                <>
+                  <h3>Risk flags</h3>
+                  <p>{turn.analysis.risk_flags.join(" · ")}</p>
+                </>
+              )}
+              {turn.analysis.price_levels && (
+                <p>
+                  Entry {turn.analysis.price_levels.entry} · Stop loss{" "}
+                  {turn.analysis.price_levels.stop_loss} · Take profit{" "}
+                  {turn.analysis.price_levels.take_profit}
                 </p>
-              ))}
+              )}
             </>
-          )}
-          {!!turn.analysis.risk_flags.length && (
-            <>
-              <h3>Risk flags</h3>
-              <p>{turn.analysis.risk_flags.join(" · ")}</p>
-            </>
-          )}
-          {turn.analysis.price_levels && (
-            <p>
-              Entry {turn.analysis.price_levels.entry} · Stop loss{" "}
-              {turn.analysis.price_levels.stop_loss} · Take profit{" "}
-              {turn.analysis.price_levels.take_profit}
-            </p>
           )}
         </>
       )}

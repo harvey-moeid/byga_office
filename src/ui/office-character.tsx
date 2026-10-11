@@ -1,3 +1,4 @@
+import { characterIdentity } from "./group-identity";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import {
@@ -249,6 +250,7 @@ function speechScreenPosition(
     ".home-notices",
     ".scene-controls",
     ".scene-quality",
+    ".scene-group-legend",
     ".scene-fullscreen",
     ".home-menu-button",
     ...(avoidOtherBubbles ? [".meeting-speech-anchor .meeting-bubble"] : []),
@@ -414,7 +416,13 @@ export function OfficeCharacter({
   onMotionChange,
   meetingFloor,
   upperFloorEnabled,
+  positions,
+  speaker,
+  motionReduced: reduced,
 }: {
+  positions: RefObject<Partial<Record<CharacterId, Vector3>>>;
+  speaker?: CharacterId;
+  motionReduced: boolean;
   index: number;
   state: string;
   activity?: OfficeActivity;
@@ -457,7 +465,8 @@ export function OfficeCharacter({
   const meeting = isAttendingMeeting(index, state);
   const activeActivity = meeting ? undefined : activity;
   const coffeeActivity =
-    activeActivity?.kind === "coffee" || activeActivity?.kind === "coffee-break";
+    activeActivity?.kind === "coffee" ||
+    activeActivity?.kind === "coffee-break";
   const target = useMemo<CharacterTarget>(() => {
     if (activeActivity) {
       const [x, z] = activeActivity.destination;
@@ -467,12 +476,7 @@ export function OfficeCharacter({
         facing: activeActivity.facing ?? Math.PI,
       };
     }
-    return characterTarget(
-      index,
-      state,
-      meetingFloor,
-      upperFloorEnabled,
-    );
+    return characterTarget(index, state, meetingFloor, upperFloorEnabled);
   }, [activeActivity, index, meetingFloor, state, upperFloorEnabled]);
   const destination = useMemo(
     () => new Vector3(...target.position),
@@ -481,15 +485,10 @@ export function OfficeCharacter({
   const path = useRef<Vector3[]>([]);
   const direction = useRef(new Vector3());
   const floorTransitioning = useRef(false);
-  const [reduced, setReduced] = useState(
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches,
-  );
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setReduced(media.matches);
-    media.addEventListener("change", update);
-    return () => media.removeEventListener("change", update);
-  }, []);
+  const poseTime = useRef(0);
+  const gaitPhase = useRef(index);
+  const walkBlend = useRef(0);
+  const listenerYaw = useRef(0);
   useEffect(() => {
     arrivedRef.current = false;
     activityArrivedRef.current = undefined;
@@ -506,7 +505,11 @@ export function OfficeCharacter({
   const peekVisible = !speech && !!peek && speechOnScreen;
   const speechPosition = useMemo(
     () =>
-      (element: Object3D, camera: Camera, size: { width: number; height: number }) =>
+      (
+        element: Object3D,
+        camera: Camera,
+        size: { width: number; height: number },
+      ) =>
         speechScreenPosition(
           characterIds[index],
           element,
@@ -521,7 +524,14 @@ export function OfficeCharacter({
     return () => onSpeechReady?.(characterIds[index], false);
   }, [index, speechVisible, onSpeechReady]);
   useFrame(({ clock, camera }, dt) => {
-    if (!root.current || !body.current) return;
+    if (!root.current || !body.current || document.hidden) return;
+    positions.current[characterIds[index]] = position.current;
+    poseTime.current += dt;
+    // Idle actors need fewer pose/projection updates; navigation remains live.
+    const interval = path.current.length || speech || speaker ? 1 / 30 : 1 / 12;
+    if (poseTime.current < interval) return;
+    dt = poseTime.current;
+    poseTime.current = 0;
     // Keep pose damping conservative, but let locomotion follow wall-clock time.
     // Otherwise low-FPS/software WebGL makes characters move in slow motion.
     const delta = Math.min(dt, 0.06);
@@ -561,10 +571,9 @@ export function OfficeCharacter({
             : meeting
               ? 1.8
               : 1.25;
-        position.current.addScaledVector(
-          direction.current,
-          Math.min(distance, movementDelta * travelSpeed),
-        );
+        const step = Math.min(distance, movementDelta * travelSpeed);
+        position.current.addScaledVector(direction.current, step);
+        gaitPhase.current += step * 7.5;
         const target = Math.atan2(direction.current.x, direction.current.z);
         const difference = Math.atan2(
           Math.sin(target - root.current.rotation.y),
@@ -607,8 +616,15 @@ export function OfficeCharacter({
         9,
         delta,
       ) + (decorative ? 0 : breathe);
-    const gait =
-      walking && !reduced ? Math.sin(clock.elapsedTime * 8 + index) * 0.42 : 0;
+    walkBlend.current = MathUtils.damp(
+      walkBlend.current,
+      walking ? 1 : 0,
+      10,
+      delta,
+    );
+    const gait = reduced
+      ? 0
+      : Math.sin(gaitPhase.current) * 0.42 * walkBlend.current;
     const activityKind = activeActivity?.kind;
     const stretching =
       atActivity &&
@@ -714,12 +730,30 @@ export function OfficeCharacter({
           delta,
         );
     }
+    const listener =
+      meeting && sitting && speaker && speaker !== characterIds[index]
+        ? positions.current[speaker]
+        : undefined;
+    const yaw = listener
+      ? Math.atan2(
+          listener.x - position.current.x,
+          listener.z - position.current.z,
+        ) - root.current.rotation.y
+      : 0;
+    listenerYaw.current = MathUtils.damp(
+      listenerYaw.current,
+      listener
+        ? MathUtils.clamp(Math.atan2(Math.sin(yaw), Math.cos(yaw)), -0.55, 0.55)
+        : 0,
+      5,
+      delta,
+    );
     if (head.current) {
-      head.current.rotation.y =
-        decorative && !reduced && !walking
-          ? Math.sin(
-              clock.elapsedTime * (gesturing ? 1.1 : 0.5) + index * 3,
-            ) * (gesturing ? 0.16 : 0.08)
+      head.current.rotation.y = listener
+        ? listenerYaw.current
+        : decorative && !reduced && !walking
+          ? Math.sin(clock.elapsedTime * (gesturing ? 1.1 : 0.5) + index * 3) *
+            (gesturing ? 0.16 : 0.08)
           : 0;
       head.current.rotation.x =
         atActivity && coffeeActivity
@@ -770,16 +804,27 @@ export function OfficeCharacter({
         ref={body}
         scale={[index === 6 ? 1.05 : 1, index === 1 ? 0.98 : 1, 1]}
       >
+        <mesh
+          name={`character-group-badge:${characterIds[index]}`}
+          position={[0.14, 1.03, 0.17]}
+        >
+          <boxGeometry args={[0.085, 0.045, 0.015]} />
+          <meshBasicMaterial
+            color={characterIdentity(characterIds[index]).color}
+            toneMapped={false}
+          />
+        </mesh>
         {decorative ? (
           <RiggedOfficeCharacter
             motion={motion}
             motionReduced={reduced}
+            listenerYaw={listenerYaw}
             showPhone={characterIds[index] === "boss" && state === "DISCORD"}
             style={{
               skin: appearance.skin,
               hair: appearance.hair,
               jacket: outfit.jacket,
-              accent: outfit.accent,
+              accent: characterIdentity(characterIds[index]).color,
               shirt: outfit.shirt,
               trousers: outfit.trousers,
               shoes: outfit.shoes,

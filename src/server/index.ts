@@ -14,9 +14,11 @@ import { consumeApiLimit, limitHeaders, limitedResponse } from "./rate-limit";
 import { isAdmin, json, login, logout, sameOrigin } from "./auth";
 import type { Env } from "./env";
 import { isProviderConfigured } from "./providers";
+import { credentialInventory, resolveProviderEnv } from "./credentials";
 import { chartSchema, readMarket } from "./market";
+import { chartQuery, readChart } from "./chart";
 import type { CaseRow } from "./office";
-import { meetingTurns } from "../core/meeting";
+import { readOfficeMeetings } from "./meetings";
 import {
   boundedBody,
   errorResponse,
@@ -25,12 +27,13 @@ import {
   readJsonObject,
 } from "./http";
 import type { OfficeState } from "../core/api";
-import { privateText, redactPrivateAnalysis } from "./publication";
+import { privateText } from "./publication";
 export { Office } from "./office";
 const adminMethods: Record<string, string[]> = {
   "/config": ["GET", "POST"],
   "/characters": ["GET", "POST"],
   "/providers": ["GET", "POST"],
+  "/credentials": ["GET", "POST"],
   "/prompts": ["GET"],
   "/rollback": ["POST"],
   "/models": ["POST"],
@@ -249,6 +252,7 @@ async function route(request: Request, env: Env): Promise<Response> {
       "/prompts",
       "/rollback",
       "/providers",
+      "/credentials",
       "/models",
       "/test-provider",
       "/emergency",
@@ -321,10 +325,9 @@ async function route(request: Request, env: Env): Promise<Response> {
         discordMeeting: !!env.DISCORD_MEETING_WEBHOOK,
         discordSignal: !!env.DISCORD_SIGNAL_WEBHOOK,
         office: await (await office(env, "/diagnostics")).json(),
-        configured: providers.map((id) => ({
-          id,
-          configured: isProviderConfigured(env, id),
-        })),
+        configured: (await credentialInventory(env)).items.map(
+          ({ id, configured }) => ({ id, configured }),
+        ),
       });
     return json({ error: "Not found" }, 404);
   }
@@ -349,8 +352,9 @@ async function route(request: Request, env: Env): Promise<Response> {
       state: string;
       failures: number;
     }[];
+    const providerEnv = await resolveProviderEnv(env);
     const configured = providers.filter((id) =>
-      isProviderConfigured(env, id),
+      isProviderConfigured(providerEnv, id),
     ).length;
     return json({
       chart_db: chart,
@@ -371,53 +375,15 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json(await officeState(env));
   }
   if (path === "/api/v1/office/meeting") {
-    const activeStatuses =
-      "'REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED'";
-    let current = await env.DB.prepare(
-      `SELECT uuid,id,status FROM cases WHERE mode='LIVE' AND status IN (${activeStatuses}) ORDER BY created_at LIMIT 1`,
-    ).first<{ uuid: string; id: string; status: string }>();
-    // Keep a just-finished meeting available long enough for the visual dialogue
-    // to finish, even when the actual AI pipeline completes between UI polls.
-    current ??= await env.DB.prepare(
-      "SELECT uuid,id,status FROM cases WHERE mode='LIVE' AND status IN ('COMPLETED','NO_CONSENSUS','FAILED','CONFIG_CHANGED','STALE') AND updated_at>=? ORDER BY updated_at DESC,created_at DESC LIMIT 1",
-    )
-      .bind(Date.now() - 180000)
-      .first<{ uuid: string; id: string; status: string }>();
-    if (!current) return json({ meeting: null });
-    const outputs = await env.DB.prepare(
-      "SELECT snapshot FROM ai_character_outputs WHERE case_uuid=?",
-    )
-      .bind(current.uuid)
-      .all<{ snapshot: string }>();
+    const requested = new URL(request.url).searchParams.get("current") ?? undefined;
+    if (requested && !/^[A-Za-z0-9:_-]{1,128}$/.test(requested))
+      throw new HttpError(400, "Invalid meeting ID", "INVALID_MEETING_ID");
     const { config } = (await (await office(env, "/config")).json()) as {
       config: { publicSignals: boolean };
     };
-    const visible = admin || config.publicSignals;
-    const turns = meetingTurns(outputs.results.map((row) => row.snapshot));
-    return json({
-      meeting: {
-        case_id: current.id,
-        status: current.status,
-        finished: [
-          "COMPLETED",
-          "NO_CONSENSUS",
-          "FAILED",
-          "CONFIG_CHANGED",
-          "STALE",
-        ].includes(current.status),
-        cancelled: ["FAILED", "CONFIG_CHANGED", "STALE"].includes(
-          current.status,
-        ),
-        ...turns,
-        prices_private: !visible,
-        turns: turns.turns.map((turn) => ({
-          ...turn,
-          analysis: visible
-            ? turn.analysis
-            : redactPrivateAnalysis(turn.analysis),
-        })),
-      },
-    });
+    return json(
+      await readOfficeMeetings(env, admin || config.publicSignals, requested),
+    );
   }
   if (path === "/api/v1/scanners") {
     const state = (await (await office(env, "/state")).json()) as {
@@ -490,6 +456,27 @@ async function route(request: Request, env: Env): Promise<Response> {
         };
       }),
     );
+  }
+  if (path === "/api/v1/market/candles") {
+    const now = Date.now();
+    const query = chartQuery(url.searchParams, now);
+    try {
+      return json(
+        await readChart(env, query, now, await marketProcessingDelay(env)),
+      );
+    } catch (error) {
+      console.error(
+        "chart_unavailable",
+        error instanceof Error ? error.message : String(error),
+      );
+      return json(
+        {
+          error: "Data chart belum tersedia. Coba lagi nanti.",
+          code: "CHART_UNAVAILABLE",
+        },
+        503,
+      );
+    }
   }
   if (path === "/api/v1/market/status") {
     try {

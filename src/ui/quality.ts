@@ -24,12 +24,11 @@ export const profiles: Record<
     shadows: false,
     shadowSize: 256,
     decorative: false,
-    upperFloor: false,
+    upperFloor: true,
   },
   medium: {
-    // Spend the medium render budget on the extra floor and complete
-    // procedural furnishing instead of realtime effects.
-    dpr: 1,
+    // Both lightweight profiles retain the complete office. Low keeps DPR 1; Medium adds sharper edges on high-density displays.
+    dpr: 1.25,
     shadows: false,
     shadowSize: 256,
     decorative: false,
@@ -61,11 +60,7 @@ export function initialQuality(cores: number, memory = 8): Quality {
 
 export function adaptQuality(current: Quality, fps: number): Quality {
   if (fps >= 30) return current;
-  return current === "ultra"
-    ? "high"
-    : current === "high"
-      ? "medium"
-      : "low";
+  return current === "ultra" ? "high" : current === "high" ? "medium" : "low";
 }
 
 export function parseQualityMode(value: string | null): QualityMode {

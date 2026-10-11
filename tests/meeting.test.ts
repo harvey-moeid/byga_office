@@ -96,9 +96,10 @@ describe("meeting presentation", () => {
     expect(state.phase).toBe("returning");
     expect(state.speaker).toBeUndefined();
   });
-  it("keeps a concise two-sentence excerpt without changing the full output", () => {
-    expect(speechExcerpt("Satu. Dua! Tiga.")).toBe("Satu. Dua!");
-    expect(speechExcerpt("a".repeat(500))).toHaveLength(188);
+  it("keeps a concise single-sentence excerpt without changing the full output", () => {
+    expect(speechExcerpt("Satu. Dua! Tiga.")).toBe("Satu.");
+    expect(speechExcerpt("a".repeat(500))).toHaveLength(118);
+    expect(speechExcerpt("Volume naik 1.25 kali. Entry 0.0012." )).toBe("Volume naik 1.25 kali.");
     expect(analysis.reasoning).toContain("nyata");
   });
 });

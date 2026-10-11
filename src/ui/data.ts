@@ -191,7 +191,7 @@ export function useData<T>(path: string, poll: boolean | number = false) {
         path.startsWith("/signals") ||
         path.startsWith("/cases/") ||
         path.startsWith("/characters/") ||
-        path === "/office/meeting"
+        path.split("?")[0] === "/office/meeting"
       ))
         return;
       clearTimeout(timer);
