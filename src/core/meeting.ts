@@ -1,5 +1,7 @@
 import {
   analysisSchema,
+  aiVoterCountSchema,
+  caseParticipants,
   characterIds,
   type Analysis,
   type CharacterId,
@@ -32,11 +34,25 @@ export interface MeetingSnapshot {
   turns: PresentationTurn[];
   unavailable: CharacterId[];
   failureReasons?: Partial<Record<CharacterId, string>>;
+  participants?: CharacterId[];
+}
+
+/** Legacy cases keep eight voters; only role IDs cross the public API. */
+export function participantsFromContext(text?: string): CharacterId[] {
+  const snapshot = text ? JSON.parse(text) : {};
+  return caseParticipants({
+    aiVoterCount: aiVoterCountSchema
+      .default(8)
+      .parse(snapshot.config?.aiVoterCount),
+  });
 }
 
 // Publish only validated character output, never prompts, provider metadata or
 // internal case snapshots. Missing/failed output does not become invented speech.
-export function meetingTurns(snapshots: string[]) {
+export function meetingTurns(
+  snapshots: string[],
+  participants: readonly CharacterId[] = characterIds,
+) {
   const turns: MeetingTurn[] = [];
   const unavailable: CharacterId[] = [];
   const failureReasons: Partial<Record<CharacterId, string>> = {};
@@ -48,6 +64,7 @@ export function meetingTurns(snapshots: string[]) {
     }
   });
   for (const character of characterIds) {
+    if (!participants.includes(character)) continue;
     const saved = results.find((result) => result?.id === character);
     if (!saved) continue;
     const parsed = analysisSchema.safeParse(saved.output);

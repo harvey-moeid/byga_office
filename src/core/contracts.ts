@@ -47,7 +47,9 @@ const weights = z
     (v) => Math.abs(v.reduce((a, b) => a + b, 0) - 100) < 1e-6,
     "Weights must total 100",
   );
+export const aiVoterCountSchema = z.union([z.literal(4), z.literal(8)]);
 export const configSchema = z.object({
+  aiVoterCount: aiVoterCountSchema.default(8),
   scannerConsensusMin: z.number().int().min(1).max(4).default(2),
   scanner: z.object({
     ema: z
@@ -110,6 +112,7 @@ export const configSchema = z.object({
 });
 export type TradingConfig = z.infer<typeof configSchema>;
 export const defaultConfig: TradingConfig = {
+  aiVoterCount: 8,
   scannerConsensusMin: 2,
   scanner: {
     ema: [20, 50, 200],
@@ -216,7 +219,7 @@ export const workersAIModel = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 export function providerLabel(provider: string) {
   return provider === "workers-ai" ? "Cloudflare Workers AI" : provider;
 }
-export const characterIds = [
+export const votingAnalystIds = [
   "trend",
   "structure",
   "momentum",
@@ -225,9 +228,22 @@ export const characterIds = [
   "quant",
   "derivatives",
   "positioning",
-  "risk",
-  "boss",
 ] as const;
+export const compactVoterIds = [
+  "trend",
+  "structure",
+  "volume",
+  "derivatives",
+] as const;
+export function aiVoters(config: Pick<TradingConfig, "aiVoterCount">) {
+  return config.aiVoterCount === 4 ? compactVoterIds : votingAnalystIds;
+}
+export function caseParticipants(
+  config: Pick<TradingConfig, "aiVoterCount">,
+): CharacterId[] {
+  return [...aiVoters(config), "risk", "boss"];
+}
+export const characterIds = [...votingAnalystIds, "risk", "boss"] as const;
 export type CharacterId = (typeof characterIds)[number];
 export const avatarPresets = [
   "professional",

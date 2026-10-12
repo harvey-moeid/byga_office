@@ -47,6 +47,14 @@ function playback(
 }
 
 describe("3D character presence", () => {
+  it("keeps analysts excluded from compact meetings at their desks during gathering, speech and return", () => {
+    const compact = { ...snapshot, participants: ["trend", "structure", "volume", "derivatives", "risk", "boss"] as MeetingSnapshot["participants"] };
+    for (const phase of ["gathering", "speaking", "returning"] as const) {
+      expect(characterPresence("quant", { snapshot: compact, playback: playback(phase) })).toBe("MONITORING");
+      expect(characterPresence("momentum", { snapshot: compact, playback: playback(phase) })).toBe("MONITORING");
+    }
+    expect(characterPresence("structure", { snapshot: compact, playback: playback("gathering") })).toBe("WALKING TO MEETING");
+  });
   it("describes walking and decorative activity from actual motion", () => {
     expect(characterPeekCopy("WALKING TO MEETING", "walk")).toBe(
       "Menuju ruang meeting.",

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   analysisGroups,
   analysisSchema,
+  aiVoters,
+  caseParticipants,
   candleSchema,
   caseStopMessage,
   configSchema,
@@ -39,6 +41,28 @@ import {
   trigger,
   voting,
 } from "../src/core/engine";
+describe("4/8 AI voting configuration", () => {
+  it("preserves eight voters for legacy settings, validates counts, and represents each group once in compact mode", () => {
+    const { aiVoterCount: omitted, ...legacy } = defaultConfig;
+    expect(omitted).toBe(8);
+    expect(configSchema.parse(legacy).aiVoterCount).toBe(8);
+    for (const aiVoterCount of [0, 2, 6, 10, "4", null])
+      expect(configSchema.safeParse({ ...defaultConfig, aiVoterCount }).success).toBe(false);
+    expect(aiVoters(defaultConfig)).toHaveLength(8);
+    const compact = aiVoters({ aiVoterCount: 4 });
+    expect(compact).toEqual(["trend", "structure", "volume", "derivatives"]);
+    expect(new Set(compact.map(analystGroup))).toEqual(new Set(analysisGroups));
+    expect(caseParticipants({ aiVoterCount: 4 })).toEqual([...compact, "risk", "boss"]);
+  });
+  it("scales successful-output quorum and confidence to the selected voters while retaining the two-directional-vote guard", () => {
+    const four = analysts(["BUY", "BUY", "SELL", "UNAVAILABLE"]);
+    expect(voting(four, "SELL")).toMatchObject({ direction: "BUY", degraded: false, tie: false });
+    expect(voting(analysts(["BUY", "SELL", "UNAVAILABLE", "UNAVAILABLE"]), "SELL", "BUY")).toMatchObject({ direction: "BUY", tie: true });
+    expect(voting(analysts(["BUY", "UNAVAILABLE", "UNAVAILABLE", "UNAVAILABLE"]), "SELL")).toMatchObject({ direction: "SELL", degraded: true });
+    expect(voting(analysts(["BUY", "NO_TRADE", "NO_TRADE", "NO_TRADE"]), "SELL").flags).toContain("AI_ABSTENTION_FALLBACK");
+    expect(confidence("BUY", groups(["BUY", "BUY", "SELL", "NONE"]), four, ["BUY", "NONE", "SELL"], { ...defaultConfig, aiVoterCount: 4 }).ai).toBe(50);
+  });
+});
 export function candles(count = 300, trend = 0.02): Candle[] {
   return Array.from({ length: count }, (_, i) => {
     const close = 100 + Math.sin(i / 8) * 8 + i * trend;

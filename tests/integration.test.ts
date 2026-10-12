@@ -886,6 +886,52 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     expect(JSON.stringify(result.result)).toContain("STRICT replay failed");
     failure = "none";
   }, 20000);
+  it("runs only four voters plus Risk/Boss in live and simulation, and STRICT replay preserves the historical council after switching to eight", async () => {
+    scenario = "BUY";
+    failure = "none";
+    const roster = ["trend", "structure", "volume", "derivatives", "risk", "boss"];
+    expect((await call("/admin/credentials", { id: "openrouter", action: "SAVE", key: "fixture-four-voter-account-key", expectedVersion: null })).status).toBe(200);
+    expect((await call("/admin/config", { config: { ...defaultConfig, aiVoterCount: 4, publicSignals: true }, activation: "NEXT CASE" })).status).toBe(200);
+    const db = await mf.getD1Database("DB");
+    const check = async (item: { id: string; uuid: string }) => {
+      const result = await done(item.id);
+      expect(result.status, JSON.stringify(result.result)).toBe("COMPLETED");
+      const context = result.context as { config: { aiVoterCount: number }; characters: { id: string }[] };
+      expect(context.config.aiVoterCount).toBe(4);
+      expect(context.characters.map(c => c.id)).toEqual(roster);
+      const outputs = await db.prepare("SELECT character_id FROM ai_character_outputs WHERE case_uuid=? ORDER BY character_id").bind(item.uuid).all<{ character_id: string }>();
+      expect(outputs.results.map(output => output.character_id)).toEqual([...roster].sort());
+      return result;
+    };
+    try {
+      const start = aiRequests;
+      const request = { focus: "NONE", sendDiscord: false, idempotencyKey: "compact-live-pipeline" };
+      const response = await call("/admin/emergency", request);
+      expect(response.status).toBe(202);
+      const live = await response.json() as { id: string; uuid: string };
+      const result = await check(live);
+      expect(result.result).toMatchObject({ vote: { counts: { BUY: 4, SELL: 0, NO_TRADE: 0, UNAVAILABLE: 0 } } });
+      expect(aiRequests - start).toBe(6);
+      expect(await (await call("/admin/emergency", request)).json()).toMatchObject({ id: live.id });
+      expect(aiRequests - start).toBe(6);
+      const meeting = await (await call(`/office/meeting?current=${live.id}`, undefined, false)).json() as { requested_meeting: { participants: string[]; turns: { character: string }[] } };
+      expect(meeting.requested_meeting.participants).toEqual(roster);
+      expect(meeting.requested_meeting.turns.map(turn => turn.character)).toEqual(roster);
+      const simulation = { timestamp: Date.now() - 600000, configMode: "CURRENT", replayMode: "COMPATIBLE", idempotencyKey: "compact-simulation-pipeline" };
+      const compatible = await call("/admin/simulation", simulation);
+      expect(compatible.status).toBe(202);
+      await check(await compatible.json() as { id: string; uuid: string });
+      expect(aiRequests - start).toBe(12);
+      expect((await call("/admin/config", { config: { ...defaultConfig, aiVoterCount: 8, publicSignals: true }, activation: "NEXT CASE" })).status).toBe(200);
+      const strict = await call("/admin/simulation", { ...simulation, replayMode: "STRICT", historicalCaseId: live.id, idempotencyKey: "compact-strict-pipeline" });
+      expect(strict.status).toBe(202);
+      await check(await strict.json() as { id: string; uuid: string });
+      expect(aiRequests - start).toBe(18);
+      expect(await (await call("/admin/config")).json()).toMatchObject({ config: { aiVoterCount: 8 } });
+    } finally {
+      await call("/admin/config", { config: { ...defaultConfig, publicSignals: true }, activation: "NEXT CASE" });
+    }
+  }, 30000);
   it("market repository remains unchanged; usage/audit stored and no secret leaks", async () => {
     const market = await mf.getD1Database("CHART_DB");
     expect(

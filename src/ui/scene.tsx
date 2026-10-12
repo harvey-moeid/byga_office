@@ -294,7 +294,12 @@ function CameraView({
                 height: hud.height,
               }
             : undefined,
-          Math.min(buttons?.top ?? canvas.bottom, legend?.top ?? canvas.bottom) - canvas.top - 12,
+          Math.min(
+            buttons?.top ?? canvas.bottom,
+            legend?.top ?? canvas.bottom,
+          ) -
+            canvas.top -
+            12,
         );
         occupancy = [
           (0.72 * rect.width) / size.width,
@@ -569,6 +574,7 @@ export default function OfficeScene({
   scanners = [],
   avatars = {},
   meetingId,
+  meetingParticipants,
   speech,
   onSpeechDetails,
   onSpeechReady,
@@ -582,6 +588,7 @@ export default function OfficeScene({
   scanners?: ScannerOutput[];
   avatars?: Partial<Record<CharacterId, AvatarPreset>>;
   meetingId?: string;
+  meetingParticipants?: CharacterId[];
   speech?: MeetingTurn;
   onSpeechDetails?: (turn: MeetingTurn) => void;
   onSpeechReady?: (id: CharacterId, visible: boolean) => void;
@@ -1075,7 +1082,11 @@ export default function OfficeScene({
                 speaker={speech?.character}
                 motionReduced={reduced}
                 avatar={avatars[id] ?? "professional"}
-                state={state}
+                state={
+                  meetingParticipants && !meetingParticipants.includes(id)
+                    ? "MONITORING"
+                    : state
+                }
                 activity={activities[id]}
                 quality={quality}
                 meetingFloor={meetingFloor}

@@ -142,6 +142,9 @@ export function characterPresence(
   if (!playback || !snapshot || playback.phase === "done")
     return activity ? activityLabels[activity] : "MONITORING";
 
+  if (snapshot.participants && !snapshot.participants.includes(id))
+    return "MONITORING";
+
   if (playback.phase === "returning") return "RETURNING";
 
   const isBoss = id === "boss";

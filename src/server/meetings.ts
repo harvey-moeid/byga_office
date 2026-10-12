@@ -1,4 +1,8 @@
-import { meetingTurns, type MeetingSnapshot } from "../core/meeting";
+import {
+  meetingTurns,
+  participantsFromContext,
+  type MeetingSnapshot,
+} from "../core/meeting";
 import {
   CRON_INTERVAL_MS,
   scannerMeeting,
@@ -12,6 +16,7 @@ interface MeetingCase {
   id: string;
   status: string;
   created_at: number;
+  context: string;
 }
 interface ReviewRow {
   id: string;
@@ -30,7 +35,11 @@ async function caseMeeting(
   )
     .bind(current.uuid)
     .all<{ snapshot: string }>();
-  const turns = meetingTurns(outputs.results.map((row) => row.snapshot));
+  const participants = participantsFromContext(current.context);
+  const turns = meetingTurns(
+    outputs.results.map((row) => row.snapshot),
+    participants,
+  );
   const cancelled = [
     "FAILED",
     "CONFIG_CHANGED",
@@ -41,6 +50,7 @@ async function caseMeeting(
   return {
     case_id: current.id,
     kind: "AI",
+    participants,
     ...(scan ? { scan } : {}),
     status: current.status,
     finished:
@@ -58,7 +68,7 @@ async function reviewMeeting(env: Env, row: ReviewRow, visible: boolean) {
   const review = JSON.parse(row.snapshot) as ScannerReview;
   if (row.case_uuid) {
     const current = await env.DB.prepare(
-      "SELECT uuid,id,status,created_at FROM cases WHERE uuid=? AND mode='LIVE'",
+      "SELECT uuid,id,status,created_at,context FROM cases WHERE uuid=? AND mode='LIVE'",
     )
       .bind(row.case_uuid)
       .first<MeetingCase>();
@@ -72,7 +82,7 @@ export async function readOfficeMeetings(
   requestedId?: string,
 ) {
   const active = await env.DB.prepare(
-    "SELECT uuid,id,status,created_at FROM cases WHERE mode='LIVE' AND status IN ('REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED') ORDER BY created_at LIMIT 1",
+    "SELECT uuid,id,status,created_at,context FROM cases WHERE mode='LIVE' AND status IN ('REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED') ORDER BY created_at LIMIT 1",
   ).first<MeetingCase>();
   const latestReview = await env.DB.prepare(
     "SELECT * FROM scanner_meetings WHERE created_at>=? ORDER BY scheduled_at DESC LIMIT 1",
@@ -94,7 +104,7 @@ export async function readOfficeMeetings(
     );
   } else {
     const recent = await env.DB.prepare(
-      "SELECT uuid,id,status,created_at FROM cases WHERE mode='LIVE' AND status IN ('COMPLETED','NO_CONSENSUS','FAILED','CONFIG_CHANGED','STALE','DIRECTION_CHANGED') AND updated_at>=? ORDER BY created_at DESC LIMIT 1",
+      "SELECT uuid,id,status,created_at,context FROM cases WHERE mode='LIVE' AND status IN ('COMPLETED','NO_CONSENSUS','FAILED','CONFIG_CHANGED','STALE','DIRECTION_CHANGED') AND updated_at>=? ORDER BY created_at DESC LIMIT 1",
     )
       .bind(Date.now() - 180_000)
       .first<MeetingCase>();
@@ -110,7 +120,7 @@ export async function readOfficeMeetings(
   if (meeting?.case_id === requestedId) requested = meeting;
   else {
     const current = await env.DB.prepare(
-      "SELECT uuid,id,status,created_at FROM cases WHERE id=? AND mode='LIVE'",
+      "SELECT uuid,id,status,created_at,context FROM cases WHERE id=? AND mode='LIVE'",
     )
       .bind(requestedId)
       .first<MeetingCase>();

@@ -414,6 +414,10 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
                 defaultConfig.scannerConsensusMin}{" "}
               · {analysisGroups.length} group
             </small>
+            <small>
+              Voting case baru: {state.data?.ai_voter_count ?? "—"} AI +
+              Risk/Boss
+            </small>
           </div>
         </div>
       )}
@@ -458,6 +462,11 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
                 state={meeting.active ? meeting.playback!.stage : office}
                 meetingId={
                   meeting.active ? meeting.snapshot?.case_id : undefined
+                }
+                meetingParticipants={
+                  meeting.active
+                    ? meeting.snapshot?.participants
+                    : state.data?.active?.participants
                 }
                 speech={meeting.active ? meeting.current : undefined}
                 onSpeechDetails={meeting.openDetails}
