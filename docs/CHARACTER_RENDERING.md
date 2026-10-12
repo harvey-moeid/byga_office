@@ -1,5 +1,20 @@
 # Character rendering contract
 
+## Agency avatar renderer
+
+The office now uses the same five textured, skinned Microsoft Rocketbox models as `harvey-moeid/byga-agency`. Assets are bundled under `public/avatars/`; `manifest.json` records the original source, checksums and clips, and `LICENSE-Rocketbox.txt` includes the MIT attribution. No runtime CDN or avatar account is needed.
+
+`src/ui/agency-character.tsx` clones each skeleton independently and crossfades the bundled Idle, Walk, Read, Present and Type clips. Stable character indices select models cyclically; existing character IDs, roles, group colors, click handlers, world navigation, speech routing and meeting attendance remain authoritative in `office-character.tsx`.
+
+Workstation typing applies arm IK to reach the existing keyboard. Standing talk/stretch uses Present; coffee/review uses Read. Seated idle, typing and meeting speech all use the seated Type clip so a speaker remains seated. These are visual approximations: dedicated coffee, stretch, neutral meeting and seated speech clips, phone props and listener head tracking are not present in the agency assets. Reduced motion freezes the model animation while required world travel/seat transitions remain controlled by the office state machine.
+
+All quality levels use the textured models. Only High/Ultra enable avatar shadows; this renderer does not yet provide separate lower-polygon model assets. The procedural renderer is retained as the loading/error fallback. Geometry, materials and textures from the GLTF cache are shared; skeletons and animation actions are independent.
+
+`tests/agency-character.test.ts` verifies asset checksums, embedded textures, skeletons, animation clips and license. Browser acceptance checks successful agency GLB loading and WebGL context-loss behavior.
+
+## Procedural fallback contract (previous renderer)
+
+
 Phase 1 replaces the decorative character renderer without changing the trading or office state machines.
 
 ## Quality contract

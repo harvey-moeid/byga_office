@@ -24,7 +24,7 @@ import {
   type WorldPoint,
 } from "./multi-floor-navigation";
 import type { MeetingFloor } from "./meeting-venue";
-import { RiggedOfficeCharacter } from "./rigged-character";
+import { RiggedOfficeCharacter } from "./agency-character";
 import type { Quality } from "./quality";
 import { advanceCharacterRoute } from "./character-locomotion";
 import { characterMotion, type CharacterMotion } from "./character-motion";

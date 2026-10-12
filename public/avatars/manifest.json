@@ -1,0 +1,77 @@
+{
+  "repository": "microsoft/Microsoft-Rocketbox",
+  "commit": "0943055db6ec570bcef9f2c8b41c9e5467c808f9",
+  "license": "MIT",
+  "avatars": [
+    {
+      "name": "aria",
+      "source": "Female_Adult_03",
+      "bytes": 2238972,
+      "sha256": "e1b54d6a302f4950427b9a821344fb52536f79f023ff71682f666a834e4db946",
+      "clips": [
+        "Idle",
+        "Walk",
+        "Read",
+        "Present",
+        "Type"
+      ]
+    },
+    {
+      "name": "nova",
+      "source": "Female_Adult_08",
+      "bytes": 2022548,
+      "sha256": "b8929a52eef3651bb0857848b7187abd7257e4353e20be496a24ce62bfb67872",
+      "clips": [
+        "Idle",
+        "Walk",
+        "Read",
+        "Present",
+        "Type"
+      ]
+    },
+    {
+      "name": "kai",
+      "source": "Male_Adult_03",
+      "bytes": 2166404,
+      "sha256": "3a65f6c8b51061fac7564f3a451a0492aa5f7942123254a0c9ac9590ae44623c",
+      "clips": [
+        "Idle",
+        "Walk",
+        "Read",
+        "Present",
+        "Type"
+      ]
+    },
+    {
+      "name": "leo",
+      "source": "Male_Adult_08",
+      "bytes": 1939800,
+      "sha256": "0b5d0dd6e204d1200d84970cb0d1e0b9a93e59abeee52fdd38a2c7334115bf67",
+      "clips": [
+        "Idle",
+        "Walk",
+        "Read",
+        "Present",
+        "Type"
+      ]
+    },
+    {
+      "name": "iris",
+      "source": "Female_Adult_01",
+      "bytes": 2103380,
+      "sha256": "e0f1fccd5d4c5e92c6969735b3d58accf3a10f5d6e7938a8b2029aef16ff2b12",
+      "clips": [
+        "Idle",
+        "Walk",
+        "Read",
+        "Present",
+        "Type"
+      ]
+    }
+  ],
+  "optimization": {
+    "quaternionToleranceRadians": 0.004,
+    "translationTolerance": 0.0006,
+    "opaqueTextureQuality": 86
+  }
+}
