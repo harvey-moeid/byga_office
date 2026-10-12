@@ -655,7 +655,7 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   const errors: string[] = [];
   const rigLoads: number[] = [];
   page.on("response", (response) => {
-    if (new URL(response.url()).pathname === "/models/byga/rigged-office-humanoid.gltf")
+    if (/\/avatars\/.*\.glb$/.test(new URL(response.url()).pathname))
       rigLoads.push(response.status());
   });
   page.on("pageerror", (e) => errors.push(e.message));
