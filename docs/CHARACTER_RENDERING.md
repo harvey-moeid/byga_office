@@ -8,6 +8,8 @@ The office now uses the same five textured, skinned Microsoft Rocketbox models a
 
 Workstation typing applies arm IK to reach the existing keyboard. Standing talk/stretch uses Present; coffee/review uses Read. Seated idle, typing and meeting speech all use the seated Type clip so a speaker remains seated. These are visual approximations: dedicated coffee, stretch, neutral meeting and seated speech clips, phone props and listener head tracking are not present in the agency assets. Reduced motion freezes the model animation while required world travel/seat transitions remain controlled by the office state machine.
 
+Each of the ten office character indices has a unique, stable clothing color in `agency-clothing.ts`. Per-model UV masks recolor clothing while preserving fabric shading and leaving skin/hair textures alone. Body materials are cloned per actor and disposed independently; GLB textures and geometry remain shared. Model/cut reuse is intentional: this is ten distinct colorways of five models, not ten different garment meshes. `scripts/avatars/clothing-masks.py` rebuilds bundled PNG masks using Python/Pillow; neither is a runtime dependency.
+
 All quality levels use the textured models. Only High/Ultra enable avatar shadows; this renderer does not yet provide separate lower-polygon model assets. The procedural renderer is retained as the loading/error fallback. Geometry, materials and textures from the GLTF cache are shared; skeletons and animation actions are independent.
 
 `tests/agency-character.test.ts` verifies asset checksums, embedded textures, skeletons, animation clips and license. Browser acceptance checks successful agency GLB loading and WebGL context-loss behavior.

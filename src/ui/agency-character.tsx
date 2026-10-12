@@ -7,10 +7,12 @@ import {
   type ReactNode,
 } from "react";
 import { useFrame } from "@react-three/fiber";
-import { useAnimations, useGLTF } from "@react-three/drei";
+import { useAnimations, useGLTF, useTexture } from "@react-three/drei";
 import { AnimationAction, Mesh, Vector3, Quaternion, type Bone } from "three";
 import { clone } from "three/addons/utils/SkeletonUtils.js";
 import { RiggedOfficeCharacter as ProceduralCharacter } from "./rigged-character";
+
+import { agencyOutfitColor, dressAgencyCharacter } from "./agency-clothing";
 
 type Props = Parameters<typeof ProceduralCharacter>[0];
 const AVATARS = ["aria", "nova", "kai", "leo", "iris"] as const;
@@ -30,7 +32,10 @@ class AvatarBoundary extends Component<
 
 function AgencyCharacter(props: Props & { url: string }) {
   const gltf = useGLTF(props.url);
-  const root = useMemo(() => {
+  const mask = useTexture(props.url.replace(".glb", "-clothing-mask.png"));
+  mask.flipY = false;
+  const outfitColor = agencyOutfitColor(props.phase);
+  const character = useMemo(() => {
     const model = clone(gltf.scene);
     model.traverse((object) => {
       if (object instanceof Mesh) {
@@ -40,8 +45,14 @@ function AgencyCharacter(props: Props & { url: string }) {
         object.frustumCulled = false;
       }
     });
-    return model;
-  }, [gltf.scene, props.quality]);
+    const materials = dressAgencyCharacter(model, mask, outfitColor);
+    return { root: model, materials };
+  }, [gltf.scene, props.quality, mask, outfitColor]);
+  const root = character.root;
+  useEffect(
+    () => () => character.materials.forEach((material) => material.dispose()),
+    [character.materials],
+  );
   const clips = useMemo(
     () =>
       gltf.animations.map((clip) => {
