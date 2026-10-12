@@ -73,7 +73,11 @@ export function ProviderKeys({ onSaved }: { onSaved: () => void }) {
       setDraftVersion(undefined);
       setShow(false);
       try {
-        await api<CredentialInventory>("/admin/credentials", parsed.data);
+        const result = await api<CredentialInventory>(
+          "/admin/credentials",
+          parsed.data,
+        );
+        inventory.replace(result);
         setMessage(
           remove
             ? "Key dari UI dihapus. Status provider diperbarui."
@@ -91,7 +95,6 @@ export function ProviderKeys({ onSaved }: { onSaved: () => void }) {
               ? "Penyimpanan API key belum tersedia di server."
               : "Permintaan belum dapat dipastikan. Periksa status terbaru sebelum mencoba lagi; masukkan ulang key bila perlu.",
         );
-      } finally {
         inventory.retry();
       }
     });

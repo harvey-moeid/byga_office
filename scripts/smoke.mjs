@@ -44,9 +44,17 @@ assert.ok(Object.hasOwn(meeting, "meeting"), "Meeting presentation endpoint miss
 if (meeting.meeting) {
   assert.equal(typeof meeting.meeting.case_id, "string");
   assert.ok(Array.isArray(meeting.meeting.turns));
-  assert.ok(meeting.meeting.turns.every(turn =>
-    ["trend", "structure", "momentum", "liquidity", "volume", "quant", "derivatives", "positioning", "risk", "boss"].includes(turn.character) &&
-    typeof turn.analysis.summary === "string" && typeof turn.analysis.reasoning === "string"));
+  for (const turn of meeting.meeting.turns) {
+    assert.ok(turn &&
+      ["trend", "structure", "momentum", "liquidity", "volume", "quant", "derivatives", "positioning", "risk", "boss"].includes(turn.character),
+      "Meeting turn must identify a known office character");
+    // Scanner reviews publish deterministic narration, not AI analysis.
+    const content = turn.source === "SCANNER" ? turn.scanner : turn.analysis;
+    assert.ok(content && typeof content.summary === "string" && typeof content.reasoning === "string",
+      "Meeting turn must include AI analysis or scanner narration with summary and reasoning");
+    if (turn.source === "SCANNER")
+      assert.ok(["BUY", "SELL", "NONE"].includes(content.direction), "Scanner turn direction is invalid");
+  }
 }
 assert.equal(typeof state.office, "string", "Durable Object state missing");
 assert.ok(

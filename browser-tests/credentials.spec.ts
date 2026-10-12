@@ -1,5 +1,5 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
-import { defaultConfig, providers } from "../src/core/contracts";
+import { defaultConfig, formatWib, providers } from "../src/core/contracts";
 import type { CredentialInventory } from "../src/core/credentials";
 
 async function fixture(
@@ -66,6 +66,95 @@ async function open(page: Page) {
   await page.goto("/admin");
   await page.getByRole("button", { name: "Providers", exact: true }).click();
 }
+
+test("rotation and deletion use committed inventory while older reads finish late", async ({
+  page,
+}) => {
+  const firstVersion = "11111111-1111-4111-8111-111111111111";
+  const nextVersion = "22222222-2222-4222-8222-222222222222";
+  let version: string | null = firstVersion;
+  const updatedAt = 1_791_721_500_000;
+  const snapshot = () => {
+    const result = inventory(version);
+    result.items.find((item) => item.id === "openrouter")!.updated_at =
+      version === nextVersion ? updatedAt : null;
+    return result;
+  };
+  let delayedRead: { arrived: () => void; gate: Promise<void> } | undefined;
+  const writes: string[] = [];
+  await fixture(page, async (route, path) => {
+    if (path !== "/admin/credentials") return false;
+    if (route.request().method() === "POST") {
+      const payload = route.request().postDataJSON();
+      expect(payload.expectedVersion).toBe(version);
+      writes.push(payload.action);
+      version = payload.action === "SAVE" ? nextVersion : null;
+      await route.fulfill({ json: snapshot() });
+    } else {
+      const result = snapshot();
+      const delay = delayedRead;
+      if (delay) {
+        delay.arrived();
+        await delay.gate;
+      }
+      await route.fulfill({ json: result });
+    }
+    return true;
+  });
+  await open(page);
+  const status = page.getByLabel("Status API key");
+  const input = page.getByLabel("API key baru", { exact: true });
+  await expect(input).toBeEnabled();
+  await expect(status).toHaveText("Key tersimpan dari Admin");
+
+  const holdRead = async () => {
+    let arrived!: () => void;
+    let release!: () => void;
+    const started = new Promise<void>((resolve) => {
+      arrived = resolve;
+    });
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    delayedRead = { arrived, gate };
+    const response = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/admin/credentials") &&
+        response.request().method() === "GET",
+    );
+    await page.evaluate(() =>
+      document.dispatchEvent(new Event("visibilitychange")),
+    );
+    await started;
+    return async () => {
+      delayedRead = undefined;
+      release();
+      await (await response).finished();
+    };
+  };
+  const finishOldInventory = await holdRead();
+  await input.fill("fixture-only-rotated-key");
+  await page
+    .getByRole("button", { name: "Ganti API key", exact: true })
+    .click();
+  const rotatedStatus = `Key tersimpan dari Admin · Diperbarui ${formatWib(updatedAt)}`;
+  await expect(status).toHaveText(rotatedStatus);
+  await finishOldInventory();
+  await expect(status).toHaveText(rotatedStatus);
+
+  const finishStoredInventory = await holdRead();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page
+    .getByRole("button", { name: "Hapus key dari UI", exact: true })
+    .click();
+  await expect(status).toHaveText("Belum ada API key");
+  await finishStoredInventory();
+  await expect(status).toHaveText("Belum ada API key");
+  await expect(
+    page.getByRole("button", { name: "Hapus key dari UI", exact: true }),
+  ).toBeDisabled();
+  expect(writes).toEqual(["SAVE", "DELETE"]);
+});
 
 test("lost save response clears the key, refreshes committed status and never retries a stored secret", async ({
   page,

@@ -127,6 +127,7 @@ export function useData<T>(path: string, poll: boolean | number = false) {
     updatedAt?: number;
   }>({ path, loading: true });
   const [version, refresh] = useState(0);
+  const revision = useRef(0);
   useEffect(() => {
     let live = true;
     let active: AbortController | undefined;
@@ -145,13 +146,22 @@ export function useData<T>(path: string, poll: boolean | number = false) {
       }
       if (document.hidden && poll) return;
       const request = new AbortController();
+      const requestRevision = revision.current;
       active = request;
       try {
         const data = await api<T>(path, undefined, request.signal);
-        if (live && !request.signal.aborted)
+        if (
+          live &&
+          !request.signal.aborted &&
+          requestRevision === revision.current
+        )
           set({ path, data, loading: false, updatedAt: Date.now() });
       } catch (error) {
-        if (live && !request.signal.aborted)
+        if (
+          live &&
+          !request.signal.aborted &&
+          requestRevision === revision.current
+        )
           set((s) => ({
             ...(error instanceof ApiError && error.status === 401
               ? { path }
@@ -224,7 +234,16 @@ export function useData<T>(path: string, poll: boolean | number = false) {
   const visible: typeof state =
     state.path === path ? state : { path, loading: true };
   const retry = useCallback(() => refresh((v) => v + 1), []);
-  return { ...visible, retry };
+  const replace = useCallback(
+    (data: T) => {
+      // A completed write is newer than reads already in flight. Keep those reads
+      // from restoring the previous version after the action becomes available.
+      revision.current++;
+      set({ path, data, loading: false, updatedAt: Date.now() });
+    },
+    [path],
+  );
+  return { ...visible, retry, replace };
 }
 
 /** SSE is an acceleration layer only; the regular request remains the fallback. */

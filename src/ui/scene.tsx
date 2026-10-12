@@ -1,6 +1,6 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, OrbitControls } from "@react-three/drei";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   TOUCH,
   Vector3,
@@ -1039,7 +1039,11 @@ export default function OfficeScene({
             shadows={profile.shadows}
           />
         )}
-        {profile.decorative && <HybridOfficeAssets />}
+        {/* Keep asynchronous models inside the Canvas Suspense boundary so
+            loading never hides the office DOM and its camera/fullscreen UI. */}
+        <Suspense fallback={null}>
+          {profile.decorative && <HybridOfficeAssets />}
+        </Suspense>
         {profile.decorative && (
           <PremiumOfficeAccents cinematic={quality === "ultra"} />
         )}
@@ -1067,63 +1071,65 @@ export default function OfficeScene({
           <boxGeometry args={[0.75, 2, 2.6]} />
           <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
-        {characterIds.map((id, index) => {
-          const context = characterContexts[id];
-          return (
-            <OfficeCharacter
-              key={id}
-              index={index}
-              positions={positions}
-              speaker={speech?.character}
-              motionReduced={reduced}
-              avatar={avatars[id] ?? "professional"}
-              state={
-                meetingParticipants && !meetingParticipants.includes(id)
-                  ? "MONITORING"
-                  : state
-              }
-              activity={activities[id]}
-              decorative={profile.decorative}
-              meetingFloor={meetingFloor}
-              upperFloorEnabled={profile.upperFloor}
-              onSelect={onSelect}
-              onPeek={
-                context
-                  ? (character) =>
-                      setPeekCharacter((current) =>
-                        current === character ? undefined : character,
-                      )
-                  : undefined
-              }
-              labelHost={labelHost}
-              onSpeechReady={onSpeechReady}
-              onActivityArrive={(id, activity) =>
-                activityArrivalHandler.current(id, activity)
-              }
-              onMotionChange={handleMotionChange}
-              speech={
-                speech?.character === id && onSpeechDetails ? (
-                  <SpeechBubble turn={speech} onDetails={onSpeechDetails} />
-                ) : undefined
-              }
-              peek={
-                peekCharacter === id && context ? (
-                  <CharacterPeekBubble
-                    character={id}
-                    presence={context.presence}
-                    group={context.group}
-                    motion={motions[id]}
-                    turn={context.turn}
-                    onDetails={() => {
-                      setPeekCharacter(undefined);
-                      onSelect(id);
-                    }}
-                  />
-                ) : undefined
-              }
-            />
-          );
-        })}
+        <Suspense fallback={null}>
+          {characterIds.map((id, index) => {
+            const context = characterContexts[id];
+            return (
+              <OfficeCharacter
+                key={id}
+                index={index}
+                positions={positions}
+                speaker={speech?.character}
+                motionReduced={reduced}
+                avatar={avatars[id] ?? "professional"}
+                state={
+                  meetingParticipants && !meetingParticipants.includes(id)
+                    ? "MONITORING"
+                    : state
+                }
+                activity={activities[id]}
+                quality={quality}
+                meetingFloor={meetingFloor}
+                upperFloorEnabled={profile.upperFloor}
+                onSelect={onSelect}
+                onPeek={
+                  context
+                    ? (character) =>
+                        setPeekCharacter((current) =>
+                          current === character ? undefined : character,
+                        )
+                    : undefined
+                }
+                labelHost={labelHost}
+                onSpeechReady={onSpeechReady}
+                onActivityArrive={(id, activity) =>
+                  activityArrivalHandler.current(id, activity)
+                }
+                onMotionChange={handleMotionChange}
+                speech={
+                  speech?.character === id && onSpeechDetails ? (
+                    <SpeechBubble turn={speech} onDetails={onSpeechDetails} />
+                  ) : undefined
+                }
+                peek={
+                  peekCharacter === id && context ? (
+                    <CharacterPeekBubble
+                      character={id}
+                      presence={context.presence}
+                      group={context.group}
+                      motion={motions[id]}
+                      turn={context.turn}
+                      onDetails={() => {
+                        setPeekCharacter(undefined);
+                        onSelect(id);
+                      }}
+                    />
+                  ) : undefined
+                }
+              />
+            );
+          })}
+        </Suspense>
         {qualityMode === "auto" && (
           <PerformanceMonitor quality={quality} onQuality={setQuality} />
         )}
