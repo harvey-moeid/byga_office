@@ -3,6 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import {
   useEffect,
+  useCallback,
   useMemo,
   useRef,
   useState,
@@ -26,7 +27,12 @@ import {
 import type { MeetingFloor } from "./meeting-venue";
 import { RiggedOfficeCharacter } from "./agency-character";
 import type { Quality } from "./quality";
-import { advanceCharacterRoute } from "./character-locomotion";
+import {
+  advanceCharacterRoute,
+  stairDirection,
+  WALK_SPEED,
+  type StairDirection,
+} from "./character-locomotion";
 import { characterMotion, type CharacterMotion } from "./character-motion";
 
 const appearances: Record<
@@ -199,6 +205,7 @@ function speechScreenPosition(
   camera: Camera,
   size: { width: number; height: number },
   avoidOtherBubbles: boolean,
+  placement: { point?: [number, number]; time: number },
 ): [number, number] {
   const projected = element.getWorldPosition(speechProjection).project(camera);
   const rawX = (projected.x * 0.5 + 0.5) * size.width;
@@ -283,7 +290,30 @@ function speechScreenPosition(
     clampPoint([base[0] + horizontal, base[1] - vertical]),
     clampPoint([base[0] - horizontal, base[1] - vertical]),
   ];
-  return candidates.find(clear) ?? base;
+  const goal = candidates.find(clear) ?? base;
+  const now = performance.now();
+  const blend =
+    1 - Math.exp(-Math.min((now - placement.time) / 1000, 0.1) * 14);
+  const point: [number, number] = placement.point
+    ? clampPoint([
+        MathUtils.lerp(placement.point[0], goal[0], blend),
+        MathUtils.lerp(placement.point[1], goal[1], blend),
+      ])
+    : goal;
+  placement.point = point;
+  placement.time = now;
+  const anchor = document.querySelector<HTMLElement>(
+    `[data-character="${character}"].meeting-speech-anchor`,
+  );
+  const line = anchor?.querySelector(".speech-connector line");
+  const dot = anchor?.querySelector(".speech-connector circle");
+  const x = rawX - point[0],
+    y = rawY - point[1] + gap;
+  line?.setAttribute("x2", String(x));
+  line?.setAttribute("y2", String(y));
+  dot?.setAttribute("cx", String(x));
+  dot?.setAttribute("cy", String(y));
+  return point;
 }
 export function OfficeCharacter({
   index,
@@ -297,6 +327,8 @@ export function OfficeCharacter({
   peek,
   labelHost,
   onSpeechReady,
+  onMeetingArrival,
+  meetingId,
   onActivityArrive,
   onMotionChange,
   meetingFloor,
@@ -319,6 +351,8 @@ export function OfficeCharacter({
   peek?: ReactNode;
   labelHost?: RefObject<HTMLDivElement>;
   onSpeechReady?: (id: CharacterId, visible: boolean) => void;
+  onMeetingArrival?: (caseId: string, id: CharacterId, ready: boolean) => void;
+  meetingId?: string;
   onActivityArrive?: (id: CharacterId, activity: OfficeActivity) => void;
   onMotionChange?: (id: CharacterId, motion: CharacterMotion) => void;
   meetingFloor: MeetingFloor;
@@ -328,12 +362,20 @@ export function OfficeCharacter({
   const outfit = outfits[characterIds[index]];
   const root = useRef<Group>(null);
   const body = useRef<Group>(null);
+  const speechAnchor = useRef<Group>(null);
+  const headAnchor = useRef<Object3D | undefined>(undefined);
+  const onHeadAnchor = useCallback((head: Object3D | undefined) => {
+    headAnchor.current = head;
+  }, []);
+  const stairMotion = useRef<StairDirection | undefined>(undefined);
+  const seatTime = useRef(0);
   const position = useRef(
     new Vector3(desks[index][0], 0, desks[index][1] + 0.72),
   );
   const [arrived, setArrived] = useState(false);
   const [speechOnScreen, setSpeechOnScreen] = useState(false);
   const speechOnScreenRef = useRef(false);
+  const speechReported = useRef(false);
   const speechVisibilityProbe = useRef(new Vector3());
   const [motion, setMotion] = useState<CharacterMotion>("type");
   const motionRef = useRef<CharacterMotion>("type");
@@ -361,11 +403,21 @@ export function OfficeCharacter({
   );
   const path = useRef<Vector3[]>([]);
   const direction = useRef(new Vector3());
-  const floorTransitioning = useRef(false);
   const poseTime = useRef(0);
+  const wasHidden = useRef(false);
   const travelSpeed = useRef(0);
   const motionSpeed = useRef(0);
   const listenerYaw = useRef(0);
+  useEffect(() => {
+    // RAF may stop completely in a hidden tab, so remember visibility changes
+    // independently of frame callbacks and discard background elapsed time.
+    const visibility = () => {
+      poseTime.current = 0;
+      if (document.hidden) wasHidden.current = true;
+    };
+    document.addEventListener("visibilitychange", visibility);
+    return () => document.removeEventListener("visibilitychange", visibility);
+  }, []);
   useEffect(() => {
     arrivedRef.current = false;
     activityArrivedRef.current = undefined;
@@ -373,35 +425,56 @@ export function OfficeCharacter({
     const current = position.current;
     const start: WorldPoint = [current.x, current.y, current.z];
     const route = planWorldRoute(start, target);
-    floorTransitioning.current =
-      Math.abs(current.y - destination.y) > 0.45 ||
-      route.some((point) => Math.abs(point[1] - current.y) > 0.45);
     path.current = route.map(([x, y, z]) => new Vector3(x, y, z));
+    seatTime.current = 0;
   }, [destination, target]);
   const speechVisible = !!speech && arrived && meeting && speechOnScreen;
+  const hasSpeech = !!speech;
   const peekVisible = !speech && !!peek && speechOnScreen;
-  const speechPosition = useMemo(
-    () =>
-      (
-        element: Object3D,
-        camera: Camera,
-        size: { width: number; height: number },
-      ) =>
-        speechScreenPosition(
-          characterIds[index],
-          element,
-          camera,
-          size,
-          !speech,
-        ),
-    [index, speech],
-  );
+  const speechPosition = useMemo(() => {
+    const placement = { time: 0 };
+    return (
+      element: Object3D,
+      camera: Camera,
+      size: { width: number; height: number },
+    ) =>
+      speechScreenPosition(
+        characterIds[index],
+        element,
+        camera,
+        size,
+        !hasSpeech,
+        placement,
+      );
+  }, [index, hasSpeech]);
   useEffect(() => {
-    onSpeechReady?.(characterIds[index], speechVisible);
+    if (!meetingId) return;
+    // A new destination can render once with the previous seat's ready state.
+    // Never report that old desk/seat as arrival at the new meeting target.
+    const ready =
+      arrived &&
+      !path.current.length &&
+      seatTime.current >= 0.45 &&
+      position.current.distanceTo(destination) < 0.08;
+    onMeetingArrival?.(meetingId, characterIds[index], ready);
+    return () => onMeetingArrival?.(meetingId, characterIds[index], false);
+  }, [meetingId, index, arrived, destination, onMeetingArrival]);
+  useEffect(() => {
+    speechReported.current = false;
+    onSpeechReady?.(characterIds[index], false);
     return () => onSpeechReady?.(characterIds[index], false);
-  }, [index, speechVisible, onSpeechReady]);
+  }, [index, hasSpeech, meetingId, onSpeechReady]);
   useFrame(({ camera }, dt) => {
-    if (!root.current || !body.current || document.hidden) return;
+    if (!root.current || !body.current) return;
+    if (document.hidden) {
+      poseTime.current = 0;
+      wasHidden.current = true;
+      return;
+    }
+    if (wasHidden.current) {
+      dt = Math.min(dt, 1 / 30);
+      wasHidden.current = false;
+    }
     positions.current[characterIds[index]] = position.current;
     poseTime.current += dt;
     // Idle actors need fewer pose/projection updates; navigation remains live.
@@ -412,10 +485,17 @@ export function OfficeCharacter({
     // Keep pose damping conservative, but let locomotion follow wall-clock time.
     // Otherwise low-FPS/software WebGL makes characters move in slow motion.
     const delta = Math.min(dt, 0.06);
-    const movementDelta = Math.min(dt, reduced ? 0.25 : 0.5);
+    const movementDelta = Math.min(dt, 2);
     if (speech || peek) {
-      const probe = speechVisibilityProbe.current.set(0, 2.05, 0);
-      root.current.localToWorld(probe);
+      const probe = speechVisibilityProbe.current;
+      if (headAnchor.current) {
+        headAnchor.current.getWorldPosition(probe);
+        probe.y += 0.18;
+      } else root.current.localToWorld(probe.set(0, arrived ? 1.35 : 1.8, 0));
+      if (speechAnchor.current)
+        speechAnchor.current.position.copy(
+          root.current.worldToLocal(probe.clone()),
+        );
       probe.project(camera);
       const onScreen =
         probe.z >= -1 &&
@@ -430,13 +510,18 @@ export function OfficeCharacter({
       speechOnScreenRef.current = false;
       setSpeechOnScreen(false);
     }
-    const cruiseSpeed = reduced
-      ? 4
-      : floorTransitioning.current
-        ? 2.7
-        : meeting
-          ? 1.8
-          : 1.25;
+    const cruiseSpeed = WALK_SPEED;
+    stairMotion.current = stairDirection(position.current, path.current[0]);
+    body.current.position.y = MathUtils.damp(
+      body.current.position.y,
+      stairMotion.current === "up"
+        ? -0.2
+        : stairMotion.current === "down"
+          ? -0.12
+          : 0,
+      12,
+      Math.min(dt, 0.1),
+    );
     const movement = advanceCharacterRoute(
       position.current,
       path.current,
@@ -454,7 +539,7 @@ export function OfficeCharacter({
         Math.sin(facing - root.current.rotation.y),
         Math.cos(facing - root.current.rotation.y),
       );
-      root.current.rotation.y += difference * (1 - Math.exp(-dt * 10));
+      root.current.rotation.y += difference * (1 - Math.exp(-dt * 6));
     }
     const atActivity = !!activeActivity && !walking && !path.current.length;
     if (
@@ -466,9 +551,11 @@ export function OfficeCharacter({
       onActivityArrive?.(characterIds[index], activeActivity);
     }
     const sitting = !walking && !path.current.length && !atActivity;
-    if (arrivedRef.current !== sitting) {
-      arrivedRef.current = sitting;
-      setArrived(sitting);
+    seatTime.current = sitting ? seatTime.current + dt : 0;
+    const settled = sitting && seatTime.current >= 0.45;
+    if (arrivedRef.current !== settled) {
+      arrivedRef.current = settled;
+      setArrived(settled);
     }
     if (!walking) {
       const facing = target.facing;
@@ -510,7 +597,34 @@ export function OfficeCharacter({
       5,
       delta,
     );
-  });
+    if (hasSpeech) {
+      // Drei's HTML portal commits separately from the WebGL scene. Start the
+      // reading window only after the actual, visible bubble has mounted.
+      const bubble = document.querySelector<HTMLElement>(
+        `[data-character="${characterIds[index]}"] .meeting-bubble`,
+      );
+      const domVisible =
+        bubble &&
+        (typeof bubble.checkVisibility === "function"
+          ? bubble.checkVisibility({
+              checkOpacity: true,
+              checkVisibilityCSS: true,
+            })
+          : bubble.getClientRects().length > 0 &&
+            getComputedStyle(bubble).visibility !== "hidden");
+      const visible = !!(
+        arrivedRef.current &&
+        meeting &&
+        speechOnScreenRef.current &&
+        domVisible &&
+        bubble!.getBoundingClientRect().width > 0
+      );
+      if (speechReported.current !== visible) {
+        speechReported.current = visible;
+        onSpeechReady?.(characterIds[index], visible);
+      }
+    }
+  }, -1);
   const longHair = index === 1 || index === 4;
   return (
     <group
@@ -527,20 +641,43 @@ export function OfficeCharacter({
         onSelect(id);
       }}
     >
+      {speaker === characterIds[index] && meeting && arrived && (
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.018, 0]}>
+          <ringGeometry args={[0.28, 0.34, 32]} />
+          <meshBasicMaterial
+            color={characterIdentity(characterIds[index]).color}
+            transparent
+            opacity={0.55}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
       {labelHost && (speech || peek) && (
-        <Html
-          portal={labelHost}
-          position={[0, 2.05, 0]}
-          calculatePosition={speechPosition}
-          zIndexRange={speech ? [7, 6] : [4, 3]}
-        >
-          <div
-            className="meeting-speech-anchor"
-            data-character={characterIds[index]}
+        <group ref={speechAnchor} position={[0, 1.65, 0]}>
+          <Html
+            portal={labelHost}
+            calculatePosition={speechPosition}
+            zIndexRange={speech ? [7, 6] : [4, 3]}
           >
-            {speechVisible ? speech : peekVisible ? peek : null}
-          </div>
-        </Html>
+            <div
+              className="meeting-speech-anchor"
+              data-character={characterIds[index]}
+            >
+              {speechVisible ? speech : peekVisible ? peek : null}
+              {(speechVisible || peekVisible) && (
+                <svg
+                  className="speech-connector"
+                  width="1"
+                  height="1"
+                  aria-hidden="true"
+                >
+                  <line x1="0" y1="0" x2="0" y2="14" />
+                  <circle cx="0" cy="14" r="2.5" />
+                </svg>
+              )}
+            </div>
+          </Html>
+        </group>
       )}
       <group
         ref={body}
@@ -562,6 +699,9 @@ export function OfficeCharacter({
           phase={index}
           motionSpeed={motionSpeed}
           motionReduced={reduced}
+          stairMotion={stairMotion}
+          worldPosition={position}
+          onHeadAnchor={onHeadAnchor}
           listenerYaw={listenerYaw}
           showPhone={characterIds[index] === "boss" && state === "DISCORD"}
           style={{

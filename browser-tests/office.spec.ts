@@ -1,6 +1,10 @@
 import { test, expect, type Page } from "@playwright/test";
+import type { RootState } from "@react-three/fiber";
 import type { MeetingSnapshot } from "../src/core/meeting";
-import { scannerMeeting, type ScannerReview } from "../src/core/scanner-meeting";
+import {
+  scannerMeeting,
+  type ScannerReview,
+} from "../src/core/scanner-meeting";
 import { analysisGroups } from "../src/core/contracts";
 import {
   caseStopMessage,
@@ -9,37 +13,66 @@ import {
   workersAIModel,
 } from "../src/core/contracts";
 test("stopped cases explain why no signal was published", async ({ page }) => {
-  await page.route("**/api/v1/auth/session", route => route.fulfill({ json: { admin: false } }));
-  await page.route("**/api/v1/cases/CASE-stale/public", route => route.fulfill({ json: {
-    id: "CASE-stale", status: "STALE", direction: "BUY", source: "AUTO",
-    created_at: Date.now(), updated_at: Date.now(), signal: null, analysts: [],
-    stop_reason: caseStopMessage("MARKET_CHANGED_DURING_ANALYSIS"),
-  } }));
+  await page.route("**/api/v1/auth/session", (route) =>
+    route.fulfill({ json: { admin: false } }),
+  );
+  await page.route("**/api/v1/cases/CASE-stale/public", (route) =>
+    route.fulfill({
+      json: {
+        id: "CASE-stale",
+        status: "STALE",
+        direction: "BUY",
+        source: "AUTO",
+        created_at: Date.now(),
+        updated_at: Date.now(),
+        signal: null,
+        analysts: [],
+        stop_reason: caseStopMessage("MARKET_CHANGED_DURING_ANALYSIS"),
+      },
+    }),
+  );
   await page.goto("/cases/CASE-stale");
-  await expect(page.getByRole("status")).toContainText("Data candle berubah selama analisis. Sinyal tidak diterbitkan.");
-  await expect(page.getByText("Preferred Entry", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText(
+    "Data candle berubah selama analisis. Sinyal tidak diterbitkan.",
+  );
+  await expect(page.getByText("Preferred Entry", { exact: true })).toHaveCount(
+    0,
+  );
 });
-test("stale cases close meetings even when the 3D speaker has not become visible", async ({ page }) => {
+test("stale cases close meetings even when the 3D speaker has not become visible", async ({
+  page,
+}) => {
   // Keep the actual meeting hook and UI, while simulating a renderer that has
   // not reported a visible speaker yet. No GPU timing is involved in this case.
   await page.addInitScript(() => {
-    HTMLCanvasElement.prototype.getContext = (() => ({ getExtension: () => null })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = (() => ({
+      getExtension: () => null,
+    })) as unknown as typeof HTMLCanvasElement.prototype.getContext;
   });
-  await page.route("**/src/ui/scene.tsx*", (route) => route.fulfill({
-    contentType: "application/javascript",
-    body: "export default function OfficeScene() { return null; }",
-  }));
+  await page.route("**/src/ui/scene.tsx*", (route) =>
+    route.fulfill({
+      contentType: "application/javascript",
+      body: "export default function OfficeScene() { return null; }",
+    }),
+  );
   await page.clock.install();
   const snapshot = await fixtureMeeting(page);
   await page.goto("/");
-  await expect(page.getByText("Tim menuju ruang meeting", { exact: true })).toBeVisible();
-  await page.clock.fastForward(15000);
-  await expect(page.getByText("Trend Analyst sedang berbicara", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Tim menuju ruang meeting", { exact: true }),
+  ).toBeVisible();
+  // A renderer that never reports arrival must reach the bounded travel fallback.
+  await page.clock.fastForward(66000);
+  await expect(
+    page.getByText("Trend Analyst sedang berbicara", { exact: true }),
+  ).toBeVisible();
   await expect(page.locator(".meeting-bubble")).toHaveCount(0);
   snapshot.status = "STALE";
   snapshot.cancelled = true;
   await page.clock.fastForward(5500);
-  await expect(page.getByText("Meeting dihentikan · kembali ke meja", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("Meeting dihentikan · kembali ke meja", { exact: true }),
+  ).toBeVisible();
   await page.clock.fastForward(8500);
   await expect(page.locator(".meeting-status")).toHaveCount(0);
 });
@@ -109,7 +142,9 @@ test("admin-only routes mirror API authorization while public case detail remain
   });
   await page.goto("/operations");
   const nav = page.getByRole("navigation");
-  await expect(nav.getByRole("link", { name: "Cases", exact: true })).toHaveCount(0);
+  await expect(
+    nav.getByRole("link", { name: "Cases", exact: true }),
+  ).toHaveCount(0);
   await expect(
     nav.getByRole("link", { name: "Simulation", exact: true }),
   ).toHaveCount(0);
@@ -395,9 +430,13 @@ test("operations, scanner navigation, admin login and mobile layout remain usabl
   await expect(
     page.getByRole("heading", { name: "Trading Office", exact: true }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Buka status kantor" }).click();
   await expect(
-    page.getByText("Lingkungan pengembangan lokal", { exact: false }),
+    page
+      .getByRole("dialog", { name: "Status kantor" })
+      .getByText("Lingkungan pengembangan lokal", { exact: false }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Tutup status kantor" }).click();
   await expect(page.getByText("Trend Analyst", { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("button", { name: /Sholat/ })).toHaveCount(0);
@@ -677,7 +716,9 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   await expect(quality.locator('option[value="ultra"]')).toHaveText("Ultra");
   // New visitors start in two-floor Medium; an explicit choice remains sticky.
   await expect(quality).toHaveValue("medium");
-  expect(await page.evaluate(() => localStorage.getItem("byga:3d-quality"))).toBe("medium");
+  expect(
+    await page.evaluate(() => localStorage.getItem("byga:3d-quality")),
+  ).toBe("medium");
   await expect(page.locator(".room-label")).toHaveCount(0);
   await quality.selectOption("medium");
   await expect(quality).toHaveValue("medium");
@@ -690,13 +731,23 @@ test("3D renderer mounts rooms and reset controls when WebGL is available", asyn
   await quality.selectOption("low");
   const upstairs = page.getByRole("button", { name: "Lantai 2", exact: true });
   await expect(upstairs).toBeVisible();
-  await expect(page.locator(".office-scene")).toHaveAttribute("data-boss-floor", "2");
+  await expect(page.locator(".office-scene")).toHaveAttribute(
+    "data-boss-floor",
+    "2",
+  );
   await upstairs.click();
   await expect(upstairs).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Ruang bos", exact: true }).click();
-  await expect(page.locator(".office-scene")).toHaveAttribute("data-camera-view", "boss");
-  await page.getByRole("button", { name: "Perbesar kantor", exact: true }).click();
-  await page.getByRole("button", { name: "Perkecil kantor", exact: true }).click();
+  await expect(page.locator(".office-scene")).toHaveAttribute(
+    "data-camera-view",
+    "boss",
+  );
+  await page
+    .getByRole("button", { name: "Perbesar kantor", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Perkecil kantor", exact: true })
+    .click();
   expect(
     await page.evaluate(() => localStorage.getItem("byga:3d-quality")),
   ).toBe("low");
@@ -815,7 +866,9 @@ test("meeting dialogue rotates actual case results, opens details, admits Boss l
   await expect(trend).toBeVisible();
   await expect(page.locator(".meeting-bubble")).toHaveCount(1);
   await expect(trend).not.toContainText("Kalimat ketiga");
-  await expect(trend.locator(".speech-text")).not.toContainText("Kalimat kedua");
+  await expect(trend.locator(".speech-text")).not.toContainText(
+    "Kalimat kedua",
+  );
   await expect(trend.locator(".speech-vote")).toHaveText("SELL");
   await expect(trend.locator(".speech-vote")).toHaveClass(/vote-sell/);
   const trendCard = page.locator(".operations-grid button").filter({
@@ -887,9 +940,12 @@ test("meeting dialogue rotates actual case results, opens details, admits Boss l
   await page.clock.fastForward(8500);
   await expect(page.locator(".meeting-status")).toHaveCount(0);
 });
-test("meeting HUD condenses analyst failures and expands diagnostic details on mobile", async ({ page }) => {
+test("meeting HUD condenses analyst failures and expands diagnostic details on mobile", async ({
+  page,
+}) => {
   await page.addInitScript(() => {
-    HTMLCanvasElement.prototype.getContext = (() => null) as typeof HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = (() =>
+      null) as typeof HTMLCanvasElement.prototype.getContext;
   });
   await page.clock.install();
   const meeting = await fixtureMeeting(page);
@@ -900,13 +956,16 @@ test("meeting HUD condenses analyst failures and expands diagnostic details on m
     positioning: "Model atau endpoint tidak ditemukan (HTTP 404)",
   };
   await page.goto("/");
-  const hud = page.locator(".meeting-status");
+  await page.getByRole("button", { name: "Buka status kantor" }).click();
+  const hud = page.getByRole("dialog").locator(".meeting-status");
   await expect(hud).toContainText("3 hasil AI tidak tersedia");
   await expect(hud).not.toContainText("Permintaan model ditolak");
-  await hud.getByRole("button", {name:/Detail/}).click();
+  await hud.getByRole("button", { name: /Detail/ }).click();
   await expect(hud).toContainText("Permintaan model ditolak");
-  await expect(hud.getByRole("link", {name:/Lihat detail case/})).toHaveAttribute("href", "/cases/CASE-meeting-fixture");
-  await hud.getByRole("button", {name:/Tutup/}).click();
+  await expect(
+    hud.getByRole("link", { name: /Lihat detail case/ }),
+  ).toHaveAttribute("href", "/cases/CASE-meeting-fixture");
+  await hud.getByRole("button", { name: /Tutup/ }).click();
   await expect(hud).not.toContainText("Provider belum dikonfigurasi");
   for (const elapsed of [15000, 7500, 7500, 8500, 7500]) {
     await page.clock.fastForward(elapsed);
@@ -915,14 +974,21 @@ test("meeting HUD condenses analyst failures and expands diagnostic details on m
   const bounds = await hud.boundingBox();
   expect(bounds).not.toBeNull();
   expect(bounds!.x).toBeGreaterThanOrEqual(0);
-  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(
+    page.viewportSize()!.width,
+  );
 });
 
 test("3D speech follows the seated character and opens the actual result detail", async ({
   page,
 }, testInfo) => {
-  test.setTimeout(120000);
+  test.setTimeout(180000);
   const errors: string[] = [];
+  let fiberModule = "";
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.endsWith("/@react-three_fiber.js"))
+      fiberModule = request.url();
+  });
   page.on("pageerror", (error) => errors.push(error.message));
   // Probe WebGL before navigation. The meeting itself is enabled only after
   // the 3D renderer is ready, so production walking/timing stays realistic.
@@ -942,21 +1008,44 @@ test("3D speech follows the seated character and opens the actual result detail"
   // expose the second-floor navigation button. Alternate from a prior L1 case.
   await page.addInitScript(() => {
     localStorage.setItem("byga:3d-quality", "low");
-    localStorage.setItem("byga:meeting-venue", JSON.stringify({
-      caseId: "CASE-previous-meeting", floor: 1,
-    }));
+    localStorage.setItem(
+      "byga:meeting-venue",
+      JSON.stringify({
+        caseId: "CASE-previous-meeting",
+        floor: 1,
+      }),
+    );
   });
   await page.goto("/");
   await expect(page.getByRole("button", { name: /Reset View/ })).toBeVisible();
-  await expect(page.getByLabel("Kualitas 3D", { exact: true })).toHaveValue("low");
+  await expect(page.getByLabel("Kualitas 3D", { exact: true })).toHaveValue(
+    "low",
+  );
   meetingEnabled = true;
   // The fixture becomes visible on the next five-second API poll.
-  await expect(page.locator(".meeting-status")).toHaveAttribute("data-case-id", snapshot.case_id, { timeout: 15000 });
-  await expect(page.locator(".office-scene")).toHaveAttribute("data-meeting-floor", "2");
+  await expect(page.locator(".meeting-status")).toHaveAttribute(
+    "data-case-id",
+    snapshot.case_id,
+    { timeout: 45000 },
+  );
+  await expect(page.locator(".office-scene")).toHaveAttribute(
+    "data-meeting-floor",
+    "2",
+  );
   // Poll visibility, capture geometry and click in one browser task. A separate
   // locator assertion followed by a click can miss the seven-second speech
   // window when software WebGL and trace capture delay protocol round-trips.
   const openSpeech = async (label: string) => {
+    // Resolve the module once outside the synchronous visibility predicate.
+    await page.evaluate(async (fiberModule) => {
+      const { _roots } = await import(fiberModule);
+      const canvas = document.querySelector(".office-scene canvas");
+      (
+        window as unknown as {
+          __bygaRegressionStore: { getState(): RootState };
+        }
+      ).__bygaRegressionStore = _roots.get(canvas)?.store;
+    }, fiberModule);
     const handle = await page.waitForFunction(
       (label) => {
         const element = Array.from(
@@ -990,13 +1079,47 @@ test("3D speech follows the seated character and opens the actual result detail"
           .map(rect);
         const bubbleBounds = rect(element);
         if (bubbleBounds.width === 0 || bubbleBounds.height === 0) return;
+        const anchor = element.closest("[data-character]")!;
+        const svg = anchor.querySelector<SVGSVGElement>(".speech-connector");
+        const dot = svg?.querySelector("circle");
+        const canvas = document.querySelector<HTMLCanvasElement>(
+          ".office-scene canvas",
+        );
+        if (!svg || !dot || !canvas) return;
+        const state = (
+          window as unknown as {
+            __bygaRegressionStore?: { getState(): RootState };
+          }
+        ).__bygaRegressionStore?.getState();
+        const actor = state?.scene.getObjectByName(
+          `character-${anchor.getAttribute("data-character")}`,
+        );
+        const head =
+          actor?.getObjectByName("Bip01_Head") ??
+          actor?.getObjectByName("Head");
+        if (!head || !actor || !state) return;
+        const probe = head.getWorldPosition(actor.position.clone());
+        probe.y += 0.18;
+        probe.project(state.camera);
+        const canvasRect = canvas.getBoundingClientRect(),
+          svgRect = svg.getBoundingClientRect();
+        const target = {
+          x: canvasRect.left + (probe.x * 0.5 + 0.5) * canvasRect.width,
+          y: canvasRect.top + (-probe.y * 0.5 + 0.5) * canvasRect.height,
+        };
+        const tip = {
+          x: svgRect.left + Number(dot.getAttribute("cx")),
+          y: svgRect.top + Number(dot.getAttribute("cy")),
+        };
+        const anchorError = Math.hypot(target.x - tip.x, target.y - tip.y);
+        if (anchorError > 16) return;
         element.dispatchEvent(
           new MouseEvent("click", { bubbles: true, cancelable: true }),
         );
-        return { bubbleBounds, overlays };
+        return { bubbleBounds, overlays, anchorError };
       },
       label,
-      { timeout: 60000, polling: 100 },
+      { timeout: 90000, polling: 100 },
     );
     try {
       const geometry = await handle.jsonValue();
@@ -1009,6 +1132,7 @@ test("3D speech follows the seated character and opens the actual result detail"
   const geometry = await openSpeech("Baca percakapan Trend Analyst");
   const viewport = page.viewportSize()!;
   const { bubbleBounds } = geometry;
+  expect(geometry.anchorError).toBeLessThanOrEqual(16);
   expect(bubbleBounds.x).toBeGreaterThanOrEqual(8);
   expect(bubbleBounds.y).toBeGreaterThanOrEqual(8);
   expect(bubbleBounds.x + bubbleBounds.width).toBeLessThanOrEqual(
@@ -1038,7 +1162,10 @@ test("3D speech follows the seated character and opens the actual result detail"
     .getByRole("button", { name: "Tutup percakapan", exact: true })
     .click();
   await page.getByLabel("Kualitas 3D", { exact: true }).selectOption("medium");
-  await expect(page.locator(".office-scene")).toHaveAttribute("data-meeting-floor", "2");
+  await expect(page.locator(".office-scene")).toHaveAttribute(
+    "data-meeting-floor",
+    "2",
+  );
   await openSpeech("Baca percakapan Head Trader");
   await expect(page.getByRole("dialog")).toContainText(
     "Fixture boss: penjelasan lengkap",
@@ -1094,10 +1221,12 @@ test("scanner meetings explain a 2–2 conflict without AI and finish before the
     });
   });
   await page.goto("/");
-  const hud = page.locator(".meeting-status");
+  const hud = page.locator(".office-status-trigger");
   await expect(hud).toHaveAttribute("data-case-id", first.case_id);
-  await expect(hud).toContainText("2 BUY, 2 SELL");
-  await expect(hud).toContainText("tanpa AI");
+  await hud.click();
+  await expect(page.getByRole("dialog")).toContainText("2 BUY, 2 SELL");
+  await expect(page.getByRole("dialog")).toContainText("tanpa AI");
+  await page.keyboard.press("Escape");
   await page.clock.fastForward(15000);
   await page
     .getByRole("button", {
@@ -1131,7 +1260,7 @@ test("scanner meetings explain a 2–2 conflict without AI and finish before the
 test("Low upstairs 3D meeting displays actual scanner speech without AI", async ({
   page,
 }, testInfo) => {
-  test.setTimeout(120000);
+  test.setTimeout(180000);
   let enabled = false;
   const snapshot = scannerFixture("SCANNER-3d");
   await page.route("**/api/v1/office/meeting**", (route) =>
@@ -1152,16 +1281,18 @@ test("Low upstairs 3D meeting displays actual scanner speech without AI", async 
   await expect(page.locator(".meeting-status")).toHaveAttribute(
     "data-case-id",
     snapshot.case_id,
-    { timeout: 15000 },
+    { timeout: 45000 },
   );
   await expect(page.locator(".office-scene")).toHaveAttribute(
     "data-meeting-floor",
     "2",
     { timeout: 15000 },
   );
-  await expect(page.locator(".meeting-status")).toContainText(
+  await page.getByRole("button", { name: "Buka status kantor" }).click();
+  await expect(page.getByRole("dialog")).toContainText(
     "Review scanner · tanpa AI",
   );
+  await page.keyboard.press("Escape");
   const geometryHandle = await page.waitForFunction(
     () => {
       const button = Array.from(
@@ -1192,7 +1323,7 @@ test("Low upstairs 3D meeting displays actual scanner speech without AI", async 
       return { bubble, overlays };
     },
     undefined,
-    { timeout: 60000, polling: 100 },
+    { timeout: 90000, polling: 100 },
   );
   const geometry = await geometryHandle.jsonValue();
   await geometryHandle.dispose();
@@ -1224,24 +1355,50 @@ test("Low upstairs 3D meeting displays actual scanner speech without AI", async 
     path: testInfo.outputPath("scanner-upstairs-low.png"),
   });
   await page.keyboard.press("Escape");
-  await page.screenshot({ path: testInfo.outputPath("scanner-upstairs-scene.png") });
-  await expect(page.getByLabel("Empat grup analisis")).toContainText("SMC / ICT");
-  const legend = page.getByRole("group", { name: "Empat grup analisis", exact: true });
+  await page.screenshot({
+    path: testInfo.outputPath("scanner-upstairs-scene.png"),
+  });
+  await expect(page.getByLabel("Empat grup analisis")).toContainText(
+    "SMC / ICT",
+  );
+  const legend = page.getByRole("group", {
+    name: "Empat grup analisis",
+    exact: true,
+  });
   await expect(legend.locator("span")).toHaveCount(4);
   const legendBounds = (await legend.boundingBox())!;
-  for (const selector of [".scene-controls", ".scene-quality", ".home-hud .segmented", ".home-menu-button", ".meeting-status"]) {
+  for (const selector of [
+    ".scene-controls",
+    ".scene-quality",
+    ".home-hud .segmented",
+    ".home-menu-button",
+    ".meeting-status",
+  ]) {
     const bounds = await page.locator(selector).boundingBox();
     if (!bounds) continue;
-    expect(legendBounds.x < bounds.x + bounds.width && legendBounds.x + legendBounds.width > bounds.x && legendBounds.y < bounds.y + bounds.height && legendBounds.y + legendBounds.height > bounds.y).toBe(false);
+    expect(
+      legendBounds.x < bounds.x + bounds.width &&
+        legendBounds.x + legendBounds.width > bounds.x &&
+        legendBounds.y < bounds.y + bounds.height &&
+        legendBounds.y + legendBounds.height > bounds.y,
+    ).toBe(false);
   }
-  const follow = page.getByRole("button", { name: "Ikuti pembicara", exact: true });
+  const follow = page.getByRole("button", {
+    name: "Ikuti pembicara",
+    exact: true,
+  });
   await follow.click();
-  await expect(page.locator(".office-scene")).toHaveAttribute("data-camera-follow", "manual");
+  await expect(page.locator(".office-scene")).toHaveAttribute(
+    "data-camera-follow",
+    "manual",
+  );
   await follow.click();
-  await expect(page.locator(".office-scene")).toHaveAttribute("data-camera-follow", "speaker");
+  await expect(page.locator(".office-scene")).toHaveAttribute(
+    "data-camera-follow",
+    "speaker",
+  );
   expect(errors).toEqual([]);
 });
-
 
 test("scanner numeric settings validate tuples and persist the exact parameters", async ({
   page,

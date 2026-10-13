@@ -24,6 +24,36 @@ import type { CharacterMotion } from "./character-motion";
 export function useMeetingPresentation(render3D: boolean) {
   const [snapshot, setSnapshot] = useState<MeetingSnapshot | null>(null);
   const [playback, setPlayback] = useState<MeetingPlayback>();
+  const hiddenSince = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const visibility = () => {
+      if (document.hidden) {
+        hiddenSince.current ??= Date.now();
+        return;
+      }
+      const since = hiddenSince.current;
+      hiddenSince.current = undefined;
+      if (since === undefined) return;
+      const paused = Math.max(0, Date.now() - since);
+      // Characters discard background elapsed time too. Preserve both the
+      // arrival timeout and reading window until visible playback resumes.
+      setPlayback((previous) =>
+        previous
+          ? {
+              ...previous,
+              until: previous.until + paused,
+              deadline:
+                previous.deadline === undefined
+                  ? undefined
+                  : previous.deadline + paused,
+            }
+          : previous,
+      );
+    };
+    visibility();
+    document.addEventListener("visibilitychange", visibility);
+    return () => document.removeEventListener("visibilitychange", visibility);
+  }, []);
   const currentId =
     snapshot && playback?.phase !== "done" ? snapshot.case_id : undefined;
   const data = useData<{
@@ -56,14 +86,31 @@ export function useMeetingPresentation(render3D: boolean) {
       window.removeEventListener(authExpiredEvent, clearPrivateDetail);
   }, []);
   const visibleSpeakers = useRef(new Set<CharacterId>());
+  const arrivals = useRef<{ caseId?: string; ready: Set<CharacterId> }>({
+    ready: new Set(),
+  });
+  const meetingCase = useRef(snapshot?.case_id);
+  meetingCase.current = snapshot?.case_id;
+  const onMeetingArrival = useCallback(
+    (caseId: string, id: CharacterId, ready: boolean) => {
+      if (caseId !== meetingCase.current) return;
+      if (arrivals.current.caseId !== caseId)
+        arrivals.current = { caseId, ready: new Set() };
+      if (ready) arrivals.current.ready.add(id);
+      else arrivals.current.ready.delete(id);
+    },
+    [],
+  );
   const onSpeechReady = useCallback((id: CharacterId, visible: boolean) => {
     const wasVisible = visibleSpeakers.current.has(id);
     if (visible) visibleSpeakers.current.add(id);
     else visibleSpeakers.current.delete(id);
     if (visible && !wasVisible)
       setPlayback((previous) =>
-        previous?.phase === "speaking" && previous.speaker === id
-          ? { ...previous, until: Date.now() + 7000 }
+        previous?.phase === "speaking" &&
+        previous.speaker === id &&
+        !previous.speechSeen
+          ? { ...previous, until: Date.now() + 7000, speechSeen: true }
           : previous,
       );
   }, []);
@@ -76,9 +123,20 @@ export function useMeetingPresentation(render3D: boolean) {
         !snapshot?.cancelled &&
         previous?.phase === "speaking" &&
         previous.speaker &&
-        !visibleSpeakers.current.has(previous.speaker)
+        !visibleSpeakers.current.has(previous.speaker) &&
+        Date.now() < (previous.deadline ?? previous.until + 20000)
           ? previous
-          : advanceMeeting(previous, snapshot, Date.now(), media.matches),
+          : advanceMeeting(
+              previous,
+              snapshot,
+              Date.now(),
+              media.matches,
+              render3D
+                ? arrivals.current.caseId === snapshot?.case_id
+                  ? arrivals.current.ready
+                  : new Set()
+                : undefined,
+            ),
       );
     };
     advance();
@@ -104,6 +162,7 @@ export function useMeetingPresentation(render3D: boolean) {
     error: data.error,
     retry: data.retry,
     onSpeechReady,
+    onMeetingArrival,
   };
 }
 

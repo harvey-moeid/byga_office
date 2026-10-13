@@ -278,9 +278,11 @@ function CameraView({
       const perspective = camera as PerspectiveCamera;
       let occupancy: [number, number] = [0.76, 0.76];
       let meetingFrame: ReturnType<typeof fitMeetingCamera> | undefined;
-      if (meetingView) {
+      if (meetingView || view === "overview" || view === "cinematic") {
         const canvas = gl.domElement.getBoundingClientRect();
-        const hudElement = document.querySelector(".meeting-status");
+        const hudElement =
+          document.querySelector(".home-hud") ??
+          document.querySelector(".meeting-status");
         const hud =
           hudElement &&
           (!document.fullscreenElement ||
@@ -311,9 +313,10 @@ function CameraView({
             canvas.top -
             12,
         );
+        const fill = meetingView ? 0.72 : 0.84;
         occupancy = [
-          (0.72 * rect.width) / size.width,
-          (0.72 * rect.height) / size.height,
+          (fill * rect.width) / size.width,
+          (fill * rect.height) / size.height,
         ];
         meetingFrame = fitMeetingCamera(
           [seed.x, seed.y, seed.z],
@@ -356,7 +359,7 @@ function CameraView({
     const alpha =
       reduced || !initialized.current
         ? 1
-        : 1 - Math.exp(-Math.min(dt, 0.1) * 3.5);
+        : 1 - Math.exp(-Math.min(dt, 0.5) * 3.5);
     camera.position.lerp(destination.position, alpha);
     c.target.lerp(destination.target, alpha);
     camera.lookAt(c.target);
@@ -367,7 +370,7 @@ function CameraView({
       c.target.distanceToSquared(destination.target) < 0.00001
     )
       goal.current = undefined;
-  });
+  }, -2);
   return null;
 }
 
@@ -588,6 +591,7 @@ export default function OfficeScene({
   speech,
   onSpeechDetails,
   onSpeechReady,
+  onMeetingArrival,
   onActivityChange,
   marketTimestamp,
   characterContexts = {},
@@ -602,6 +606,7 @@ export default function OfficeScene({
   speech?: MeetingTurn;
   onSpeechDetails?: (turn: MeetingTurn) => void;
   onSpeechReady?: (id: CharacterId, visible: boolean) => void;
+  onMeetingArrival?: (caseId: string, id: CharacterId, ready: boolean) => void;
   onActivityChange?: (
     activities: Partial<Record<CharacterId, OfficeActivityKind>>,
   ) => void;
@@ -959,9 +964,9 @@ export default function OfficeScene({
           far: 300,
         }}
         gl={{
-          antialias: true,
+          antialias: quality !== "low",
           toneMapping: ACESFilmicToneMapping,
-          toneMappingExposure: 1.15,
+          toneMappingExposure: 1.08,
         }}
         onCreated={({ gl }) => {
           if (qualityMode === "auto" && softwareRendering(gl))
@@ -979,12 +984,12 @@ export default function OfficeScene({
         />
         <color attach="background" args={["#101f26"]} />
         <fog attach="fog" args={["#101f26", 180, 300]} />
-        <hemisphereLight args={["#e4f2ff", "#bcae96", 1.65]} />
-        <ambientLight intensity={0.35} />
+        <hemisphereLight args={["#e1edf5", "#96816a", 1.3]} />
+        <ambientLight intensity={0.28} />
         <directionalLight
           position={[-6, 13, -7]}
-          intensity={2.5}
-          color="#fff0dd"
+          intensity={2.85}
+          color="#ffe7c6"
           castShadow={profile.shadows}
           shadow-mapSize={[profile.shadowSize, profile.shadowSize]}
           shadow-camera-left={-12}
@@ -999,8 +1004,8 @@ export default function OfficeScene({
         />
         <directionalLight
           position={[5, 8, 13]}
-          intensity={1.5}
-          color="#dce8ef"
+          intensity={1.2}
+          color="#c5e1e7"
         />
         {profile.decorative ? (
           <>
@@ -1108,6 +1113,8 @@ export default function OfficeScene({
                 }
                 labelHost={labelHost}
                 onSpeechReady={onSpeechReady}
+                onMeetingArrival={onMeetingArrival}
+                meetingId={meetingId}
                 onActivityArrive={(id, activity) =>
                   activityArrivalHandler.current(id, activity)
                 }

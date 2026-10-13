@@ -345,13 +345,15 @@ test("real scanner review reaches the visual meeting without an external AI call
   expect(result.meeting.scan.groups).toHaveLength(4);
   expect(result.meeting.turns).toHaveLength(6);
   await page.goto("/");
-  await expect(page.locator(".meeting-status")).toHaveAttribute(
+  const status = page.getByRole("button", { name: "Buka status kantor" });
+  await expect(status).toHaveAttribute("data-case-id", result.meeting.case_id);
+  await status.click();
+  const dialog = page.getByRole("dialog", { name: "Status kantor" });
+  await expect(dialog.locator(".meeting-status")).toHaveAttribute(
     "data-case-id",
     result.meeting.case_id,
   );
-  await expect(page.locator(".meeting-status")).toContainText(
-    "Review scanner · tanpa AI",
-  );
+  await expect(dialog).toContainText("Review scanner · tanpa AI");
   const stats = (await (
     await page.request.get("http://127.0.0.1:8788/__test/stats")
   ).json()) as { outboundCalls: number };

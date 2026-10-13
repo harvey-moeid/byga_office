@@ -2490,3 +2490,212 @@ footer {
     top: max(184px, calc(env(safe-area-inset-top) + 184px));
   }
 }
+
+/* Keep the living office in view: status is a compact, accessible doorway to
+   diagnostics; a native dialog owns detail and retry actions. */
+.office-status {
+  position: relative;
+  pointer-events: auto;
+  max-width: 100%;
+}
+.office-status .office-status-trigger {
+  position: static;
+  display: inline-flex;
+  width: auto;
+  max-width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 8px 12px;
+  gap: 8px;
+  background: linear-gradient(135deg, #173b35ed, #102624eb);
+  border: 1px solid #8dd9bd38;
+  border-radius: 999px;
+  color: #d6e8df;
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-align: left;
+  backdrop-filter: blur(12px);
+}
+.office-status-trigger > span:nth-child(2) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.office-status .dot {
+  flex-shrink: 0;
+  margin: 0;
+  box-shadow: 0 0 12px #72dbb54d;
+}
+.office-status-trigger[data-warning="true"] {
+  border-color: #d5b97a66;
+}
+.office-status-trigger[data-warning="true"] .dot {
+  background: #dfbc7e;
+  box-shadow: 0 0 10px #dfbc7e33;
+}
+.office-status-warning {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  color: #182422;
+  background: #dfbc7e;
+  font-weight: 800;
+}
+.office-status-chevron {
+  color: #b6c7bf;
+  font-size: 15px;
+}
+.office-meeting-caption {
+  display: block;
+  max-width: min(340px, 65vw);
+  margin-top: 5px;
+  font-size: 11px;
+  line-height: 1.35;
+  letter-spacing: 0;
+  color: #b1c7be;
+}
+.office-status-toast {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: min(280px, 65vw);
+  padding: 10px 12px;
+  border: 1px solid #d5b97a55;
+  border-radius: 12px;
+  background: #172a2cf2;
+  color: #eadbbe;
+  font-size: 11px;
+  line-height: 1.5;
+  letter-spacing: 0;
+  box-shadow: 0 8px 24px #0003;
+}
+.office-status:has(.office-status-panel) .modal {
+  pointer-events: auto;
+  letter-spacing: 0;
+  max-width: min(520px, calc(100vw - 32px));
+  padding: 24px;
+  background: linear-gradient(145deg, #203637, #122528);
+  color: #e0ece4;
+}
+.office-status-panel-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 20px;
+  align-items: start;
+}
+.office-status-panel-heading h2 {
+  margin: 8px 0 16px;
+  font-size: 24px;
+  letter-spacing: -0.5px;
+}
+.office-status-panel-heading button {
+  min-width: 44px;
+  min-height: 44px;
+}
+.office-status-panel p {
+  font-size: 13px;
+  line-height: 1.7;
+  letter-spacing: 0;
+}
+.office-status-summary {
+  color: #9de1c4;
+}
+.office-status-panel .meeting-status {
+  position: static;
+  width: 100%;
+  max-width: none;
+  margin: 16px 0 0;
+  padding: 16px;
+  box-sizing: border-box;
+  font-size: 13px;
+  background: #12302c;
+}
+.office-status-panel .meeting-status small {
+  font-size: 11px;
+  line-height: 1.5;
+}
+.office-status-panel .meeting-status button {
+  min-height: 44px;
+}
+.office-status-panel .notice {
+  font-size: 13px;
+  line-height: 1.5;
+}
+.office-status-panel .notice button {
+  min-height: 44px;
+  flex-shrink: 0;
+}
+.meeting-bubble::after {
+  display: none;
+}
+.speech-connector {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.speech-connector line {
+  stroke: #b8d4c5;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+.speech-connector circle {
+  fill: #c9e9d7;
+  stroke: #17352d;
+  stroke-width: 1;
+}
+.meeting-bubble {
+  border-color: #c4dacf;
+  box-shadow:
+    0 10px 28px #0005,
+    inset 0 1px #fff9;
+}
+.office-scene::after {
+  background:
+    linear-gradient(180deg, #0813170d, transparent 30%, #0810111c),
+    radial-gradient(ellipse at 50% 48%, transparent 54%, #040b0e44);
+  box-shadow: inset 0 0 75px #05090b33;
+}
+.scene-controls {
+  border-color: #cfbb8c55;
+  background: linear-gradient(145deg, #1b3235ed, #10242aeb);
+}
+.scene-controls button {
+  border-radius: 10px;
+}
+@media (max-width: 760px) {
+  .office-status:has(.office-status-panel) .modal {
+    position: fixed;
+    inset: auto 0 0;
+    margin: 0;
+    max-width: none;
+    width: 100%;
+    max-height: min(80dvh, 640px);
+    box-sizing: border-box;
+    border-radius: 24px 24px 0 0;
+    padding: 24px 20px max(24px, env(safe-area-inset-bottom));
+    overflow-y: auto;
+  }
+  .office-status-panel .meeting-status {
+    max-height: none;
+  }
+  .office-status-panel .notice {
+    flex-wrap: wrap;
+  }
+}
+@media (max-height: 480px) {
+  .office-meeting-caption {
+    font-size: 10px;
+    max-width: 240px;
+  }
+  .office-status:has(.office-status-panel) .modal {
+    max-height: 90dvh;
+  }
+  .office-status-toast {
+    font-size: 10px;
+    padding: 7px 10px;
+  }
+}

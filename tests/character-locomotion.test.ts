@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { Vector3 } from "three";
-import { advanceCharacterRoute } from "../src/ui/character-locomotion";
+import {
+  advanceCharacterRoute,
+  WALK_SPEED,
+  STAIR_SPEED,
+  stairDirection,
+} from "../src/ui/character-locomotion";
+import { STAIR_LAYOUT } from "../src/ui/office-layout";
 import {
   characterTarget,
   planWorldRoute,
@@ -69,7 +75,7 @@ describe("continuous character locomotion", () => {
     ).speed;
     expect(speed).toBeGreaterThan(0);
     expect(speed).toBeLessThan(0.2);
-    for (let i = 0; i < 145; i++)
+    for (let i = 0; i < 165; i++)
       speed = advanceCharacterRoute(
         position,
         route,
@@ -81,9 +87,34 @@ describe("continuous character locomotion", () => {
     expect(speed).toBeLessThan(1.25);
     expect(position.z).toBeLessThanOrEqual(3);
   });
+  it("keeps the same travel rate on a slow renderer without raising cruise speed", () => {
+    const fast = new Vector3(),
+      slow = new Vector3();
+    const route = [new Vector3(0, 0, 20)];
+    let speed = 0;
+    for (let i = 0; i < 120; i++)
+      speed = advanceCharacterRoute(
+        fast,
+        route,
+        speed,
+        1 / 60,
+        WALK_SPEED,
+        new Vector3(),
+      ).speed;
+    advanceCharacterRoute(
+      slow,
+      [new Vector3(0, 0, 20)],
+      0,
+      2,
+      WALK_SPEED,
+      new Vector3(),
+    );
+    expect(slow.z).toBeCloseTo(fast.z, 5);
+    expect(slow.z).toBeLessThanOrEqual(2 * WALK_SPEED);
+  });
 
   for (const dt of [1 / 60, 1 / 12, 0.5])
-    it(`gets the team upstairs within the meeting window at dt=${dt}`, () => {
+    it(`gets the team upstairs at natural speed before the arrival timeout at dt=${dt}`, () => {
       characterIds.slice(0, -1).forEach((_, index) => {
         const start = characterTarget(index, "MONITORING", 1, true);
         const target = characterTarget(index, "AI_ANALYSIS", 2, true);
@@ -99,19 +130,46 @@ describe("continuous character locomotion", () => {
         }
         const route = planned.map((point) => new Vector3(...point));
         let speed = 0;
-        for (let time = 0; time < 14 && route.length; time += dt)
+        for (let time = 0; time < 60 && route.length; time += dt)
           speed = advanceCharacterRoute(
             position,
             route,
             speed,
             dt,
-            2.7,
+            WALK_SPEED,
             new Vector3(),
           ).speed;
         expect(route, `character ${index}`).toHaveLength(0);
         expect(position.toArray()).toEqual(target.position);
       });
     });
+
+  it("slows ascent and descent while flat upstairs travel keeps normal speed", () => {
+    const position = new Vector3(STAIR_LAYOUT.x, 0.2, STAIR_LAYOUT.startZ);
+    const route = Array.from(
+      { length: 10 },
+      (_, i) =>
+        new Vector3(
+          STAIR_LAYOUT.x,
+          0.2 + (i + 1) * STAIR_LAYOUT.rise,
+          STAIR_LAYOUT.startZ - (i + 1) * STAIR_LAYOUT.run,
+        ),
+    );
+    expect(stairDirection(position, route[0])).toBe("up");
+    const result = advanceCharacterRoute(
+      position,
+      route,
+      0,
+      0.5,
+      WALK_SPEED,
+      new Vector3(),
+    );
+    expect(result.speed).toBeLessThanOrEqual(STAIR_SPEED);
+    expect(stairDirection(route[1], route[0])).toBe("down");
+    expect(
+      stairDirection(new Vector3(4, 3.68, 1), new Vector3(4, 3.68, -2)),
+    ).toBeUndefined();
+  });
 
   it("does not move when the planner has no safe route", () => {
     const position = new Vector3(1, 0, 2);

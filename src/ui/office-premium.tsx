@@ -23,6 +23,8 @@ export function OfficeFoundation() {
           color="#c9ad78"
           metalness={0.65}
           roughness={0.4}
+          emissive="#b79454"
+          emissiveIntensity={0.25}
         />
       </mesh>
       <PhysicalSign
