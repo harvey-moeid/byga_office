@@ -24,6 +24,36 @@ import type { CharacterMotion } from "./character-motion";
 export function useMeetingPresentation(render3D: boolean) {
   const [snapshot, setSnapshot] = useState<MeetingSnapshot | null>(null);
   const [playback, setPlayback] = useState<MeetingPlayback>();
+  const hiddenSince = useRef<number | undefined>(undefined);
+  useEffect(() => {
+    const visibility = () => {
+      if (document.hidden) {
+        hiddenSince.current ??= Date.now();
+        return;
+      }
+      const since = hiddenSince.current;
+      hiddenSince.current = undefined;
+      if (since === undefined) return;
+      const paused = Math.max(0, Date.now() - since);
+      // Characters discard background elapsed time too. Preserve both the
+      // arrival timeout and reading window until visible playback resumes.
+      setPlayback((previous) =>
+        previous
+          ? {
+              ...previous,
+              until: previous.until + paused,
+              deadline:
+                previous.deadline === undefined
+                  ? undefined
+                  : previous.deadline + paused,
+            }
+          : previous,
+      );
+    };
+    visibility();
+    document.addEventListener("visibilitychange", visibility);
+    return () => document.removeEventListener("visibilitychange", visibility);
+  }, []);
   const currentId =
     snapshot && playback?.phase !== "done" ? snapshot.case_id : undefined;
   const data = useData<{

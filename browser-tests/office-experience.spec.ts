@@ -1,5 +1,15 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { characterIds } from "../src/core/contracts";
+
+async function setHidden(page: Page, hidden: boolean) {
+  await page.evaluate((hidden) => {
+    Object.defineProperty(document, "hidden", {
+      configurable: true,
+      value: hidden,
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+  }, hidden);
+}
 
 test.beforeEach(async ({ page }) => {
   await page.route("**/api/v1/**", (route) => {
@@ -122,6 +132,14 @@ test("meeting waits for arrivals instead of accelerating the visual team", async
   await expect(
     page.getByText("Tim menuju ruang meeting", { exact: true }),
   ).toBeVisible();
+  // Background time cannot consume the bounded arrival wait while actors stop.
+  await setHidden(page, true);
+  await page.clock.fastForward(90000);
+  await setHidden(page, false);
+  await page.clock.fastForward(500);
+  await expect(
+    page.getByText("Tim menuju ruang meeting", { exact: true }),
+  ).toBeVisible();
   await page.evaluate((ids) => {
     const props = (
       window as unknown as {
@@ -139,6 +157,13 @@ test("meeting waits for arrivals instead of accelerating the visual team", async
       .filter((id) => id !== "boss")
       .forEach((id) => props.onMeetingArrival(props.meetingId, id, true));
   }, characterIds);
+  await page.clock.fastForward(500);
+  await expect(
+    page.getByText("Trend Analyst sedang berbicara", { exact: true }),
+  ).toBeVisible();
+  await setHidden(page, true);
+  await page.clock.fastForward(45000);
+  await setHidden(page, false);
   await page.clock.fastForward(500);
   await expect(
     page.getByText("Trend Analyst sedang berbicara", { exact: true }),

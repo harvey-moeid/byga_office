@@ -9,6 +9,7 @@ This update makes the office presentation calmer and keeps mobile controls clear
 - Ascent and descent apply distance-driven support/swing foot targets and a small skeletal IK correction. Targets follow actual tread geometry, including both landings, for the five agency models and the local fallback.
 - Gathering waits for the selected participants to reach their seats and finish settling. Boss entry waits for the Boss. A previous desk/seat cannot count as arrival at a new target.
 - Arrival waits are capped at 65 seconds. Cancellation closes stale discussion without waiting for a missing renderer callback. These are visual presentation timings only.
+- Hidden-tab time pauses arrival and speech deadlines, matching paused character travel; resuming cannot skip the gathering phase or consume the reading window.
 
 ## Speech and status
 
