@@ -140,6 +140,9 @@ export class SceneBoundary extends Component<
   static getDerivedStateFromError() {
     return { failed: true };
   }
+  componentDidCatch() {
+    window.dispatchEvent(new Event("byga:webgl-lost"));
+  }
   render() {
     return this.state.failed ? (
       <Empty>3D tidak tersedia. Dashboard operasi tetap dapat digunakan.</Empty>

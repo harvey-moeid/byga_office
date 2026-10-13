@@ -5,8 +5,11 @@
   font-synthesis: none;
   color-scheme: dark;
   --accent: #65d9b5;
-  --muted: #8c9a9d;
-  --border: #2b3639;
+  --muted: #a2afad;
+  --border: #32403f;
+  --champagne: #d1b887;
+  --surface: #172125;
+  --glass: #152529ed;
 }
 * {
   box-sizing: border-box;
@@ -49,7 +52,8 @@ button:disabled {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
 }
@@ -275,6 +279,7 @@ nav a.active span {
   box-shadow: 0 0 8px #9db38b55;
 }
 main {
+  min-width: 0;
   margin-left: 242px;
   width: calc(100% - 242px);
   padding: 0 38px;
@@ -495,11 +500,22 @@ p {
 .scene-controls {
   position: absolute;
   z-index: 8;
-  right: 18px;
-  bottom: 18px;
+  left: max(16px, env(safe-area-inset-left));
+  right: max(16px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
   display: flex;
-  gap: 7px;
+  gap: 6px;
   align-items: center;
+  max-width: 1240px;
+  margin-inline: auto;
+  padding: 8px;
+  border: 1px solid #c9ad7838;
+  border-radius: 16px;
+  background: var(--glass);
+  backdrop-filter: blur(18px);
+  box-shadow:
+    0 12px 36px #0004,
+    inset 0 1px #ffffff08;
 }
 .scene-label-layer {
   position: absolute;
@@ -888,16 +904,17 @@ p {
   border-radius: 7px;
   color: #d4e9e1;
   padding: 10px 13px;
-  min-height: 40px;
+  min-height: 44px;
 }
 .scene-view-buttons {
   display: flex;
   gap: 4px;
   min-width: 0;
+  flex: 1;
   overflow-x: auto;
   scrollbar-width: thin;
   scrollbar-color: #527c7e transparent;
-  padding: 3px;
+  padding: 0;
 }
 .scene-view-buttons button {
   flex-shrink: 0;
@@ -910,7 +927,7 @@ p {
 }
 .scene-camera-actions button,
 .scene-reset {
-  min-width: 40px;
+  min-width: 44px;
   flex-shrink: 0;
 }
 .scene-quality small {
@@ -983,34 +1000,34 @@ p {
   border-radius: 50%;
 }
 .scene-quality {
-  position: absolute;
-  bottom: 20px;
-  left: 20px;
+  position: static;
+  order: -1;
+  flex: 0 0 auto;
+  flex-direction: row;
   z-index: 8;
   display: flex;
   align-items: center;
   gap: 8px;
   color: #9db4ad;
-  font-size: 9px;
+  font-size: 10px;
   letter-spacing: 0.5px;
   background: #132b2fed;
-  border: 1px solid #5b817980;
-  border-radius: 8px;
-  padding: 6px 7px 6px 10px;
-  backdrop-filter: blur(10px);
+  border: 0;
+  padding: 0;
 }
 .scene-quality span {
   white-space: nowrap;
   pointer-events: none;
 }
 .scene-quality select {
-  min-height: 34px;
+  width: auto;
+  min-height: 44px;
   border: 1px solid #58776f;
   border-radius: 6px;
   background: #1b3737;
   color: #e4efe9;
   padding: 5px 28px 5px 9px;
-  font-size: 10px;
+  font-size: 12px;
   cursor: pointer;
 }
 .screen-label {
@@ -1138,18 +1155,6 @@ p {
     padding: 10px 8px;
     font-size: 9px;
     min-height: 42px;
-  }
-  .scene-quality {
-    bottom: 65px;
-    left: 12px;
-    padding: 5px 6px 5px 8px;
-  }
-  .scene-quality span {
-    display: none;
-  }
-  .scene-quality select {
-    min-height: 36px;
-    font-size: 9px;
   }
   .room-label {
     font-size: 6px;
@@ -1295,7 +1300,7 @@ p {
 }
 .filters {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 20px;
 }
@@ -1309,6 +1314,7 @@ label {
 input,
 select,
 textarea {
+  min-width: 0;
   width: 100%;
   border: 1px solid #39494a;
   border-radius: 5px;
@@ -1635,7 +1641,7 @@ footer {
     align-items: stretch;
   }
   .filters {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .character-grid {
     grid-template-columns: repeat(3, 1fr);
@@ -1750,7 +1756,7 @@ footer {
     padding: 13px;
   }
   .filters {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .signal-list {
     grid-template-columns: 1fr;
@@ -2044,11 +2050,6 @@ footer {
   bottom: max(24px, env(safe-area-inset-bottom));
   right: max(24px, env(safe-area-inset-right));
 }
-.home-stage .scene-quality {
-  z-index: 10;
-  bottom: max(36px, env(safe-area-inset-bottom));
-  left: max(24px, env(safe-area-inset-left));
-}
 /* Keep the scene fullscreen action clear of the fixed Home menu.
    Once the scene itself is fullscreen, the menu is no longer visible, so the
    action can safely return to the top-right corner. */
@@ -2090,10 +2091,6 @@ footer {
     left: 10px;
     right: 10px;
     bottom: max(18px, env(safe-area-inset-bottom));
-  }
-  .home-stage .scene-quality {
-    bottom: max(76px, calc(env(safe-area-inset-bottom) + 60px));
-    left: 16px;
   }
   .home-stage .scene-fullscreen {
     top: max(76px, calc(env(safe-area-inset-top) + 76px));
@@ -2235,7 +2232,7 @@ footer {
 }
 .scene-group-legend {
   position: absolute;
-  bottom: 98px;
+  bottom: max(98px, calc(env(safe-area-inset-bottom) + 78px));
   right: 16px;
   z-index: 5;
   display: flex;
@@ -2264,6 +2261,9 @@ footer {
 .scene-follow {
   white-space: nowrap;
 }
+.scene-follow-short {
+  display: none;
+}
 .scene-follow[aria-pressed="true"] {
   border-color: #70d5ba;
   color: #b7f2e0;
@@ -2277,5 +2277,216 @@ footer {
   .scene-group-legend span {
     font-size: 9px;
     padding: 3px 5px;
+  }
+}
+
+/* Shared finishing: restrained metal accents and readable, touch-friendly cards. */
+.sidebar {
+  background: linear-gradient(165deg, #1c292b, #121b1e 65%);
+}
+.panel,
+.office-panel,
+.metrics > div,
+.signal-card,
+.scanner-card,
+.chart-card {
+  border-radius: 14px;
+  box-shadow:
+    inset 0 1px #ffffff04,
+    0 8px 24px #00000012;
+}
+.panel,
+.signal-card {
+  background: linear-gradient(145deg, #1b282c, var(--surface));
+}
+.heading .eyebrow,
+.home-hud .eyebrow,
+.nav-label {
+  color: var(--champagne);
+}
+.metrics > div {
+  border-top-color: #c9ad7855;
+}
+.metrics strong,
+.chart-summary strong {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.5px;
+}
+.scanner-card p,
+.scanner-card small {
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+.home-hud h1 {
+  letter-spacing: -0.8px;
+}
+.home-state {
+  background: #122927c9;
+  border: 1px solid #65d9b52b;
+  border-radius: 999px;
+  padding: 7px 10px;
+  backdrop-filter: blur(12px);
+}
+.home-stage {
+  border-radius: 0;
+}
+.home-hud .segmented,
+.home-menu-button {
+  border-radius: 10px;
+}
+.home-hud .segmented button {
+  min-height: 44px;
+}
+.scene-controls button[aria-pressed="true"] {
+  background: #2d5146;
+  border-color: #d1b887a6;
+  color: #f4ebd9;
+}
+.scene-group-legend span {
+  border-radius: 999px;
+  padding: 5px 8px;
+}
+.office-fallback-note {
+  margin: 12px 20px 0;
+  padding: 12px 16px;
+  border: 1px solid #c9ad7840;
+  border-radius: 10px;
+  color: #d7c8a9;
+  background: #19282b;
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.operations-grid button {
+  background: linear-gradient(145deg, #203437, #17272b);
+  border-radius: 14px;
+}
+.operations-grid strong {
+  overflow-wrap: anywhere;
+}
+.modal {
+  border-color: #c9ad7855;
+  border-radius: 18px;
+  box-shadow: 0 24px 100px #0007;
+}
+
+/* Camera presets get their own row on touch screens. Quality and actions share
+   the second row, so landscape never overlays one control with another. */
+@media (max-width: 1100px) {
+  .scene-controls,
+  .home-stage .scene-controls {
+    left: max(12px, env(safe-area-inset-left));
+    right: max(12px, env(safe-area-inset-right));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+  .scene-view-buttons {
+    order: -1;
+    flex: 1 0 100%;
+    scroll-padding-inline: 4px;
+  }
+  .scene-controls .scene-quality {
+    order: 0;
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    align-items: flex-start;
+    background: transparent;
+  }
+  .scene-controls > button,
+  .scene-controls .scene-camera-actions {
+    order: 1;
+  }
+  .scene-quality > span {
+    display: none;
+  }
+  .scene-controls .scene-quality select {
+    min-height: 44px;
+    max-width: 160px;
+    font-size: 12px;
+  }
+  .scene-group-legend {
+    bottom: max(132px, calc(env(safe-area-inset-bottom) + 120px));
+    right: max(16px, env(safe-area-inset-right));
+    max-width: calc(100% - 32px);
+  }
+  .scene-controls button {
+    min-height: 44px;
+    font-size: 11px;
+  }
+}
+@media (max-width: 760px) {
+  .office-panel:not(.home-stage) .operations-grid {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x proximity;
+    gap: 12px;
+    padding: 16px;
+  }
+  .office-panel:not(.home-stage) .operations-grid button {
+    flex: 0 0 156px;
+    scroll-snap-align: start;
+  }
+  .sidebar:not(.home-menu) {
+    height: calc(68px + env(safe-area-inset-bottom));
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .sidebar:not(.home-menu) nav a {
+    min-width: 64px;
+    min-height: 48px;
+    font-size: 10px;
+  }
+  main {
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+    min-height: 44px;
+  }
+  .metrics small {
+    font-size: 11px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+  }
+  .scene-follow-full {
+    display: none;
+  }
+  .scene-follow-short {
+    display: inline;
+  }
+  .scene-controls .scene-quality select {
+    width: 100%;
+    padding-inline: 8px;
+  }
+  .scene-group-legend span {
+    font-size: 10px;
+    padding: 4px 6px;
+  }
+  .home-hud {
+    gap: 10px;
+  }
+  .home-hud h1 {
+    font-size: 24px;
+  }
+  .home-hud .segmented button {
+    font-size: 12px;
+    min-height: 44px;
+  }
+  .home-shell .home-menu {
+    overflow-y: auto;
+  }
+  .office-fallback-note {
+    margin-inline: 16px;
+  }
+}
+@media (max-width: 600px) {
+  .home-stage:not(.home-fallback) > .meeting-status {
+    top: max(184px, calc(env(safe-area-inset-top) + 184px));
   }
 }

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState } from "react";
+import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -100,14 +100,39 @@ function AppLayout() {
   const location = useLocation();
   const home = location.pathname === "/" || location.pathname === "/office";
   const [menuOpen, setMenuOpen] = useState(false);
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const navigation = useRef<HTMLElement>(null);
   useEffect(() => setMenuOpen(false), [location.pathname]);
   useEffect(() => {
+    if (!home || !menuOpen) return;
+    navigation.current?.querySelector<HTMLAnchorElement>("nav a")?.focus();
     const close = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMenuOpen(false);
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+        menuButton.current?.focus();
+      }
+      if (event.key === "Tab") {
+        const links = Array.from(
+          navigation.current?.querySelectorAll<HTMLAnchorElement>("nav a") ??
+            [],
+        );
+        const first = links[0],
+          last = menuButton.current;
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
+        }
+      }
     };
     window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, []);
+    return () => {
+      window.removeEventListener("keydown", close);
+      menuButton.current?.focus();
+    };
+  }, [home, menuOpen]);
   return (
     <div className={`shell${home ? " home-shell" : ""}`}>
       {!online && (
@@ -118,6 +143,7 @@ function AppLayout() {
       )}
       {home && (
         <button
+          ref={menuButton}
           className="home-menu-button"
           aria-expanded={menuOpen}
           aria-controls={menuOpen ? "app-navigation" : undefined}
@@ -131,11 +157,13 @@ function AppLayout() {
         <button
           className="home-menu-dismiss"
           aria-label="Tutup menu"
+          tabIndex={-1}
           onClick={() => setMenuOpen(false)}
         />
       )}
       {(!home || menuOpen) && (
         <aside
+          ref={navigation}
           id="app-navigation"
           className={`sidebar${home ? " home-menu" : ""}`}
         >
@@ -148,7 +176,7 @@ function AppLayout() {
             </div>
           </Link>
           <span className="nav-label">OPERATIONS</span>
-          <nav>
+          <nav aria-label="Navigasi utama">
             {[
               ["/", "◈", "Home"],
               ["/operations", "▤", "Operations"],
@@ -189,14 +217,14 @@ function AppLayout() {
           </div>
         </aside>
       )}
-      <main>
+      <main inert={home && menuOpen}>
         {!home && (
           <header className="topbar">
             <span>
               BYGA / OPERATIONS <i>●</i>
             </span>
             <div>
-              <span className="muted">Cloudflare-first</span>
+              <span className="muted">AI Trading Office</span>
               <Link to="/admin">
                 {session.data?.admin ? "Admin terhubung" : "Login Admin"}
               </Link>
@@ -284,19 +312,24 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
     characters =
       useData<{ id: CharacterId; avatar: AvatarPreset }[]>("/characters");
   const [view, setView] = useState(immersive ? "3D" : "Operations");
+  const [sceneUnavailable, setSceneUnavailable] = useState(false);
   const [selected, setSelected] = useState<string>();
   const [activityKinds, setActivityKinds] = useState<
     Partial<Record<CharacterId, OfficeActivityKind>>
   >({});
   const [tf, setTf] = useState("M5");
   useEffect(() => {
-    const fallback = () => setView("Operations");
+    const fallback = () => {
+      setSceneUnavailable(true);
+      setView("Operations");
+    };
     window.addEventListener("byga:webgl-lost", fallback);
     return () => window.removeEventListener("byga:webgl-lost", fallback);
   }, []);
   const office = state.data?.office ?? "CONNECTING";
   const health = useData<Record<string, string>>("/health", true);
   const render3D = view === "3D" && supportsWebGL();
+  const unavailable = sceneUnavailable || (view === "3D" && !render3D);
   const meeting = useMeetingPresentation(render3D);
   const busy = !!state.data?.active || meeting.active;
   const presenceFor = (id: CharacterId) =>
@@ -442,10 +475,14 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
               </>
             )}
           </div>
-          <div className="segmented">
+          <div className="segmented" role="group" aria-label="Tampilan kantor">
             {["3D", "Operations"].map((v) => (
               <button
-                className={v === view ? "selected" : ""}
+                className={
+                  (v === "3D" ? render3D : !render3D) ? "selected" : ""
+                }
+                aria-pressed={v === "3D" ? render3D : !render3D}
+                disabled={v === "3D" && unavailable}
                 key={v}
                 onClick={() => setView(v)}
               >
@@ -486,22 +523,30 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
             </Suspense>
           </SceneBoundary>
         ) : (
-          <div className="operations-grid" aria-label="Tim operasi">
-            {characterIds.map((id) => (
-              <button key={id} onClick={() => setSelected(id)}>
-                <span className="avatar">
-                  {id === "boss"
-                    ? "BG"
-                    : roles[id]
-                        .split(" ")
-                        .map((s) => s[0])
-                        .join("")}
-                </span>
-                <strong>{roles[id]}</strong>
-                <Badge value={presenceFor(id)} />
-              </button>
-            ))}
-          </div>
+          <>
+            {unavailable && (
+              <p className="office-fallback-note" role="status">
+                Tampilan 3D tidak tersedia. Tim dan hasil analisis tetap dapat
+                diakses.
+              </p>
+            )}
+            <div className="operations-grid" aria-label="Tim operasi">
+              {characterIds.map((id) => (
+                <button key={id} onClick={() => setSelected(id)}>
+                  <span className="avatar">
+                    {id === "boss"
+                      ? "BG"
+                      : roles[id]
+                          .split(" ")
+                          .map((s) => s[0])
+                          .join("")}
+                  </span>
+                  <strong>{roles[id]}</strong>
+                  <Badge value={presenceFor(id)} />
+                </button>
+              ))}
+            </div>
+          </>
         )}
         <MeetingStatus presentation={meeting} />
         {!render3D && meeting.active && meeting.current && (

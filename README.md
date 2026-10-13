@@ -41,6 +41,8 @@ npm run deploy:check
 
 See [3D camera and scanner settings](docs/OFFICE_UI_SETTINGS.md) for speaker tracking, group identities, and numeric scanner controls.
 
+See [frontend and mobile-first 3D audit](docs/FRONTEND_MOBILE_AUDIT.md) for the responsive camera dock, premium visual updates, keyboard navigation, and renderer/storage fallback review.
+
 See [five-minute scanner meetings](docs/CRON_MEETINGS.md) for the two-group AI gate, no-AI visual review, meeting handoff API, and required configuration migration.
 
 Admin → Trading Config can select **4 or 8 AI voters**. Four uses one analyst per group (Trend, Structure, Volume, Derivatives); Risk and Boss still review separately. The default remains eight. See [voting modes and case snapshots](docs/AI_VOTING_MODES.md).

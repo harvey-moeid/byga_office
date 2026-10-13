@@ -1,5 +1,46 @@
 import { PhysicalSign } from "./physical-signs";
 
+/** A small, shared base gives lightweight modes the same finished silhouette.
+ * It sits below the walkable floor and uses no extra lights or asset downloads. */
+export function OfficeFoundation() {
+  return (
+    <group name="office-foundation">
+      <mesh position={[0, -0.54, 0]} receiveShadow>
+        <boxGeometry args={[18.9, 0.46, 16.9]} />
+        <meshStandardMaterial color="#352d28" roughness={0.62} />
+      </mesh>
+      <mesh position={[0, -0.79, 0]}>
+        <boxGeometry args={[19.35, 0.08, 17.35]} />
+        <meshStandardMaterial
+          color="#15191a"
+          roughness={0.52}
+          metalness={0.34}
+        />
+      </mesh>
+      <mesh position={[0, -0.34, 8.46]}>
+        <boxGeometry args={[18.8, 0.025, 0.025]} />
+        <meshStandardMaterial
+          color="#c9ad78"
+          metalness={0.65}
+          roughness={0.4}
+        />
+      </mesh>
+      <PhysicalSign
+        quality="low"
+        sign={{
+          id: "foundation-brand",
+          label: "BYGA OFFICE",
+          position: [0, -0.55, 8.47],
+          width: 2.8,
+          height: 0.28,
+          mount: "wall",
+          style: "plaque",
+        }}
+      />
+    </group>
+  );
+}
+
 function Pendant({
   position,
   intensity = 2.8,
@@ -56,16 +97,23 @@ function GlassDoor({ x }: { x: number }) {
       </mesh>
       <mesh position={[x > 0 ? -0.55 : 0.55, 0, 0.055]}>
         <boxGeometry args={[0.035, 2.16, 0.04]} />
-        <meshStandardMaterial color="#303638" metalness={0.78} roughness={0.25} />
+        <meshStandardMaterial
+          color="#303638"
+          metalness={0.78}
+          roughness={0.25}
+        />
       </mesh>
       <mesh position={[x > 0 ? -0.38 : 0.38, 0, 0.075]}>
         <boxGeometry args={[0.025, 0.48, 0.035]} />
-        <meshStandardMaterial color="#c5a66b" metalness={0.82} roughness={0.22} />
+        <meshStandardMaterial
+          color="#c5a66b"
+          metalness={0.82}
+          roughness={0.22}
+        />
       </mesh>
     </group>
   );
 }
-
 
 function WoodSlatWall({
   position,
@@ -211,20 +259,6 @@ export function PremiumOfficeAccents({ cinematic }: { cinematic: boolean }) {
       <PremiumPlanter position={[2.95, 0, 6.74]} scale={0.92} />
       <PremiumPlanter position={[7.72, 0, 6.7]} scale={1.05} />
       <PremiumPlanter position={[2.95, 0, -5.85]} scale={0.86} />
-      <mesh position={[0, -0.54, 0]} receiveShadow>
-        <boxGeometry args={[18.9, 0.46, 16.9]} />
-        <meshPhysicalMaterial
-          color="#3f2d22"
-          roughness={0.44}
-          clearcoat={0.18}
-          clearcoatRoughness={0.5}
-        />
-      </mesh>
-      <mesh position={[0, -0.79, 0]}>
-        <boxGeometry args={[19.35, 0.08, 17.35]} />
-        <meshStandardMaterial color="#15191a" roughness={0.52} metalness={0.34} />
-      </mesh>
-
       <mesh position={[4.85, 0.72, 7.7]} castShadow receiveShadow>
         <boxGeometry args={[5.15, 1.45, 0.3]} />
         <meshPhysicalMaterial
@@ -261,7 +295,11 @@ export function PremiumOfficeAccents({ cinematic }: { cinematic: boolean }) {
       <GlassDoor x={0.68} />
       <mesh position={[0, 2.24, 7.59]}>
         <boxGeometry args={[3, 0.08, 0.1]} />
-        <meshStandardMaterial color="#333a3b" metalness={0.75} roughness={0.24} />
+        <meshStandardMaterial
+          color="#333a3b"
+          metalness={0.75}
+          roughness={0.24}
+        />
       </mesh>
 
       {[
@@ -298,7 +336,11 @@ export function PremiumOfficeAccents({ cinematic }: { cinematic: boolean }) {
         </group>
       ))}
 
-      <mesh position={[-6.2, 0.046, 5.7]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+      <mesh
+        position={[-6.2, 0.046, 5.7]}
+        rotation={[-Math.PI / 2, 0, 0]}
+        receiveShadow
+      >
         <circleGeometry args={[1.55, 48]} />
         <meshStandardMaterial color="#314944" roughness={1} />
       </mesh>
@@ -318,7 +360,7 @@ export function PremiumOfficeAccents({ cinematic }: { cinematic: boolean }) {
           id: "office-mantra",
           label: "DISCIPLINE",
           subtitle: "PLAN · EXECUTE · GROW",
-          position: [8.40, 1.62, 5.55],
+          position: [8.4, 1.62, 5.55],
           rotationY: -Math.PI / 2,
           width: 1.85,
           height: 0.87,

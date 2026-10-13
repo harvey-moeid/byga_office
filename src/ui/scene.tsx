@@ -1,6 +1,13 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { ContactShadows, OrbitControls } from "@react-three/drei";
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   TOUCH,
   Vector3,
@@ -42,7 +49,7 @@ import {
 } from "./quality";
 import { OfficeEnvironment } from "./office-environment";
 import { HybridOfficeAssets } from "./office-assets";
-import { PremiumOfficeAccents } from "./office-premium";
+import { OfficeFoundation, PremiumOfficeAccents } from "./office-premium";
 import { UpperFloorOffice } from "./office-upper-floor";
 import { RoomSigns, ScannerDisplay } from "./physical-signs";
 import {
@@ -71,6 +78,7 @@ import type { ComponentRef, RefObject } from "react";
 import type { PresentationTurn as MeetingTurn } from "../core/meeting";
 import type { CharacterPresence } from "./character-state";
 import { CharacterPeekBubble, SpeechBubble } from "./meeting-view";
+import { readPreference, writePreference } from "./preferences";
 
 type CharacterBubbleContext = {
   presence: CharacterPresence;
@@ -282,7 +290,9 @@ function CameraView({
         const buttons = document
           .querySelector(".scene-controls")
           ?.getBoundingClientRect();
-        const legend = document.querySelector(".scene-group-legend")?.getBoundingClientRect();
+        const legend = document
+          .querySelector(".scene-group-legend")
+          ?.getBoundingClientRect();
         const rect = meetingViewport(
           size.width,
           size.height,
@@ -601,11 +611,11 @@ export default function OfficeScene({
   const [view, setView] = useState<View>("overview");
   const [reset, setReset] = useState(0);
   const [followSpeaker, setFollowSpeaker] = useState(
-    () => window.localStorage.getItem("byga:camera-follow") !== "false",
+    () => readPreference("byga:camera-follow") !== "false",
   );
   const cameraInterrupted = useRef(false);
   useEffect(() => {
-    window.localStorage.setItem("byga:camera-follow", String(followSpeaker));
+    writePreference("byga:camera-follow", String(followSpeaker));
   }, [followSpeaker]);
   const positions = useRef<CharacterPositions>({});
   const [reduced, setReduced] = useState(
@@ -693,16 +703,14 @@ export default function OfficeScene({
     [],
   );
   const [qualityMode, setQualityMode] = useState<QualityMode>(() =>
-    parseQualityMode(window.localStorage.getItem(QUALITY_STORAGE_KEY)),
+    parseQualityMode(readPreference(QUALITY_STORAGE_KEY)),
   );
   const [quality, setQuality] = useState<Quality>(() => {
-    const stored = parseQualityMode(
-      window.localStorage.getItem(QUALITY_STORAGE_KEY),
-    );
+    const stored = parseQualityMode(readPreference(QUALITY_STORAGE_KEY));
     return stored === "auto" ? deviceQuality : stored;
   });
   useEffect(() => {
-    window.localStorage.setItem(QUALITY_STORAGE_KEY, qualityMode);
+    writePreference(QUALITY_STORAGE_KEY, qualityMode);
     setQuality(qualityMode === "auto" ? deviceQuality : qualityMode);
   }, [deviceQuality, qualityMode]);
   const profile = profiles[quality];
@@ -711,7 +719,7 @@ export default function OfficeScene({
 
     const parseStoredVenue = (): MeetingVenueRecord | undefined => {
       try {
-        const raw = window.localStorage.getItem(MEETING_VENUE_STORAGE_KEY);
+        const raw = readPreference(MEETING_VENUE_STORAGE_KEY);
         if (!raw) return undefined;
         const value = JSON.parse(raw) as Partial<MeetingVenueRecord>;
         return typeof value.caseId === "string" &&
@@ -727,7 +735,7 @@ export default function OfficeScene({
       if (!profile.upperFloor) {
         meetingVenueCase.current = meetingId;
         setMeetingFloor(1);
-        window.localStorage.setItem(
+        writePreference(
           MEETING_VENUE_STORAGE_KEY,
           JSON.stringify({ caseId: meetingId, floor: 1 }),
         );
@@ -742,10 +750,7 @@ export default function OfficeScene({
     );
     meetingVenueCase.current = meetingId;
     setMeetingFloor(venue.floor);
-    window.localStorage.setItem(
-      MEETING_VENUE_STORAGE_KEY,
-      JSON.stringify(venue),
-    );
+    writePreference(MEETING_VENUE_STORAGE_KEY, JSON.stringify(venue));
   }, [meetingId, profile.upperFloor]);
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
   useEffect(() => {
@@ -1047,6 +1052,7 @@ export default function OfficeScene({
         {profile.decorative && (
           <PremiumOfficeAccents cinematic={quality === "ultra"} />
         )}
+        <OfficeFoundation />
         {profile.decorative && <InteriorReflections />}
         <MarketWall
           prices={prices}
@@ -1177,7 +1183,11 @@ export default function OfficeScene({
           }}
         />
       </Canvas>
-      <div className="scene-group-legend" role="group" aria-label="Empat grup analisis">
+      <div
+        className="scene-group-legend"
+        role="group"
+        aria-label="Empat grup analisis"
+      >
         {Object.entries(groupIdentity).map(([key, identity]) => (
           <span key={key} style={{ borderColor: identity.color }}>
             <i style={{ background: identity.color }} />
@@ -1197,6 +1207,12 @@ export default function OfficeScene({
               <button
                 key={key}
                 aria-pressed={view === key}
+                onFocus={(event) =>
+                  event.currentTarget.scrollIntoView({
+                    block: "nearest",
+                    inline: "nearest",
+                  })
+                }
                 onClick={() => {
                   setFollowSpeaker(false);
                   setView(key);
@@ -1209,6 +1225,7 @@ export default function OfficeScene({
         </div>
         <button
           className="scene-follow"
+          aria-label="Ikuti pembicara"
           aria-pressed={followSpeaker}
           onClick={() => {
             setFollowSpeaker((value) => !value);
@@ -1218,7 +1235,10 @@ export default function OfficeScene({
             }
           }}
         >
-          Ikuti pembicara
+          <span className="scene-follow-full">Ikuti pembicara</span>
+          <span className="scene-follow-short" aria-hidden="true">
+            Ikuti
+          </span>
         </button>
         <div
           className="scene-camera-actions"
@@ -1243,27 +1263,27 @@ export default function OfficeScene({
         >
           ↺
         </button>
+        <label className="scene-quality">
+          <span>
+            Kualitas 3D <small>2 lantai</small>
+          </span>
+          <select
+            aria-label="Kualitas 3D"
+            value={qualityMode}
+            onChange={(event) =>
+              setQualityMode(event.target.value as QualityMode)
+            }
+          >
+            {qualityModes.map((mode) => (
+              <option key={mode} value={mode}>
+                {mode === "auto"
+                  ? `Auto · ${quality}`
+                  : mode[0].toUpperCase() + mode.slice(1)}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
-      <label className="scene-quality">
-        <span>
-          Kualitas 3D <small>2 lantai</small>
-        </span>
-        <select
-          aria-label="Kualitas 3D"
-          value={qualityMode}
-          onChange={(event) =>
-            setQualityMode(event.target.value as QualityMode)
-          }
-        >
-          {qualityModes.map((mode) => (
-            <option key={mode} value={mode}>
-              {mode === "auto"
-                ? `Auto · ${quality}`
-                : mode[0].toUpperCase() + mode.slice(1)}
-            </option>
-          ))}
-        </select>
-      </label>
     </div>
   );
 }
