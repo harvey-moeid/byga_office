@@ -430,9 +430,13 @@ test("operations, scanner navigation, admin login and mobile layout remain usabl
   await expect(
     page.getByRole("heading", { name: "Trading Office", exact: true }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Buka status kantor" }).click();
   await expect(
-    page.getByText("Lingkungan pengembangan lokal", { exact: false }),
+    page
+      .getByRole("dialog", { name: "Status kantor" })
+      .getByText("Lingkungan pengembangan lokal", { exact: false }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Tutup status kantor" }).click();
   await expect(page.getByText("Trend Analyst", { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("button", { name: /Sholat/ })).toHaveCount(0);
