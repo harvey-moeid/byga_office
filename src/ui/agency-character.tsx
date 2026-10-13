@@ -13,6 +13,7 @@ import { clone } from "three/addons/utils/SkeletonUtils.js";
 import { RiggedOfficeCharacter as ProceduralCharacter } from "./rigged-character";
 
 import { agencyOutfitColor, dressAgencyCharacter } from "./agency-clothing";
+import { createStairPose } from "./stair-pose";
 
 type Props = Parameters<typeof ProceduralCharacter>[0];
 const AVATARS = ["aria", "nova", "kai", "leo", "iris"] as const;
@@ -49,6 +50,16 @@ function AgencyCharacter(props: Props & { url: string }) {
     return { root: model, materials };
   }, [gltf.scene, props.quality, mask, outfitColor]);
   const root = character.root;
+  const head = useMemo(
+    () =>
+      root.getObjectByName("Bip01_Head") ?? root.getObjectByName("Bip01 Head"),
+    [root],
+  );
+  const stairPose = useMemo(() => createStairPose(root, true), [root]);
+  useEffect(() => {
+    props.onHeadAnchor?.(head);
+    return () => props.onHeadAnchor?.(undefined);
+  }, [head, props.onHeadAnchor]);
   useEffect(
     () => () => character.materials.forEach((material) => material.dispose()),
     [character.materials],
@@ -126,7 +137,7 @@ function AgencyCharacter(props: Props & { url: string }) {
     else next.fadeIn(0.12);
     previous.current = next;
   }, [actions, clipName, props.phase, props.motionReduced, mixer]);
-  useFrame(() => {
+  useFrame((_, dt) => {
     mixer.timeScale = props.motionReduced || document.hidden ? 0 : 1;
     previous.current?.setEffectiveTimeScale(
       props.motion === "walk"
@@ -162,6 +173,13 @@ function AgencyCharacter(props: Props & { url: string }) {
         );
       }
     }
+    if (props.worldPosition)
+      stairPose(
+        props.stairMotion?.current,
+        props.worldPosition.current,
+        dt,
+        props.motionReduced,
+      );
     for (const action of Object.values(actions))
       if (
         action &&

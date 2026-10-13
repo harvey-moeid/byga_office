@@ -1,4 +1,4 @@
-import type { CharacterId } from "../core/contracts";
+import { characterIds, type CharacterId } from "../core/contracts";
 import type { MeetingSnapshot } from "../core/meeting";
 
 export interface MeetingPlayback {
@@ -14,12 +14,16 @@ export interface MeetingPlayback {
   shown: CharacterId[];
   speaker?: CharacterId;
   until: number;
+  deadline?: number;
+  speechSeen?: boolean;
 }
+export const MEETING_TRAVEL_TIMEOUT = 65000;
 export function advanceMeeting(
   previous: MeetingPlayback | undefined,
   meeting: MeetingSnapshot | null,
   now: number,
   reduced = false,
+  arrivals?: ReadonlySet<CharacterId>,
 ): MeetingPlayback | undefined {
   if (!meeting) return previous?.phase === "done" ? previous : undefined;
   if (!previous || previous.caseId !== meeting.case_id)
@@ -28,7 +32,9 @@ export function advanceMeeting(
       phase: "gathering",
       stage: meeting.kind === "SCANNER" ? "SCANNER_REVIEW" : "AI_ANALYSIS",
       shown: [],
-      until: now + (reduced ? 4000 : 14000),
+      until:
+        now + (arrivals ? (reduced ? 1200 : 2200) : reduced ? 4000 : 14000),
+      deadline: now + MEETING_TRAVEL_TIMEOUT,
     };
   if (previous.phase === "done") return previous;
   if (meeting.cancelled && previous.phase !== "returning")
@@ -40,6 +46,22 @@ export function advanceMeeting(
       until: now + 8000,
     };
   if (now < previous.until) return previous;
+  if (
+    arrivals &&
+    !meeting.cancelled &&
+    now < (previous.deadline ?? previous.until)
+  ) {
+    const participants = meeting.participants ?? characterIds;
+    const waitingFor =
+      previous.phase === "gathering"
+        ? participants.filter((id) => id !== "boss")
+        : previous.phase === "boss-entering"
+          ? ["boss" as const]
+          : previous.phase === "returning"
+            ? participants
+            : [];
+    if (waitingFor.some((id) => !arrivals.has(id))) return previous;
+  }
   if (previous.phase === "returning")
     return { ...previous, phase: "done", speaker: undefined };
   const shown = previous.speaker
@@ -63,6 +85,7 @@ export function advanceMeeting(
         stage,
         phase: "boss-entering",
         until: now + (reduced ? 2500 : 8000),
+        deadline: now + MEETING_TRAVEL_TIMEOUT,
       };
     return {
       ...previous,
@@ -71,6 +94,8 @@ export function advanceMeeting(
       phase: "speaking",
       speaker: next.character,
       until: now + 7000,
+      deadline: now + 20000,
+      speechSeen: false,
     };
   }
   if (meeting.finished && previous.stage !== "BOSS_DECISION")
@@ -81,6 +106,7 @@ export function advanceMeeting(
       phase: "boss-entering",
       stage: "BOSS_DECISION",
       until: now + (reduced ? 2500 : 8000),
+      deadline: now + MEETING_TRAVEL_TIMEOUT,
     };
   if (meeting.finished)
     return {
@@ -90,6 +116,7 @@ export function advanceMeeting(
       phase: "returning",
       stage: "RETURN_TO_DESK",
       until: now + 8000,
+      deadline: now + MEETING_TRAVEL_TIMEOUT,
     };
   if (previous.phase === "waiting" && !previous.speaker) return previous;
   return {

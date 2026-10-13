@@ -10,7 +10,11 @@ import {
   Quaternion,
   QuaternionKeyframeTrack,
   VectorKeyframeTrack,
+  type Object3D,
+  type Vector3,
 } from "three";
+import { createStairPose } from "./stair-pose";
+import type { StairDirection } from "./character-locomotion";
 import { clone as cloneSkeleton } from "three/addons/utils/SkeletonUtils.js";
 import { showsCoffeeCup, type CharacterMotion } from "./character-motion";
 import { characterBlink, workstationMotion } from "./character-expression";
@@ -602,6 +606,9 @@ export function RiggedOfficeCharacter({
   motionSpeed,
   phase,
   quality,
+  stairMotion,
+  worldPosition,
+  onHeadAnchor,
 }: {
   quality: Quality;
   phase: number;
@@ -611,6 +618,9 @@ export function RiggedOfficeCharacter({
   style: RiggedCharacterStyle;
   showPhone: boolean;
   motionReduced: boolean;
+  stairMotion?: RefObject<StairDirection | undefined>;
+  worldPosition?: RefObject<Vector3>;
+  onHeadAnchor?: (head: Object3D | undefined) => void;
 }) {
   const model = useGLTF(HUMANOID_MODEL);
   const stableStyle = useMemo<RiggedCharacterStyle>(
@@ -640,6 +650,11 @@ export function RiggedOfficeCharacter({
   const { actions, mixer } = useAnimations(CLIPS, root);
   const active = useRef<string | undefined>(undefined);
   const head = useMemo(() => root.getObjectByName("Head"), [root]);
+  const stairPose = useMemo(() => createStairPose(root, false), [root]);
+  useEffect(() => {
+    onHeadAnchor?.(head);
+    return () => onHeadAnchor?.(undefined);
+  }, [head, onHeadAnchor]);
   const hands = useMemo(
     () => [root.getObjectByName("LeftHand"), root.getObjectByName("RightHand")],
     [root],
@@ -729,6 +744,8 @@ export function RiggedOfficeCharacter({
               ? -0.18
               : 0;
     });
+    if (worldPosition)
+      stairPose(stairMotion?.current, worldPosition.current, dt, motionReduced);
   });
 
   useEffect(() => {

@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { characterIds } from "../src/core/contracts";
+import { WALK_SPEED, STAIR_SPEED } from "../src/ui/character-locomotion";
+import { MEETING_TRAVEL_TIMEOUT } from "../src/ui/meeting";
 import {
   analystDesks,
   analystFloor,
@@ -420,19 +422,20 @@ describe("two-floor office layout", () => {
     expect(BOSS_OFFICE_LAYOUT.deskBypassZ).toBeGreaterThan(deskBack + 0.2);
   });
 
-  it("keeps L2 gathering and Boss entry routes inside their presentation windows", () => {
-    const routeLength = (
+  it("keeps natural L2 and Boss travel inside the bounded arrival window", () => {
+    const routeDuration = (
       start: readonly [number, number, number],
       route: readonly (readonly [number, number, number])[],
     ) => {
       let total = 0;
       let previous = start;
       for (const point of route) {
-        total += Math.hypot(
+        const distance = Math.hypot(
           point[0] - previous[0],
           point[1] - previous[1],
           point[2] - previous[2],
         );
+        total += distance / (Math.abs(point[1] - previous[1]) > 0.002 ? STAIR_SPEED : WALK_SPEED);
         previous = point;
       }
       return total;
@@ -444,13 +447,13 @@ describe("two-floor office layout", () => {
       const start = characterTarget(index, "MONITORING", 1, true);
       const meeting = characterTarget(index, "AI_ANALYSIS", 2, true);
       const route = planWorldRoute(start.position, meeting);
-      expect(routeLength(start.position, route) / 2.7).toBeLessThan(14);
+      expect(routeDuration(start.position, route) * 1000 + 450).toBeLessThan(MEETING_TRAVEL_TIMEOUT);
     });
 
     const bossStart = characterTarget(bossIndex, "MONITORING", 1, true);
     const bossMeeting = characterTarget(bossIndex, "BOSS_DECISION", 2, true);
     const bossRoute = planWorldRoute(bossStart.position, bossMeeting);
-    expect(routeLength(bossStart.position, bossRoute) / 1.8).toBeLessThan(8);
+    expect(routeDuration(bossStart.position, bossRoute) * 1000 + 450).toBeLessThan(MEETING_TRAVEL_TIMEOUT);
   });
 
   it("routes an L2 meeting through the staircase and back to L1 without teleporting", () => {

@@ -53,10 +53,10 @@ const finishes: Record<
   }
 > = {
   plaster: { color: "#e6e1d6", roughness: 0.94 },
-  oak: { color: "#b59166", roughness: 0.65 },
-  walnut: { color: "#705039", roughness: 0.5 },
-  metal: { color: "#343b40", roughness: 0.35, metalness: 0.72 },
-  fabric: { color: "#2b675c", roughness: 0.98 },
+  oak: { color: "#bca078", roughness: 0.72 },
+  walnut: { color: "#654c3c", roughness: 0.58 },
+  metal: { color: "#303b3d", roughness: 0.42, metalness: 0.72 },
+  fabric: { color: "#28574e", roughness: 0.98 },
   leather: { color: "#343e3d", roughness: 0.72 },
   screen: { color: "#142a34", roughness: 0.3, emissive: "#152b35" },
   paper: { color: "#f3f1e8", roughness: 0.9 },

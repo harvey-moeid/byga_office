@@ -30,6 +30,8 @@ For Admin access, copy `.env.example` to the ignored `.dev.vars`. Generate a pas
 
 ## Verification
 
+See [the movement, meeting and mobile status update](docs/OFFICE_EXPERIENCE_UPDATE.md) for natural stair travel, arrival-based gathering, head-linked speech and the compact Home status sheet. Ultra remains available.
+
 Perbaikan sinkronisasi frontend/API dan penutupan temuan audit didokumentasikan pada [kontrak UI–API](docs/API_UI_CONTRACT.md). Migration `0006_admin_operations.sql` diperlukan untuk jurnal idempotensi config. Pengujian browser ke Worker/D1 lokal sebenarnya tersedia melalui `npm run test:browser:integration`.
 
 ```sh

@@ -25,6 +25,7 @@ import {
   type Signal,
 } from "../core/contracts";
 import "./style.css";
+import { OfficeStatus } from "./office-status";
 import { useData, useOfficeState, useOnline } from "./data";
 import { SessionProvider, useSession } from "./session";
 import type { OfficeState } from "../core/api";
@@ -464,10 +465,14 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
               <>
                 <span className="eyebrow">BYGA / AI TRADING OFFICE</span>
                 <h1>Trading Office</h1>
-                <span className="home-state">
-                  <span className="dot" />
-                  {office.replaceAll("_", " ")}
-                </span>
+                <OfficeStatus
+                  office={office}
+                  error={state.error}
+                  retry={state.retry}
+                  marketUnavailable={!!state.data?.error}
+                  development={market.data?.development}
+                  presentation={meeting}
+                />
               </>
             ) : (
               <>
@@ -491,7 +496,6 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
             ))}
           </div>
         </div>
-        {immersive && notices}
         {render3D ? (
           <SceneBoundary>
             <Suspense fallback={<Empty>Memuat kantor 3D…</Empty>}>
@@ -508,6 +512,7 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
                 speech={meeting.active ? meeting.current : undefined}
                 onSpeechDetails={meeting.openDetails}
                 onSpeechReady={meeting.onSpeechReady}
+                onMeetingArrival={meeting.onMeetingArrival}
                 onSelect={setSelected}
                 onActivityChange={setActivityKinds}
                 prices={market.data?.timeframes.M5.map((c) => c.close) ?? []}
@@ -548,7 +553,7 @@ function Dashboard({ immersive = false }: { immersive?: boolean }) {
             </div>
           </>
         )}
-        <MeetingStatus presentation={meeting} />
+        {!immersive && <MeetingStatus presentation={meeting} />}
         {!render3D && meeting.active && meeting.current && (
           <div className="fallback-meeting">
             <SpeechBubble
