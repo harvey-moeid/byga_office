@@ -30,7 +30,19 @@ const entry = localHtml.match(/src="([^"]+\.js)"/)?.[1];
 assert.ok(entry?.startsWith("/assets/"), "Built frontend entry missing");
 for (const path of ["/", "/office", "/operations"]) {
   for (let attempt = 0; attempt < 5; attempt++) {
-    const html = await (await get(path)).text();
+    const response = await get(path);
+    assert.equal(
+      response.headers.get("x-frame-options"),
+      "DENY",
+      `${path}: framing protection missing`,
+    );
+    assert.match(
+      response.headers.get("content-security-policy") ?? "",
+      /frame-ancestors 'none'/,
+      `${path}: CSP missing`,
+    );
+    assert.equal(response.headers.get("x-content-type-options"), "nosniff");
+    const html = await response.text();
     if (html.includes(entry)) break;
     assert.ok(
       attempt < 4,
@@ -64,17 +76,17 @@ await get("/api/v1/__test/alarm", 404);
 const state = await (await get("/api/v1/office/state")).json();
 assert.equal(typeof state.office, "string");
 const canonicalCharacters = [
-    "trend",
-    "structure",
-    "momentum",
-    "liquidity",
-    "volume",
-    "quant",
-    "derivatives",
-    "positioning",
-    "risk",
-    "boss",
-  ];
+  "trend",
+  "structure",
+  "momentum",
+  "liquidity",
+  "volume",
+  "quant",
+  "derivatives",
+  "positioning",
+  "risk",
+  "boss",
+];
 let characters;
 for (let attempt = 0; attempt < 10; attempt++) {
   characters = await (await get("/api/v1/characters")).json();

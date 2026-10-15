@@ -34,9 +34,6 @@ test("real auth, versioned config, scanner mutation and logout agree with the UI
   )) as { id: string };
   await page.getByLabel("minRR", { exact: true }).fill("2");
   await page
-    .getByText("Scanner, context, dan budget settings", { exact: true })
-    .click();
-  await page
     .getByRole("spinbutton", { name: "EMA cepat", exact: true })
     .fill("12");
   await page
@@ -165,9 +162,7 @@ test("APPLY NOW replaces a queued case atomically and a rejected quota preserves
   );
   const replacement = stats.cases.find((c) => c.status === "QUEUED");
   expect(replacement).toBeDefined();
-  await page
-    .getByText("Scanner, context, dan budget settings", { exact: true })
-    .click();
+  await page.getByText("Context dan budget", { exact: true }).click();
   await page
     .getByLabel("budgets", { exact: true })
     .fill(JSON.stringify({ ...current.config.budgets, casesPerDay: 1 }));

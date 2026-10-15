@@ -53,7 +53,7 @@ source.name = environment === "production" ? source.name : `${source.name}-${env
 source.account_id = settings.account;
 source.main = resolve("src/server/index.ts");
 source.assets.directory = resolve("dist");
-source.workers_dev = true;
+source.workers_dev = !defaults.custom_domain;
 if (defaults.custom_domain) {
   if (origin.hostname !== defaults.custom_domain || origin.port)
     throw new Error("PUBLIC_ORIGIN must match the deployment custom_domain.");

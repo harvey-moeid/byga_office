@@ -6,7 +6,7 @@ test("public Chart renders real Worker/D1 candles for all timeframes without inf
   page,
   request,
 }) => {
-  await request.post("http://127.0.0.1:8788/__test/reset");
+  await request.post("http://127.0.0.1:8788/__test/reset?publicSignals=true");
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/chart");

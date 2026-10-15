@@ -13,11 +13,17 @@ import { digest } from "../src/server/auth";
 import { apiLimits } from "../src/server/rate-limit";
 import {
   characterIds,
-  defaultConfig,
+  defaultConfig as strictDefaultConfig,
   workersAIModel,
   type CharacterConfig,
   type Signal,
 } from "../src/core/contracts";
+// Preserve advisory-policy regression fixtures; strict policy has dedicated tests.
+const defaultConfig: typeof strictDefaultConfig = {
+  ...strictDefaultConfig,
+  publicationPolicy: undefined,
+};
+
 let mf: Miniflare,
   cookie = "";
 let scenario: "BUY" | "SELL" | "NO_TRADE" | "TIE" | "BOSS_REVERSE" = "BUY";
@@ -204,6 +210,10 @@ beforeAll(async () => {
     .filter((p) => p.endsWith(".sql"))
     .sort())
     await db.exec(await readFile("migrations/" + file, "utf8"));
+  await db
+    .prepare("INSERT OR IGNORE INTO trading_config_versions VALUES (?,?,?,?)")
+    .bind("TRADING-CONFIG-v1", 1, JSON.stringify(defaultConfig), Date.now())
+    .run();
   const market = await mf.getD1Database("CHART_DB");
   await market.exec(
     "CREATE TABLE candles(symbol TEXT,timeframe TEXT,open_time INTEGER,open REAL,high REAL,low REAL,close REAL,volume REAL,is_closed INTEGER NOT NULL CHECK(is_closed IN (0,1)),PRIMARY KEY(symbol,timeframe,open_time));",
@@ -383,6 +393,9 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     ).toBe(204);
   });
   it("rejects a gap caused by the real is_closed flag without writing market data", async () => {
+    const previousCookie = cookie;
+    const authenticated = await call("/auth/login", { password }, false);
+    cookie = authenticated.headers.get("Set-Cookie")!.split(";")[0];
     const chartDb = await mf.getD1Database("CHART_DB");
     const row = await chartDb
       .prepare(
@@ -414,6 +427,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
         ).results,
       ).toEqual(before.results);
     } finally {
+      cookie = previousCookie;
       await chartDb
         .prepare(
           "UPDATE candles SET is_closed=1 WHERE timeframe='M5' AND open_time=?",
@@ -423,6 +437,9 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     }
   });
   it("reports stale-but-structurally-valid chart data as DEGRADED health", async () => {
+    const previousCookie = cookie;
+    const authenticated = await call("/auth/login", { password }, false);
+    cookie = authenticated.headers.get("Set-Cookie")!.split(";")[0];
     const chartDb = await mf.getD1Database("CHART_DB");
     const rows = await chartDb
       .prepare(
@@ -448,6 +465,7 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       const market = await call("/market/status");
       expect(market.status).toBe(503);
     } finally {
+      cookie = previousCookie;
       for (const row of rows.results)
         await chartDb
           .prepare(

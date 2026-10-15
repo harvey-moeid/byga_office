@@ -1,3 +1,4 @@
+import { publicationBlockReason } from "../core/publication-policy";
 import { DurableObject } from "cloudflare:workers";
 import { z } from "zod";
 import {
@@ -1747,6 +1748,7 @@ export class Office extends DurableObject<Env> {
         analysis_groups: groups,
         analysts,
         voting: vote,
+        publication_policy: s.config.publicationPolicy ?? null,
         risk_proposals: proposals,
       },
       s.config,
@@ -1767,6 +1769,7 @@ export class Office extends DurableObject<Env> {
         analysis_groups: groups,
         analysts,
         voting: vote,
+        publication_policy: s.config.publicationPolicy ?? null,
         risk_proposals: proposals,
         risk_review: riskReview.output ?? null,
       },
@@ -1833,6 +1836,33 @@ export class Office extends DurableObject<Env> {
       bias(indicators(s.market.M5, s.config)),
     ];
     const score = confidence(d, groups, analysts, mtf, s.config);
+    const blockedByPolicy = publicationBlockReason(s.config.publicationPolicy, {
+      direction: d,
+      analysts,
+      riskReview,
+      boss,
+      confidence: score.total,
+      riskReward: r.risk_reward,
+      minimumRR: s.config.minRR,
+    });
+    if (blockedByPolicy) {
+      await this.status(row, "NO_CONSENSUS", {
+        analysts,
+        vote,
+        riskReview,
+        boss,
+        score,
+        reason: blockedByPolicy,
+      });
+      await notify(
+        this.env,
+        row,
+        "NO_CONSENSUS",
+        s.sendDiscord && s.config.notifyNoConsensus,
+      );
+      return;
+    }
+
     const flags = [
       ...r.flags,
       ...vote.flags,

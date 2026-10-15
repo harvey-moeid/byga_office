@@ -8,6 +8,7 @@ import {
   scannerNames,
   wibDate,
   type Signal,
+  type ScannerOutput,
 } from "../core/contracts";
 import { reviewDelivery } from "./discord";
 import { consumeApiLimit, limitHeaders, limitedResponse } from "./rate-limit";
@@ -28,7 +29,12 @@ import {
 } from "./http";
 import type { OfficeState } from "../core/api";
 import { deleteHistory } from "./history";
-import { privateText } from "./publication";
+import {
+  privateText,
+  redactScanner,
+  redactOfficeState,
+  redactMeeting,
+} from "./publication";
 export { Office } from "./office";
 const adminMethods: Record<string, string[]> = {
   "/history/delete": ["POST"],
@@ -68,14 +74,24 @@ async function office(
     }),
   );
 }
-async function officeState(env: Env) {
+async function activeConfig(env: Env) {
+  const response = await office(env, "/config");
+  if (!response.ok) throw new HttpError(503, "Configuration unavailable");
+  return configSchema.parse(
+    ((await response.json()) as { config: unknown }).config,
+  );
+}
+async function officeState(env: Env, admin = false) {
   const response = await office(env, "/state");
   if (!response.ok)
     throw new HttpError(503, "Office state unavailable", "OFFICE_UNAVAILABLE");
-  return {
+  const state = {
     ...((await response.json()) as OfficeState),
-    group_names: analysisGroups,
+    group_names: [...analysisGroups],
   };
+  return admin || (await activeConfig(env)).publicSignals
+    ? state
+    : redactOfficeState(state);
 }
 async function marketProcessingDelay(env: Env) {
   const response = await office(env, "/config");
@@ -88,6 +104,7 @@ function officeEvents(request: Request, env: Env) {
   const encoder = new TextEncoder();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let stopped = false;
+  const expiresAt = Date.now() + 5 * 60_000;
   const stream = new ReadableStream<Uint8Array>({
     async start(controller) {
       const stop = () => {
@@ -103,8 +120,12 @@ function officeEvents(request: Request, env: Env) {
       request.signal.addEventListener("abort", stop, { once: true });
       const emit = async () => {
         if (stopped) return;
+        if (Date.now() >= expiresAt) {
+          stop();
+          return;
+        }
         try {
-          const state = await officeState(env);
+          const state = await officeState(env, await isAdmin(request, env));
           if (stopped) return;
           controller.enqueue(
             encoder.encode(`event: office\ndata: ${JSON.stringify(state)}\n\n`),
@@ -378,25 +399,54 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (path === "/api/v1/office/events") return officeEvents(request, env);
   if (path === "/api/v1/office/state") {
-    return json(await officeState(env));
+    return json(await officeState(env, admin));
   }
   if (path === "/api/v1/office/meeting") {
     const requested =
       new URL(request.url).searchParams.get("current") ?? undefined;
     if (requested && !/^[A-Za-z0-9:_-]{1,128}$/.test(requested))
       throw new HttpError(400, "Invalid meeting ID", "INVALID_MEETING_ID");
-    const { config } = (await (await office(env, "/config")).json()) as {
-      config: { publicSignals: boolean };
-    };
+    const config = await activeConfig(env);
+    const result = await readOfficeMeetings(
+      env,
+      admin || config.publicSignals,
+      requested,
+    );
+    // The current live meeting stays usable when historical browsing is disabled.
+    if (requested && !admin && requested !== result.meeting?.case_id) {
+      const allowed =
+        config.publicHistory &&
+        (await env.DB.prepare(
+          "SELECT id FROM (SELECT id FROM cases WHERE mode='LIVE' AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=cases.uuid) ORDER BY created_at DESC,rowid DESC LIMIT ?) WHERE id=? UNION ALL SELECT id FROM (SELECT id FROM scanner_meetings WHERE NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=scanner_meetings.case_uuid) ORDER BY created_at DESC,rowid DESC LIMIT ?) WHERE id=?",
+        )
+          .bind(config.historyLimit, requested, config.historyLimit, requested)
+          .first());
+      if (!allowed) result.requested_meeting = null;
+    }
     return json(
-      await readOfficeMeetings(env, admin || config.publicSignals, requested),
+      admin || config.publicSignals
+        ? result
+        : {
+            meeting: redactMeeting(result.meeting),
+            ...(requested
+              ? {
+                  requested_meeting: redactMeeting(
+                    result.requested_meeting ?? null,
+                  ),
+                }
+              : {}),
+          },
     );
   }
   if (path === "/api/v1/scanners") {
     const state = (await (await office(env, "/state")).json()) as {
-      scanners: unknown[];
+      scanners: ScannerOutput[];
     };
-    return json(state.scanners);
+    return json(
+      admin || (await activeConfig(env)).publicSignals
+        ? state.scanners
+        : state.scanners.map(redactScanner),
+    );
   }
   if (path === "/api/v1/characters") {
     const characters = (await (await office(env, "/characters")).json()) as {
@@ -428,17 +478,23 @@ async function route(request: Request, env: Env): Promise<Response> {
     )
       .bind(id)
       .all<{ snapshot: string }>();
-    return json(rows.results.map((r) => JSON.parse(r.snapshot)));
+    const visible = admin || (await activeConfig(env)).publicSignals;
+    return json(
+      rows.results.map((r) =>
+        visible
+          ? JSON.parse(r.snapshot)
+          : redactScanner(JSON.parse(r.snapshot)),
+      ),
+    );
   }
   if (path.startsWith("/api/v1/characters/")) {
     const id = path.split("/").at(-1);
-    const { config } = (await (await office(env, "/config")).json()) as {
-      config: { publicSignals: boolean };
-    };
+    const config = await activeConfig(env);
+    if (!admin && !config.publicHistory) return json([]);
     const rows = await env.DB.prepare(
-      "SELECT a.snapshot,c.id AS case_id,c.updated_at FROM ai_character_outputs a JOIN cases c ON c.uuid=a.case_uuid WHERE a.character_id=? AND c.mode='LIVE' AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=c.uuid) ORDER BY c.created_at DESC LIMIT 20",
+      "SELECT a.snapshot,c.id AS case_id,c.updated_at FROM ai_character_outputs a JOIN cases c ON c.uuid=a.case_uuid WHERE a.character_id=? AND c.mode='LIVE' AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=c.uuid) AND (?=1 OR c.uuid IN (SELECT uuid FROM cases WHERE mode='LIVE' AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=cases.uuid) ORDER BY created_at DESC,rowid DESC LIMIT ?)) ORDER BY c.created_at DESC LIMIT 20",
     )
-      .bind(id)
+      .bind(id, admin ? 1 : 0, config.historyLimit)
       .all<{ snapshot: string; case_id: string; updated_at: number }>();
     return json(
       rows.results.map((row) => {
@@ -472,6 +528,8 @@ async function route(request: Request, env: Env): Promise<Response> {
     );
   }
   if (path === "/api/v1/market/candles") {
+    if (!admin && !(await activeConfig(env)).publicSignals)
+      return json({ error: "Market detail is private" }, 401);
     const now = Date.now();
     const query = chartQuery(url.searchParams, now);
     try {
@@ -493,6 +551,8 @@ async function route(request: Request, env: Env): Promise<Response> {
     }
   }
   if (path === "/api/v1/market/status") {
+    if (!admin && !(await activeConfig(env)).publicSignals)
+      return json({ error: "Market detail is private" }, 401);
     try {
       const delay = await marketProcessingDelay(env);
       const m = await readMarket(env, Date.now(), 260, delay);
@@ -535,11 +595,15 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!config.publicSignals && !admin)
       return json({ error: "Admin authentication required" }, 401);
     if (path !== "/api/v1/signals") {
+      if (!admin && !config.publicHistory)
+        return json({ error: "Signal not found" }, 404);
       const id = decodeURIComponent(path.split("/").at(-1)!);
       const row = await env.DB.prepare(
-        "SELECT snapshot FROM signals WHERE id=? AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=signals.case_uuid)",
+        admin
+          ? "SELECT snapshot FROM signals WHERE id=? AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=signals.case_uuid)"
+          : `SELECT snapshot FROM (SELECT * FROM signals WHERE NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=signals.case_uuid) ORDER BY created_at DESC,rowid DESC LIMIT ?) WHERE id=?`,
       )
-        .bind(id)
+        .bind(...(admin ? [id] : [config.historyLimit, id]))
         .first<{ snapshot: string }>();
       return row
         ? json(
@@ -675,6 +739,16 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
   if (/^\/api\/v1\/cases\/[^/]+\/public$/.test(path)) {
     const id = decodeURIComponent(path.split("/")[4]);
+    if (!admin) {
+      const config = await activeConfig(env);
+      if (!config.publicHistory) return json({ error: "Case not found" }, 404);
+      const allowed = await env.DB.prepare(
+        "SELECT id FROM (SELECT id FROM cases WHERE mode='LIVE' AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=cases.uuid) ORDER BY created_at DESC,rowid DESC LIMIT ?) WHERE id=?",
+      )
+        .bind(config.historyLimit, id)
+        .first();
+      if (!allowed) return json({ error: "Case not found" }, 404);
+    }
     const row = await env.DB.prepare(
       "SELECT * FROM cases WHERE id=? AND mode='LIVE' AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=cases.uuid)",
     )
@@ -744,7 +818,7 @@ export default {
     response.headers.set("X-Frame-Options", "DENY");
     response.headers.set(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; worker-src 'self' blob:",
+      "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' data: blob:; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; worker-src 'self' blob:",
     );
     return response;
   },

@@ -107,7 +107,7 @@ for (const [tf, duration] of [
 }
 const ns = await mf.getDurableObjectNamespace("OFFICE"),
   live = ns.get(ns.idFromName("BTCUSDT.P"));
-async function reset() {
+async function reset(publicSignals = false) {
   await live.fetch("https://internal/state");
   await db.batch(
     [
@@ -130,7 +130,10 @@ async function reset() {
   const response = await live.fetch("https://internal/config", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ config: defaultConfig, activation: "NEXT CASE" }),
+    body: JSON.stringify({
+      config: { ...defaultConfig, publicSignals },
+      activation: "NEXT CASE",
+    }),
   });
   if (!response.ok)
     throw new Error(`Fixture reset failed: ${await response.text()}`);
@@ -147,39 +150,35 @@ async function reset() {
     price_levels: { entry: 96.78, stop_loss: 95.77, take_profit: 104.08 },
   };
   await db.batch([
-    db
-      .prepare("INSERT INTO cases VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
-      .bind(
-        uuid,
-        "CASE-private-fixture",
-        "LIVE",
-        "EMERGENCY",
-        "BUY",
-        "COMPLETED",
-        now - 600000,
-        id,
-        JSON.stringify({ config: defaultConfig }),
-        JSON.stringify({
-          analysts: [
-            { id: "risk", status: "SUCCESS", output: analysis, flags: [] },
-          ],
-        }),
-        now - 10000,
-        now,
-        "fixture:private",
-      ),
-    db
-      .prepare("INSERT INTO ai_character_outputs VALUES (?,?,?)")
-      .bind(
-        uuid,
-        "risk",
-        JSON.stringify({
-          id: "risk",
-          status: "SUCCESS",
-          output: analysis,
-          flags: [],
-        }),
-      ),
+    db.prepare("INSERT INTO cases VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)").bind(
+      uuid,
+      "CASE-private-fixture",
+      "LIVE",
+      "EMERGENCY",
+      "BUY",
+      "COMPLETED",
+      now - 600000,
+      id,
+      JSON.stringify({ config: defaultConfig }),
+      JSON.stringify({
+        analysts: [
+          { id: "risk", status: "SUCCESS", output: analysis, flags: [] },
+        ],
+      }),
+      now - 10000,
+      now,
+      "fixture:private",
+    ),
+    db.prepare("INSERT INTO ai_character_outputs VALUES (?,?,?)").bind(
+      uuid,
+      "risk",
+      JSON.stringify({
+        id: "risk",
+        status: "SUCCESS",
+        output: analysis,
+        flags: [],
+      }),
+    ),
   ]);
   outboundCalls = 0;
   return { timestamp: now - 60000, configVersion: id };
@@ -189,9 +188,16 @@ const server = createServer(async (req, res) => {
   let reader;
   try {
     // Test control endpoints exist only in this local bridge, never in the Worker.
-    if (req.url === "/__test/reset" && req.method === "POST") {
+    if (req.url.startsWith("/__test/reset") && req.method === "POST") {
       res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify(await reset()));
+      res.end(
+        JSON.stringify(
+          await reset(
+            new URL(req.url, origin).searchParams.get("publicSignals") ===
+              "true",
+          ),
+        ),
+      );
       return;
     }
     if (req.url === "/__test/stats") {

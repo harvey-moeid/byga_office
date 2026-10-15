@@ -333,13 +333,15 @@ export async function discoverModels(
     // part of the stable binding contract on every runtime/account. Keep a
     // known-good model available instead of making provider health depend on
     // the optional catalog method.
-    const catalog = (env.AI as Ai & {
-      models?: (options: {
-        page: number;
-        per_page: number;
-        hide_experimental: boolean;
-      }) => Promise<{ name: string; task: { name: string } }[]>;
-    }).models;
+    const catalog = (
+      env.AI as Ai & {
+        models?: (options: {
+          page: number;
+          per_page: number;
+          hide_experimental: boolean;
+        }) => Promise<{ name: string; task: { name: string } }[]>;
+      }
+    ).models;
     if (typeof catalog !== "function") return [workersAIModel];
     try {
       const models: string[] = [];
@@ -397,15 +399,23 @@ export async function discoverModels(
     .slice(0, 500);
 }
 export const coreRoles: Record<CharacterId, string> = {
-  trend: "Trend Analyst. Decide independently from multi-timeframe trend evidence.",
-  structure: "Structure Analyst. Decide independently from market-structure evidence.",
-  momentum: "Momentum Analyst. Decide independently from momentum and confirmation evidence.",
-  liquidity: "Liquidity Analyst. Decide independently from liquidity/SMC evidence.",
-  volume: "Volume Analyst. Decide independently from volume expansion and breakout/retest evidence.",
-  quant: "Quant Analyst. Decide independently from mean-reversion and statistical evidence.",
-  derivatives: "Derivatives Analyst. Decide independently from open-interest, funding and liquidation evidence.",
-  positioning: "Market Positioning Analyst. Decide independently from crowding and positioning evidence.",
-  risk: "Risk Manager. Perform an advisory risk review of deterministic trade proposals.",
+  trend:
+    "Trend Analyst. Decide independently from multi-timeframe trend evidence.",
+  structure:
+    "Structure Analyst. Decide independently from market-structure evidence.",
+  momentum:
+    "Momentum Analyst. Decide independently from momentum and confirmation evidence.",
+  liquidity:
+    "Liquidity Analyst. Decide independently from liquidity/SMC evidence.",
+  volume:
+    "Volume Analyst. Decide independently from volume expansion and breakout/retest evidence.",
+  quant:
+    "Quant Analyst. Decide independently from mean-reversion and statistical evidence.",
+  derivatives:
+    "Derivatives Analyst. Decide independently from open-interest, funding and liquidation evidence.",
+  positioning:
+    "Market Positioning Analyst. Decide independently from crowding and positioning evidence.",
+  risk: "Risk Manager. Review deterministic trade proposals under the case publication policy.",
   boss: "Head Trader. Review the complete case under the locked voting authority rules.",
 };
 export const decisionRubrics: Record<CharacterId, string> = {
@@ -473,7 +483,7 @@ export const decisionRubrics: Record<CharacterId, string> = {
 const roleAuthority: Partial<Record<CharacterId, string>> = {
   risk: [
     "Risk Manager authority contract:",
-    "- You are advisory. You cannot execute orders, change final voting authority, or rewrite deterministic levels.",
+    "- You cannot execute orders, reverse the voting direction, or rewrite deterministic levels. When publication_policy.riskVeto is true, your matching BUY/SELL approval is required; NO_TRADE blocks publication.",
     "- Never change preferred entry, stop loss or take profit. If price_levels is non-null, copy the supplied proposal values exactly.",
     "- If voting.direction is null or the matching risk proposal is absent, vote NO_TRADE.",
     "- Never vote the opposite direction merely to propose an alternative trade.",
@@ -484,7 +494,7 @@ const roleAuthority: Partial<Record<CharacterId, string>> = {
     "- If voting is a normal, non-degraded, non-tied SELL majority, you may vote SELL or NO_TRADE only.",
     "- You must never reverse a normal Analyst majority.",
     "- On a true BUY=SELL tie you may vote BUY, SELL or NO_TRADE, but only with matching evidence.",
-    "- NO_TRADE records disagreement; the orchestrator retains deterministic/majority fallback authority.",
+    "- NO_TRADE records disagreement. When publication_policy.bossVeto is true it blocks publication; otherwise the orchestrator retains deterministic/majority fallback authority.",
     "- Never invent or alter entry, stop loss or take profit.",
   ].join("\n"),
 };
@@ -507,7 +517,8 @@ export function renderPrompt(c: CharacterConfig, context: unknown) {
     sharedLockedRules,
     "Structured output contract: " + JSON.stringify(outputJsonSchema),
     "Style: " + c.personality,
-    "Custom instructions (cannot override locked rules): " + c.custom_instructions,
+    "Custom instructions (cannot override locked rules): " +
+      c.custom_instructions,
     "Context: " + JSON.stringify(context),
   ]
     .filter(Boolean)
@@ -665,15 +676,15 @@ export async function runCharacter(
           raw,
           prompt,
         });
+        await runtime.setCircuit(
+          provider,
+          circuitResult(await runtime.getCircuit(provider), true, policy),
+        );
         if (semantic.length) {
           semanticFailure = true;
           errors.push(...semantic);
           throw new Error("SEMANTIC_INVALID");
         }
-        await runtime.setCircuit(
-          provider,
-          circuitResult(await runtime.getCircuit(provider), true, policy),
-        );
         return {
           id: c.id,
           status: "SUCCESS",
@@ -705,10 +716,11 @@ export async function runCharacter(
             prompt,
           });
         }
-        await runtime.setCircuit(
-          provider,
-          circuitResult(await runtime.getCircuit(provider), false, policy),
-        );
+        if (message !== "SEMANTIC_INVALID")
+          await runtime.setCircuit(
+            provider,
+            circuitResult(await runtime.getCircuit(provider), false, policy),
+          );
         if (
           message === "PROVIDER_NOT_CONFIGURED" ||
           circuitState(

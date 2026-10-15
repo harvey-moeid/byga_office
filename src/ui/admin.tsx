@@ -1,3 +1,4 @@
+import { strictPublicationPolicy } from "../core/publication-policy";
 import { ScannerRulesEditor } from "./scanner-rules";
 import { useCharacterNames } from "./character-names";
 import { ScannerSettings } from "./scanner-settings";
@@ -378,6 +379,75 @@ function ConfigEditor() {
                 {k}
               </label>
             ))}
+            <fieldset>
+              <legend>Kebijakan publikasi sinyal</legend>
+              <p>
+                {draft.publicationPolicy
+                  ? "Kebijakan tersimpan pada versi konfigurasi ini."
+                  : "Konfigurasi lama memakai aturan advisory. Aktifkan kebijakan ketat untuk case baru."}
+              </p>
+              <button
+                onClick={() =>
+                  update("publicationPolicy", { ...strictPublicationPolicy })
+                }
+              >
+                Gunakan kebijakan ketat
+              </button>
+              {draft.publicationPolicy && (
+                <>
+                  {(
+                    [
+                      "riskVeto",
+                      "bossVeto",
+                      "requireAiQuorum",
+                      "blockLowRR",
+                    ] as const
+                  ).map((key) => (
+                    <label className="check" key={key}>
+                      <input
+                        type="checkbox"
+                        checked={draft.publicationPolicy![key]}
+                        onChange={(event) =>
+                          update("publicationPolicy", {
+                            ...draft.publicationPolicy!,
+                            [key]: event.target.checked,
+                          })
+                        }
+                      />
+                      {
+                        {
+                          riskVeto: "Wajib persetujuan Risk Manager",
+                          bossVeto: "Wajib persetujuan Head Trader",
+                          requireAiQuorum:
+                            "Wajib minimal separuh AI searah (minimal 2)",
+                          blockLowRR: "Blokir R:R di bawah minRR",
+                        }[key]
+                      }
+                    </label>
+                  ))}
+                  <label>
+                    Confidence minimum
+                    <input
+                      aria-label="Confidence minimum"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="any"
+                      value={draft.publicationPolicy.minConfidence}
+                      onChange={(event) =>
+                        update("publicationPolicy", {
+                          ...draft.publicationPolicy!,
+                          minConfidence:
+                            event.target.value === ""
+                              ? NaN
+                              : Number(event.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                </>
+              )}
+            </fieldset>
             <div id="scanner">
               <h3>Edit strategi scanner</h3>
               <ScannerSettings

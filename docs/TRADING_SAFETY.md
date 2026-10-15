@@ -45,7 +45,7 @@ round away from entry and targets towards entry, preserving the structural targe
 rather than extending it to meet a minimum R:R. Ordering is checked again. A coarse
 tick that collapses target and entry is rejected. Unsupported numerical precision
 is rejected instead of emitting an approximate grid. LOW_RR and Risk/Boss
-NO_TRADE remain advisory under the existing product rules.
+NO_TRADE remain advisory only for legacy snapshots without publicationPolicy. New strict policies require affirmative Risk/Boss approval and block publication on NO_TRADE; see [security hardening](SECURITY_HARDENING.md).
 
 These trading corrections alone require no database migration. The subsequent
 UI/API synchronization adds `0006_admin_operations.sql`; see the

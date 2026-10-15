@@ -40,6 +40,7 @@ import {
   SpeechBubble,
 } from "./meeting-view";
 import {
+  AppBoundary,
   Badge,
   Empty,
   Heading,
@@ -89,13 +90,15 @@ interface PublicCase {
 }
 function App() {
   return (
-    <BrowserRouter>
-      <SessionProvider>
-        <CharacterNamesProvider>
-          <AppLayout />
-        </CharacterNamesProvider>
-      </SessionProvider>
-    </BrowserRouter>
+    <AppBoundary>
+      <BrowserRouter>
+        <SessionProvider>
+          <CharacterNamesProvider>
+            <AppLayout />
+          </CharacterNamesProvider>
+        </SessionProvider>
+      </BrowserRouter>
+    </AppBoundary>
   );
 }
 function AppLayout() {
@@ -801,7 +804,10 @@ function Scanners() {
 }
 function ScannerDetail() {
   const { id } = useParams();
-  const data = useData<ScannerOutput[]>(`/scanners/${id}`, true);
+  const data = useData<ScannerOutput[]>(
+    `/scanners/${encodeURIComponent(id ?? "")}`,
+    true,
+  );
   const s = data.data?.[0];
   return (
     <>
@@ -1021,7 +1027,7 @@ function SignalView({ signal: s }: { signal: Signal }) {
 }
 function SignalDetail() {
   const { id } = useParams();
-  const data = useData<Signal>(`/signals/${id}`);
+  const data = useData<Signal>(`/signals/${encodeURIComponent(id ?? "")}`);
   return (
     <>
       <Heading eyebrow="FINAL DECISION" title={id ?? "Signal"} />
@@ -1061,8 +1067,8 @@ function CaseDetail({ simulation = false }: { simulation?: boolean }) {
   const { id } = useParams();
   const session = useSession();
   const path = session.data?.admin
-    ? `/admin/${simulation ? "simulation" : "cases"}/${id}`
-    : `/cases/${id}/public`;
+    ? `/admin/${simulation ? "simulation" : "cases"}/${encodeURIComponent(id ?? "")}`
+    : `/cases/${encodeURIComponent(id ?? "")}/public`;
   const data = useData<
     PublicCase & {
       context?: { market?: { M5: { close: number }[] } };
@@ -1163,7 +1169,11 @@ function Characters() {
       />
       <div className="character-grid">
         {characterIds.map((id) => (
-          <Link to={`/characters/${id}`} className="panel" key={id}>
+          <Link
+            to={`/characters/${encodeURIComponent(id ?? "")}`}
+            className="panel"
+            key={id}
+          >
             <span className="avatar">
               {id === "boss"
                 ? "BG"
@@ -1196,7 +1206,7 @@ function CharacterDetail() {
   const session = useSession();
   const history = useData<
     (PublicCase["analysts"][number] & { case_id: string; updated_at: number })[]
-  >(`/characters/${id}`, true);
+  >(`/characters/${encodeURIComponent(id ?? "")}`, true);
   const state = useData<OfficeState>("/office/state", true);
   return (
     <>

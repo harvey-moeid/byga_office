@@ -72,6 +72,13 @@ async function smoke(meeting: unknown) {
     if (path === "/office")
       return new Response(
         '<div id="root"></div><script src="/assets/fixture.js"></script>',
+        {
+          headers: {
+            "x-frame-options": "DENY",
+            "content-security-policy": "frame-ancestors 'none'",
+            "x-content-type-options": "nosniff",
+          },
+        },
       );
     if (path === "/assets/fixture.js")
       return new Response("// fixture", {

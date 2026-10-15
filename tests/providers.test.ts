@@ -323,7 +323,7 @@ describe("Provider adapters", () => {
     expect(result.status).toBe("UNAVAILABLE");
   });
   it("never exposes a persistent semantic-invalid response as a voting output", async () => {
-    const { r } = runtime();
+    const { r, circuits } = runtime();
     const bad = {
       ...output,
       evidence: [
@@ -352,6 +352,7 @@ describe("Provider adapters", () => {
     expect(result.status).toBe("UNAVAILABLE");
     expect(result.output).toBeUndefined();
     expect(result.flags).toContain("SEMANTIC_VALIDATION_FAILED");
+    expect(Object.values(circuits).every((c) => c.failures === 0)).toBe(true);
   });
   it("rejects BUY/SELL without matching directional evidence after all retries", async () => {
     const { r } = runtime();

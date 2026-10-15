@@ -709,3 +709,53 @@ test("history deletion asks for confirmation and refreshes the list", async ({
   await expect(page.getByRole("status")).toContainText("1 histori dihapus");
   expect(posts).toBe(1);
 });
+
+test("strict publication controls validate confidence and persist the versioned policy", async ({
+  page,
+}) => {
+  let config = structuredClone(defaultConfig);
+  await fixture(page, async (route, path) => {
+    if (path !== "/admin/config") return false;
+    if (route.request().method() === "POST") {
+      config = route.request().postDataJSON().config;
+      await route.fulfill({
+        json: { id: "strict-policy-v2", replacement_case_id: null },
+      });
+    } else
+      await route.fulfill({
+        json: { id: "strict-policy-v2", config, versions: [] },
+      });
+    return true;
+  });
+  await page.goto("/admin");
+  const minimum = page.getByLabel("Confidence minimum", { exact: true });
+  const save = page.getByRole("button", {
+    name: "Save new version",
+    exact: true,
+  });
+  await expect(minimum).toHaveValue("60");
+  await expect(
+    page.getByLabel("Wajib persetujuan Risk Manager", { exact: true }),
+  ).toBeChecked();
+  await expect(
+    page.getByLabel("Wajib persetujuan Head Trader", { exact: true }),
+  ).toBeChecked();
+  await minimum.fill("");
+  await expect(save).toBeDisabled();
+  await minimum.fill("101");
+  await expect(save).toBeDisabled();
+  await minimum.fill("72");
+  await save.click();
+  await expect(page.getByRole("status")).toContainText(
+    "Tersimpan: strict-policy-v2",
+  );
+  expect(config.publicationPolicy).toMatchObject({
+    riskVeto: true,
+    bossVeto: true,
+    requireAiQuorum: true,
+    minConfidence: 72,
+    blockLowRR: true,
+  });
+  await page.reload();
+  await expect(minimum).toHaveValue("72");
+});

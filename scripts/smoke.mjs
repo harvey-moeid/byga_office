@@ -1,34 +1,57 @@
 import assert from "node:assert/strict";
 const origin = process.env.BYGA_PUBLIC_ORIGIN;
-if (!origin || new URL(origin).origin !== origin || !origin.startsWith("https://"))
+if (
+  !origin ||
+  new URL(origin).origin !== origin ||
+  !origin.startsWith("https://")
+)
   throw new Error("BYGA_PUBLIC_ORIGIN must be an exact HTTPS origin.");
 async function get(path, status = 200, options = {}) {
   const attempts = options.attempts ?? 5;
   const maxDelayMs = options.maxDelayMs ?? 16000;
   for (let attempt = 0; attempt < attempts; attempt++) {
-    const response = await fetch(origin + path, { signal: AbortSignal.timeout(20000) });
+    const response = await fetch(origin + path, {
+      signal: AbortSignal.timeout(20000),
+    });
     if (response.status === status) return response;
     const body = (await response.clone().text()).slice(0, 500);
     // Fresh Worker/DO deployments can briefly return 5xx while propagating.
     // Around a candle boundary, chart_db can also need extra time to flip
     // the just-closed candle to is_closed=1. Retry safe reads only; a
     // persistent failure still blocks cron activation.
-    const retryable = status === 200 && [500, 502, 503, 504].includes(response.status);
+    const retryable =
+      status === 200 && [500, 502, 503, 504].includes(response.status);
     if (!retryable || attempt === attempts - 1)
       throw new Error(
         `${path}: unexpected HTTP status ${response.status}; expected ${status}; body: ${body || "<empty>"}`,
       );
     await response.body?.cancel();
     const delayMs = Math.min(maxDelayMs, 2000 * 2 ** attempt);
-    await new Promise(resolve => setTimeout(resolve, delayMs));
+    await new Promise((resolve) => setTimeout(resolve, delayMs));
   }
 }
-const html = await (await get("/office")).text();
+const shell = await get("/office");
+assert.equal(
+  shell.headers.get("x-frame-options"),
+  "DENY",
+  "HTML must reject framing",
+);
+assert.match(
+  shell.headers.get("content-security-policy") ?? "",
+  /frame-ancestors 'none'/,
+  "HTML CSP missing",
+);
+assert.equal(shell.headers.get("x-content-type-options"), "nosniff");
+const html = await shell.text();
 assert.match(html, /<div[^>]*id="root"/, "Frontend shell missing");
 const asset = html.match(/src="([^"]+\.js)"/)?.[1];
 assert.ok(asset?.startsWith("/assets/"), "Built frontend entry missing");
 const script = await get(asset);
-assert.match(script.headers.get("content-type") ?? "", /javascript/, "Static JS serving failed");
+assert.match(
+  script.headers.get("content-type") ?? "",
+  /javascript/,
+  "Static JS serving failed",
+);
 const session = await (await get("/api/v1/auth/session")).json();
 assert.equal(session.admin, false);
 await get("/api/v1/admin/config", 401);
@@ -37,29 +60,53 @@ let state;
 for (let attempt = 0; attempt < 10; attempt++) {
   state = await (await get("/api/v1/office/state")).json();
   if (Array.isArray(state.group_names) && state.group_names.length === 4) break;
-  if (attempt < 9) await new Promise(resolve => setTimeout(resolve, 3000));
+  if (attempt < 9) await new Promise((resolve) => setTimeout(resolve, 3000));
 }
 const meeting = await (await get("/api/v1/office/meeting")).json();
-assert.ok(Object.hasOwn(meeting, "meeting"), "Meeting presentation endpoint missing");
+assert.ok(
+  Object.hasOwn(meeting, "meeting"),
+  "Meeting presentation endpoint missing",
+);
 if (meeting.meeting) {
   assert.equal(typeof meeting.meeting.case_id, "string");
   assert.ok(Array.isArray(meeting.meeting.turns));
   for (const turn of meeting.meeting.turns) {
-    assert.ok(turn &&
-      ["trend", "structure", "momentum", "liquidity", "volume", "quant", "derivatives", "positioning", "risk", "boss"].includes(turn.character),
-      "Meeting turn must identify a known office character");
+    assert.ok(
+      turn &&
+        [
+          "trend",
+          "structure",
+          "momentum",
+          "liquidity",
+          "volume",
+          "quant",
+          "derivatives",
+          "positioning",
+          "risk",
+          "boss",
+        ].includes(turn.character),
+      "Meeting turn must identify a known office character",
+    );
     // Scanner reviews publish deterministic narration, not AI analysis.
     const content = turn.source === "SCANNER" ? turn.scanner : turn.analysis;
-    assert.ok(content && typeof content.summary === "string" && typeof content.reasoning === "string",
-      "Meeting turn must include AI analysis or scanner narration with summary and reasoning");
+    assert.ok(
+      content &&
+        typeof content.summary === "string" &&
+        typeof content.reasoning === "string",
+      "Meeting turn must include AI analysis or scanner narration with summary and reasoning",
+    );
     if (turn.source === "SCANNER")
-      assert.ok(["BUY", "SELL", "NONE"].includes(content.direction), "Scanner turn direction is invalid");
+      assert.ok(
+        ["BUY", "SELL", "NONE"].includes(content.direction),
+        "Scanner turn direction is invalid",
+      );
   }
 }
 assert.equal(typeof state.office, "string", "Durable Object state missing");
 assert.ok(
   Number.isInteger(state.group_consensus_min) &&
-    state.group_consensus_min >= 1 && state.group_consensus_min <= 4,
+    state.group_consensus_min >= 1 &&
+    state.group_consensus_min <= 4,
   "Deployed backend must expose the deterministic group consensus minimum",
 );
 assert.deepEqual(
@@ -67,19 +114,22 @@ assert.deepEqual(
   ["SMC_ICT", "INDICATORS", "VOLUME", "DERIVATIVES_POSITIONING"],
   "Deployed backend must expose all four deterministic analysis groups",
 );
-assert.ok(Array.isArray(state.groups), "Latest deterministic group snapshots must be an array");
+assert.ok(
+  Array.isArray(state.groups),
+  "Latest deterministic group snapshots must be an array",
+);
 const canonicalCharacters = [
-    "trend",
-    "structure",
-    "momentum",
-    "liquidity",
-    "volume",
-    "quant",
-    "derivatives",
-    "positioning",
-    "risk",
-    "boss",
-  ];
+  "trend",
+  "structure",
+  "momentum",
+  "liquidity",
+  "volume",
+  "quant",
+  "derivatives",
+  "positioning",
+  "risk",
+  "boss",
+];
 let characters;
 for (let attempt = 0; attempt < 10; attempt++) {
   characters = await (await get("/api/v1/characters")).json();
@@ -95,14 +145,15 @@ assert.deepEqual(
   canonicalCharacters,
   "Deployed backend must expose the complete 10-character office roster in canonical order after rollout",
 );
-assert.ok(characters.every(c => !("primary_provider" in c) && !("primary_model" in c)));
+assert.ok(
+  characters.every(
+    (c) => !("primary_provider" in c) && !("primary_model" in c),
+  ),
+);
 let health;
 for (let attempt = 0; attempt < 9; attempt++) {
   health = await (await get("/api/v1/health")).json();
-  if (
-    health.api === "OK" &&
-    ["OK", "DEGRADED"].includes(health.chart_db)
-  )
+  if (health.api === "OK" && ["OK", "DEGRADED"].includes(health.chart_db))
     break;
   if (attempt < 8) {
     const delayMs = Math.min(15000, 2000 * 2 ** attempt);
@@ -128,8 +179,14 @@ if (marketResponse.status === 200) {
   for (const tf of ["H1", "M15", "M5"])
     assert.equal(market.timeframes[tf].length, 100);
   marketStatus = "PASS";
+} else if (marketResponse.status === 401) {
+  await marketResponse.body?.cancel();
+  marketStatus = "PRIVATE";
 } else {
-  const body = await marketResponse.clone().json().catch(() => ({}));
+  const body = await marketResponse
+    .clone()
+    .json()
+    .catch(() => ({}));
   assert.equal(
     marketResponse.status,
     503,
@@ -149,17 +206,20 @@ if (marketResponse.status === 200) {
 let adminAuthentication = "NOT_TESTED";
 if (process.env.ADMIN_PASSWORD) {
   const login = await fetch(origin + "/api/v1/auth/login", {
-    method: "POST", headers: { Origin: origin, "Content-Type": "application/json" },
+    method: "POST",
+    headers: { Origin: origin, "Content-Type": "application/json" },
     body: JSON.stringify({ password: process.env.ADMIN_PASSWORD }),
     signal: AbortSignal.timeout(20000),
   });
   assert.equal(login.status, 200, "Deployed Admin login failed");
   const header = login.headers.get("set-cookie") ?? "";
-  for (const flag of ["HttpOnly", "Secure", "SameSite=Strict"]) assert.ok(header.includes(flag));
+  for (const flag of ["HttpOnly", "Secure", "SameSite=Strict"])
+    assert.ok(header.includes(flag));
   const cookie = header.split(";")[0];
   try {
     const config = await fetch(origin + "/api/v1/admin/config", {
-      headers: { Cookie: cookie }, signal: AbortSignal.timeout(20000),
+      headers: { Cookie: cookie },
+      signal: AbortSignal.timeout(20000),
     });
     assert.equal(config.status, 200);
     const activeConfig = await config.json();
@@ -173,8 +233,16 @@ if (process.env.ADMIN_PASSWORD) {
         signal: AbortSignal.timeout(20000),
       }),
     ]);
-    assert.equal(activeCharactersResponse.status, 200, "Active character config read failed");
-    assert.equal(adminHealthResponse.status, 200, "Admin provider health read failed");
+    assert.equal(
+      activeCharactersResponse.status,
+      200,
+      "Active character config read failed",
+    );
+    assert.equal(
+      adminHealthResponse.status,
+      200,
+      "Admin provider health read failed",
+    );
     const activeCharacters = await activeCharactersResponse.json();
     const adminHealth = await adminHealthResponse.json();
     const configuredProviders = new Map(
@@ -192,7 +260,11 @@ if (process.env.ADMIN_PASSWORD) {
     }
     const aiProbe = await fetch(origin + "/api/v1/admin/test-provider", {
       method: "POST",
-      headers: { Cookie: cookie, Origin: origin, "Content-Type": "application/json" },
+      headers: {
+        Cookie: cookie,
+        Origin: origin,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({ id: "workers-ai" }),
       signal: AbortSignal.timeout(30000),
     });
@@ -204,31 +276,56 @@ if (process.env.ADMIN_PASSWORD) {
     );
     assert.equal(JSON.parse(aiProbeBody).inference, "PASS");
     assert.equal(
-      activeConfig.config.scannerConsensusMin, state.group_consensus_min,
+      activeConfig.config.scannerConsensusMin,
+      state.group_consensus_min,
       "Admin config and Operations must agree on the Group Consensus minimum",
     );
     const rejected = await fetch(origin + "/api/v1/admin/scan", {
       method: "POST",
-      headers: { Cookie: cookie, Origin: "https://invalid-origin.example", "Content-Type": "application/json" },
-      body: "{}", signal: AbortSignal.timeout(20000),
+      headers: {
+        Cookie: cookie,
+        Origin: "https://invalid-origin.example",
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+      signal: AbortSignal.timeout(20000),
     });
-    assert.equal(rejected.status, 403, "Wrong-origin mutation must be rejected");
+    assert.equal(
+      rejected.status,
+      403,
+      "Wrong-origin mutation must be rejected",
+    );
   } finally {
     const logout = await fetch(origin + "/api/v1/auth/logout", {
-      method: "POST", headers: { Cookie: cookie, Origin: origin },
+      method: "POST",
+      headers: { Cookie: cookie, Origin: origin },
       signal: AbortSignal.timeout(20000),
     });
     assert.equal(logout.status, 200);
     const expired = await fetch(origin + "/api/v1/admin/config", {
-      headers: { Cookie: cookie }, signal: AbortSignal.timeout(20000),
+      headers: { Cookie: cookie },
+      signal: AbortSignal.timeout(20000),
     });
     assert.equal(expired.status, 401, "Logout must invalidate the session");
   }
   adminAuthentication = "PASS";
 }
-console.log(JSON.stringify({
-  origin, infrastructure: "PASS", frontend: "PASS", durable_object: "PASS",
-  admin_access_control: "PASS", admin_authentication: adminAuthentication, market: marketStatus, provider_configuration: health.ai_providers,
-  discord_configuration: health.discord,
-  real_ai_inference: "NOT_TESTED", real_discord_delivery: "NOT_TESTED",
-}, null, 2));
+console.log(
+  JSON.stringify(
+    {
+      origin,
+      infrastructure: "PASS",
+      frontend: "PASS",
+      durable_object: "PASS",
+      admin_access_control: "PASS",
+      admin_authentication: adminAuthentication,
+      market: marketStatus,
+      provider_configuration: health.ai_providers,
+      discord_configuration: health.discord,
+      real_ai_inference: "NOT_TESTED",
+      real_discord_delivery: "NOT_TESTED",
+    },
+    null,
+    2,
+  ),
+);

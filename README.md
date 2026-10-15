@@ -30,6 +30,8 @@ For Admin access, copy `.env.example` to the ignored `.dev.vars`. Generate a pas
 
 Pengaturan nama avatar, hapus histori, dan editor strategi scanner tersedia melalui Admin. Lihat [panduan kustomisasi](docs/ADMIN_CUSTOMIZATION.md).
 
+Kebijakan publikasi sinyal ketat, batas akses publik, dan isolasi secret CI dijelaskan pada [panduan keamanan](docs/SECURITY_HARDENING.md).
+
 ## Verification
 
 See [the movement, meeting and mobile status update](docs/OFFICE_EXPERIENCE_UPDATE.md) for natural stair travel, arrival-based gathering, head-linked speech and the compact Home status sheet. Ultra remains available.

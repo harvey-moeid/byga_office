@@ -167,3 +167,24 @@ export function supportsWebGL() {
     return false;
   }
 }
+
+export class AppBoundary extends Component<
+  { children: React.ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  render() {
+    return this.state.failed ? (
+      <main className="panel" role="alert">
+        <h1>Halaman belum dapat ditampilkan</h1>
+        <p>Muat ulang untuk memulihkan aplikasi.</p>
+        <button onClick={() => window.location.reload()}>Muat ulang</button>
+      </main>
+    ) : (
+      this.props.children
+    );
+  }
+}
