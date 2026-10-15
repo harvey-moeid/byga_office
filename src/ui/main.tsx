@@ -1,3 +1,5 @@
+import { CharacterNamesProvider, useCharacterLabels } from "./character-names";
+import { HistoryDelete } from "./history-delete";
 import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -45,7 +47,6 @@ import {
   Notice,
   OfficeScene,
   SceneBoundary,
-  roles,
   supportsWebGL,
 } from "./shared";
 const Admin = lazy(() => import("./admin"));
@@ -90,7 +91,9 @@ function App() {
   return (
     <BrowserRouter>
       <SessionProvider>
-        <AppLayout />
+        <CharacterNamesProvider>
+          <AppLayout />
+        </CharacterNamesProvider>
       </SessionProvider>
     </BrowserRouter>
   );
@@ -308,6 +311,7 @@ function AppLayout() {
   );
 }
 function Dashboard({ immersive = false }: { immersive?: boolean }) {
+  const roles = useCharacterLabels();
   const state = useOfficeState<OfficeState>(),
     market = useData<Market>("/market/status", true),
     characters =
@@ -776,15 +780,21 @@ function ScannerGrid({ scanners }: { scanners: ScannerOutput[] }) {
   );
 }
 function Scanners() {
+  const session = useSession();
   const data = useData<ScannerOutput[]>("/scanners", true);
   return (
     <>
       <Heading
         eyebrow="DETERMINISTIC SYSTEMS"
         title="Scanners"
-        description="Semua enam scanner selalu aktif; strength tidak mengubah voting atau confidence."
+        description="Enam scanner mengikuti strategi dan parameter versi aktif; strength tidak mengubah voting atau confidence."
       />
       <Notice error={data.error} retry={data.retry} />
+      {session.data?.admin && (
+        <Link className="button" to="/admin#scanner">
+          Edit strategi scanner
+        </Link>
+      )}
       <ScannerGrid scanners={data.data ?? []} />
     </>
   );
@@ -853,6 +863,13 @@ function Signals() {
         eyebrow="LIVE SIGNALS"
         title="Signals"
         description="Snapshot keputusan final. Simulasi dan hasil profit/loss tidak ditampilkan di sini."
+      />
+      <HistoryDelete
+        mode="LIVE"
+        onDeleted={() => {
+          setPage(1);
+          data.retry();
+        }}
       />
       <section className="filters">
         {(["direction", "flag", "source", "scanner"] as const).map((field) => (
@@ -1024,6 +1041,7 @@ function Cases() {
         title="Cases"
         description="Daftar case memerlukan login Admin; ringkasan case live dapat dibuka melalui tautan case."
       />
+      <HistoryDelete mode="LIVE" onDeleted={data.retry} />
       <Notice error={data.error} retry={data.retry} />
       {data.data?.length
         ? data.data.map((c) => (
@@ -1039,6 +1057,7 @@ function Cases() {
   );
 }
 function CaseDetail({ simulation = false }: { simulation?: boolean }) {
+  const roles = useCharacterLabels();
   const { id } = useParams();
   const session = useSession();
   const path = session.data?.admin
@@ -1124,6 +1143,7 @@ function CaseDetail({ simulation = false }: { simulation?: boolean }) {
   );
 }
 function Characters() {
+  const roles = useCharacterLabels();
   const state = useData<OfficeState>("/office/state", true);
   return (
     <>
@@ -1171,6 +1191,7 @@ function Characters() {
   );
 }
 function CharacterDetail() {
+  const roles = useCharacterLabels();
   const { id } = useParams();
   const session = useSession();
   const history = useData<

@@ -1,3 +1,4 @@
+import { useCharacterLabels } from "./character-names";
 import { characterIdentity } from "./group-identity";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CharacterId } from "../core/contracts";
@@ -17,7 +18,6 @@ import {
   scannerGroupLabels,
   scannerReviewSummary,
 } from "../core/scanner-meeting";
-import { roles } from "./shared";
 import { characterPeekCopy, type CharacterPresence } from "./character-state";
 import type { CharacterMotion } from "./character-motion";
 
@@ -197,6 +197,7 @@ export function CharacterPeekBubble({
   turn?: MeetingTurn;
   onDetails: () => void;
 }) {
+  const roles = useCharacterLabels();
   const copy = turn ? turnCopy(turn) : undefined;
   const voteClass = copy
     ? `vote-${copy.direction.toLowerCase().replaceAll("_", "-")}`
@@ -241,6 +242,7 @@ export function SpeechBubble({
   turn: MeetingTurn;
   onDetails: (turn: MeetingTurn) => void;
 }) {
+  const roles = useCharacterLabels();
   const copy = turnCopy(turn);
   return (
     <button
@@ -288,6 +290,7 @@ export function MeetingStatus({
 }: {
   presentation: ReturnType<typeof useMeetingPresentation>;
 }) {
+  const roles = useCharacterLabels();
   const { playback, snapshot, active, current, error, retry } = presentation;
   const [expanded, setExpanded] = useState(false);
   const caseId = snapshot?.case_id;
@@ -414,6 +417,7 @@ export function MeetingDetail({
   caseId?: string;
   onClose: () => void;
 }) {
+  const roles = useCharacterLabels();
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (turn && !dialog.current?.open) dialog.current?.showModal();

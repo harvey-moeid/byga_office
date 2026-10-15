@@ -27,9 +27,11 @@ import {
   readJsonObject,
 } from "./http";
 import type { OfficeState } from "../core/api";
+import { deleteHistory } from "./history";
 import { privateText } from "./publication";
 export { Office } from "./office";
 const adminMethods: Record<string, string[]> = {
+  "/history/delete": ["POST"],
   "/config": ["GET", "POST"],
   "/characters": ["GET", "POST"],
   "/providers": ["GET", "POST"],
@@ -214,6 +216,8 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (!methods.includes(request.method)) return methodNotAllowed(methods);
     if (request.method !== "GET" && !sameOrigin(request, env))
       return json({ error: "Origin rejected" }, 403);
+    if (action === "/history/delete")
+      return deleteHistory(env.DB, await readJsonObject(request));
     if (action === "/deliveries/review" && request.method === "POST") {
       const body = (await readJsonObject(request)) as {
         key?: unknown;
@@ -284,7 +288,7 @@ async function route(request: Request, env: Env): Promise<Response> {
       return json(
         (
           await env.DB.prepare(
-            "SELECT id,status,direction,source,mode,created_at FROM cases WHERE mode='LIVE' ORDER BY created_at DESC LIMIT 100",
+            "SELECT id,status,direction,source,mode,created_at FROM cases WHERE mode='LIVE' AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=cases.uuid) ORDER BY created_at DESC LIMIT 100",
           ).all()
         ).results,
       );
@@ -292,13 +296,15 @@ async function route(request: Request, env: Env): Promise<Response> {
       return json(
         (
           await env.DB.prepare(
-            "SELECT c.id,c.status,c.created_at,s.replay_mode,s.config_mode FROM cases c JOIN simulation_runs s ON s.case_uuid=c.uuid ORDER BY c.created_at DESC LIMIT 100",
+            "SELECT c.id,c.status,c.created_at,s.replay_mode,s.config_mode FROM cases c JOIN simulation_runs s ON s.case_uuid=c.uuid WHERE NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=c.uuid) ORDER BY c.created_at DESC LIMIT 100",
           ).all()
         ).results,
       );
     if (action.startsWith("/cases/") || action.startsWith("/simulation/")) {
       const id = decodeURIComponent(action.split("/").at(-1)!);
-      const row = await env.DB.prepare("SELECT * FROM cases WHERE id=?")
+      const row = await env.DB.prepare(
+        "SELECT * FROM cases WHERE id=? AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=cases.uuid)",
+      )
         .bind(id)
         .first<CaseRow>();
       const events = row
@@ -375,7 +381,8 @@ async function route(request: Request, env: Env): Promise<Response> {
     return json(await officeState(env));
   }
   if (path === "/api/v1/office/meeting") {
-    const requested = new URL(request.url).searchParams.get("current") ?? undefined;
+    const requested =
+      new URL(request.url).searchParams.get("current") ?? undefined;
     if (requested && !/^[A-Za-z0-9:_-]{1,128}$/.test(requested))
       throw new HttpError(400, "Invalid meeting ID", "INVALID_MEETING_ID");
     const { config } = (await (await office(env, "/config")).json()) as {
@@ -395,6 +402,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     const characters = (await (await office(env, "/characters")).json()) as {
       id: string;
       avatar: string;
+      display_name?: string;
     }[];
     const byId = new Map(
       characters.map((character) => [character.id, character]),
@@ -403,7 +411,13 @@ async function route(request: Request, env: Env): Promise<Response> {
       characterIds.map((id) => {
         const character = byId.get(id);
         if (!character) throw new Error(`Character config missing: ${id}`);
-        return { id: character.id, avatar: character.avatar };
+        return {
+          id: character.id,
+          avatar: character.avatar,
+          ...(character.display_name
+            ? { display_name: character.display_name }
+            : {}),
+        };
       }),
     );
   }
@@ -422,7 +436,7 @@ async function route(request: Request, env: Env): Promise<Response> {
       config: { publicSignals: boolean };
     };
     const rows = await env.DB.prepare(
-      "SELECT a.snapshot,c.id AS case_id,c.updated_at FROM ai_character_outputs a JOIN cases c ON c.uuid=a.case_uuid WHERE a.character_id=? AND c.mode='LIVE' ORDER BY c.created_at DESC LIMIT 20",
+      "SELECT a.snapshot,c.id AS case_id,c.updated_at FROM ai_character_outputs a JOIN cases c ON c.uuid=a.case_uuid WHERE a.character_id=? AND c.mode='LIVE' AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=c.uuid) ORDER BY c.created_at DESC LIMIT 20",
     )
       .bind(id)
       .all<{ snapshot: string; case_id: string; updated_at: number }>();
@@ -523,7 +537,7 @@ async function route(request: Request, env: Env): Promise<Response> {
     if (path !== "/api/v1/signals") {
       const id = decodeURIComponent(path.split("/").at(-1)!);
       const row = await env.DB.prepare(
-        "SELECT snapshot FROM signals WHERE id=?",
+        "SELECT snapshot FROM signals WHERE id=? AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=signals.case_uuid)",
       )
         .bind(id)
         .first<{ snapshot: string }>();
@@ -553,7 +567,9 @@ async function route(request: Request, env: Env): Promise<Response> {
         },
         400,
       );
-    const conditions = ["1=1"],
+    const conditions = [
+        "NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=signals.case_uuid)",
+      ],
       values: (string | number)[] = [];
     const direction = url.searchParams.get("direction");
     if (direction === "BUY" || direction === "SELL") {
@@ -640,12 +656,12 @@ async function route(request: Request, env: Env): Promise<Response> {
     const where = conditions.join(" AND ");
     const limit = admin ? 10000 : config.historyLimit;
     const count = await env.DB.prepare(
-      `SELECT COUNT(*) AS n FROM (SELECT * FROM signals ORDER BY created_at DESC LIMIT ?) AS signals WHERE ${where}`,
+      `SELECT COUNT(*) AS n FROM (SELECT * FROM signals WHERE NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=signals.case_uuid) ORDER BY created_at DESC LIMIT ?) AS signals WHERE ${where}`,
     )
       .bind(limit, ...values)
       .first<{ n: number }>();
     const rows = await env.DB.prepare(
-      `SELECT snapshot FROM (SELECT * FROM signals ORDER BY created_at DESC LIMIT ?) AS signals WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
+      `SELECT snapshot FROM (SELECT * FROM signals WHERE NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=signals.case_uuid) ORDER BY created_at DESC LIMIT ?) AS signals WHERE ${where} ORDER BY created_at DESC LIMIT ? OFFSET ?`,
     )
       .bind(limit, ...values, size, (page - 1) * size)
       .all<{ snapshot: string }>();
@@ -660,7 +676,7 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (/^\/api\/v1\/cases\/[^/]+\/public$/.test(path)) {
     const id = decodeURIComponent(path.split("/")[4]);
     const row = await env.DB.prepare(
-      "SELECT * FROM cases WHERE id=? AND mode='LIVE'",
+      "SELECT * FROM cases WHERE id=? AND mode='LIVE' AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=cases.uuid)",
     )
       .bind(id)
       .first<CaseRow>();

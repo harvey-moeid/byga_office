@@ -1,3 +1,4 @@
+import { evaluateScannerRule } from "./scanner-rules";
 import {
   adx,
   atr,
@@ -131,6 +132,44 @@ export function scan(
           ? s.fvg
           : "NONE",
   };
+  const factsFor = (frame: typeof h, candles: MarketContext["M5"]) => ({
+    ...frame,
+    previousClose: candles.at(-2)!.close,
+    macdHistogram: frame.macd.histogram,
+    bbUpper: frame.bb.upper,
+    bbLower: frame.bb.lower,
+    displacementAtr: frame.atr > 0 ? Math.abs(frame.body) / frame.atr : NaN,
+    bias: bias(frame),
+    structureBias: frame.structure.bias,
+    breakout: frame.structure.breakout,
+    retest: frame.structure.retest,
+    bos: frame.structure.bos,
+    choch: frame.structure.choch,
+    sweep: frame.structure.sweep,
+    fvg: frame.structure.fvg,
+  });
+  const frames = {
+    H1: factsFor(h, context.H1),
+    M15: factsFor(m, context.M15),
+    M5: factsFor(f, context.M5),
+  };
+  const scalarFacts = (values: ReturnType<typeof factsFor>) => {
+    const facts: Record<string, number | string> = {};
+    for (const [key, value] of Object.entries(values)) {
+      if (typeof value === "number" || typeof value === "string")
+        facts[key] = value;
+    }
+    return facts;
+  };
+  const facts = {
+    H1: scalarFacts(frames.H1),
+    M15: scalarFacts(frames.M15),
+    M5: scalarFacts(frames.M5),
+  };
+  for (const name of scannerNames) {
+    const custom = config.scannerRules?.[name];
+    if (custom) rules[name] = evaluateScannerRule(custom, facts);
+  }
   return scannerNames
     .map((name) => ({
       name,
@@ -144,7 +183,7 @@ export function scan(
       m5_trigger: fb,
       reasons: [
         rules[name] === "NONE"
-          ? `${name}: confirmation criteria not met`
+          ? `${name}: ${config.scannerRules?.[name]?.mode === "DISABLED" ? "disabled in configuration" : "confirmation criteria not met or conflicting BUY/SELL rules"}`
           : `${name}: ${rules[name]} confirmed by configured deterministic rules`,
       ],
       levels: [
@@ -169,7 +208,9 @@ function groupStrength(scanners: ScannerOutput[], direction: Direction) {
   if (direction === "NONE") return 0;
   const matching = scanners.filter((s) => s.direction === direction);
   return matching.length
-    ? Math.round(matching.reduce((sum, s) => sum + s.strength, 0) / matching.length)
+    ? Math.round(
+        matching.reduce((sum, s) => sum + s.strength, 0) / matching.length,
+      )
     : 0;
 }
 function derivativeChange(points: DerivativesContext["open_interest"]) {
@@ -185,7 +226,9 @@ function analyzeDerivatives(
   const candleTimestamp = context.M5.at(-1)!.timestamp;
   const fresh = <T extends { timestamp: number }>(rows: T[], maxAge: number) =>
     rows.filter(
-      (row) => row.timestamp <= candleTimestamp && candleTimestamp - row.timestamp <= maxAge,
+      (row) =>
+        row.timestamp <= candleTimestamp &&
+        candleTimestamp - row.timestamp <= maxAge,
     );
   const openInterest = fresh(derivatives?.open_interest ?? [], 20 * 60_000);
   const positioning = fresh(derivatives?.long_short_ratio ?? [], 20 * 60_000);
@@ -213,7 +256,8 @@ function analyzeDerivatives(
     Math.abs(oiChangePct) >= 0.15 &&
     Math.abs(priceChangePct) >= 0.05
   ) {
-    const weight = oiChangePct > 0 ? (Math.abs(oiChangePct) >= 1 ? 1.5 : 1) : 0.5;
+    const weight =
+      oiChangePct > 0 ? (Math.abs(oiChangePct) >= 1 ? 1.5 : 1) : 0.5;
     score += priceChangePct > 0 ? weight : -weight;
     components++;
     reasons.push(
@@ -227,7 +271,10 @@ function analyzeDerivatives(
       `Funding ${(fundingRate * 100).toFixed(4)}% indicates ${fundingRate > 0 ? "long" : "short"} crowding`,
     );
   }
-  if (longShortRatio !== null && (longShortRatio >= 1.1 || longShortRatio <= 0.9)) {
+  if (
+    longShortRatio !== null &&
+    (longShortRatio >= 1.1 || longShortRatio <= 0.9)
+  ) {
     score += longShortRatio >= 1.1 ? -1 : 1;
     components++;
     reasons.push(
@@ -247,11 +294,21 @@ function analyzeDerivatives(
     }
   }
   const direction: Direction =
-    components < 2 ? "NONE" : score >= 2 ? "BUY" : score <= -2 ? "SELL" : "NONE";
+    components < 2
+      ? "NONE"
+      : score >= 2
+        ? "BUY"
+        : score <= -2
+          ? "SELL"
+          : "NONE";
   if (!reasons.length)
-    reasons.push("Derivatives: insufficient fresh positioning data for a directional edge");
+    reasons.push(
+      "Derivatives: insufficient fresh positioning data for a directional edge",
+    );
   else if (direction === "NONE")
-    reasons.push("Derivatives: signals are mixed or below the deterministic threshold");
+    reasons.push(
+      "Derivatives: signals are mixed or below the deterministic threshold",
+    );
   return {
     direction,
     strength:
@@ -268,12 +325,13 @@ function analyzeDerivatives(
       long_short_ratio: longShortRatio,
       long_liquidation_usd: longLiquidation,
       short_liquidation_usd: shortLiquidation,
-      sources: [...new Set([
-        ...openInterest,
-        ...funding,
-        ...positioning,
-        ...liquidations,
-      ].map((row) => row.source))],
+      sources: [
+        ...new Set(
+          [...openInterest, ...funding, ...positioning, ...liquidations].map(
+            (row) => row.source,
+          ),
+        ),
+      ],
     },
   };
 }
@@ -301,8 +359,7 @@ export function analyzeGroups(
   );
   const fast = indicators(context.M5, config);
   const recent = context.M5.slice(-6);
-  const previousVolume =
-    mean(recent.slice(0, -1).map((c) => c.volume)) || 1;
+  const previousVolume = mean(recent.slice(0, -1).map((c) => c.volume)) || 1;
   const volumeExpansion = context.M5.at(-1)!.volume / previousVolume;
   const volumeDirection: Direction =
     volumeExpansion >= config.scanner.volumeRatio &&
@@ -361,7 +418,10 @@ export function analyzeGroups(
       strength:
         volumeDirection === "NONE"
           ? 0
-          : Math.min(100, Math.round(50 + Math.min(50, (volumeExpansion - 1) * 50))),
+          : Math.min(
+              100,
+              Math.round(50 + Math.min(50, (volumeExpansion - 1) * 50)),
+            ),
       reasons: [
         volumeDirection === "NONE"
           ? "Volume: expansion and directional price confirmation not aligned"

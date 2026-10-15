@@ -1,3 +1,4 @@
+import { exampleScannerRule } from "../src/core/scanner-rules";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { build } from "esbuild";
 import { readFile, mkdir, readdir } from "node:fs/promises";
@@ -78,7 +79,8 @@ async function done(id: string) {
       };
       context: unknown;
     };
-    if (["COMPLETED", "NO_CONSENSUS", "FAILED", "STALE"].includes(c.status)) return c;
+    if (["COMPLETED", "NO_CONSENSUS", "FAILED", "STALE"].includes(c.status))
+      return c;
     await new Promise((r) => setTimeout(r, 30));
   }
   throw new Error(`Case did not finish: ${id}`);
@@ -111,10 +113,8 @@ beforeAll(async () => {
         OPENAI_API_KEY: "fixture-only-ai-key",
         OPENROUTER_API_KEY: "fixture-only-openrouter",
         GEMINI_API_KEY: "fixture-only-gemini",
-        DISCORD_MEETING_WEBHOOK:
-          "https://discord.invalid/webhooks/meeting",
-        DISCORD_SIGNAL_WEBHOOK:
-          "https://discord.invalid/webhooks/signal",
+        DISCORD_MEETING_WEBHOOK: "https://discord.invalid/webhooks/meeting",
+        DISCORD_SIGNAL_WEBHOOK: "https://discord.invalid/webhooks/signal",
       },
       serviceBindings: {
         ASSETS: async () => new MFResponse("<html><body>BYGA</body></html>"),
@@ -239,8 +239,7 @@ beforeAll(async () => {
     });
     await market.batch(statements);
   }
-  const derivativeBase =
-    Math.floor((now - 300000 - 5000) / 300000) * 300000;
+  const derivativeBase = Math.floor((now - 300000 - 5000) / 300000) * 300000;
   const derivativeRows = [];
   for (let i = 0; i < 13; i++) {
     const ts = derivativeBase - (12 - i) * 300000;
@@ -807,21 +806,30 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     expect(legacy.status).toBe(200);
     await stub.fetch("https://test/__test/alarm");
     expect(
-      (
-        await db
-          .prepare("SELECT status FROM cases WHERE uuid=?")
-          .bind(uuid)
-          .first<{ status: string }>()
-      )!.status,
+      (await db
+        .prepare("SELECT status FROM cases WHERE uuid=?")
+        .bind(uuid)
+        .first<{ status: string }>())!.status,
     ).toBe("COMPLETED");
   });
 
   it("simulation writes result only to simulation history, never live signals", async () => {
     scenario = "BUY";
     const uiKey = "fixture-only-simulation-ui-key";
-    expect((await call("/admin/credentials", { id: "openrouter", action: "SAVE", key: uiKey, expectedVersion: null })).status).toBe(200);
+    expect(
+      (
+        await call("/admin/credentials", {
+          id: "openrouter",
+          action: "SAVE",
+          key: uiKey,
+          expectedVersion: null,
+        })
+      ).status,
+    ).toBe(200);
     const namespace = await mf.getDurableObjectNamespace("OFFICE");
-    await namespace.get(namespace.idFromName("BTCUSDT.P:simulation")).fetch("https://test/__test/old-key-circuit");
+    await namespace
+      .get(namespace.idFromName("BTCUSDT.P:simulation"))
+      .fetch("https://test/__test/old-key-circuit");
     const db = await mf.getD1Database("DB");
     const before = (await db
       .prepare("SELECT COUNT(*) AS n FROM signals")
@@ -837,9 +845,13 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     expect(item.id).toMatch(/^CASE-/);
     const c = await done(item.id);
     expect(c.status, JSON.stringify(c.result)).toBe("COMPLETED");
-    const primary = aiAuthorizations.filter(request => request.host === "openrouter.ai");
+    const primary = aiAuthorizations.filter(
+      (request) => request.host === "openrouter.ai",
+    );
     expect(primary.length).toBeGreaterThan(0);
-    expect(primary.every(request => request.authorization === `Bearer ${uiKey}`)).toBe(true);
+    expect(
+      primary.every((request) => request.authorization === `Bearer ${uiKey}`),
+    ).toBe(true);
     const liveMeeting = (await (
       await call("/office/meeting", undefined, false)
     ).json()) as { meeting: { case_id: string } | null };
@@ -889,47 +901,119 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
   it("runs only four voters plus Risk/Boss in live and simulation, and STRICT replay preserves the historical council after switching to eight", async () => {
     scenario = "BUY";
     failure = "none";
-    const roster = ["trend", "structure", "volume", "derivatives", "risk", "boss"];
-    expect((await call("/admin/credentials", { id: "openrouter", action: "SAVE", key: "fixture-four-voter-account-key", expectedVersion: null })).status).toBe(200);
-    expect((await call("/admin/config", { config: { ...defaultConfig, aiVoterCount: 4, publicSignals: true }, activation: "NEXT CASE" })).status).toBe(200);
+    const roster = [
+      "trend",
+      "structure",
+      "volume",
+      "derivatives",
+      "risk",
+      "boss",
+    ];
+    expect(
+      (
+        await call("/admin/credentials", {
+          id: "openrouter",
+          action: "SAVE",
+          key: "fixture-four-voter-account-key",
+          expectedVersion: null,
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await call("/admin/config", {
+          config: { ...defaultConfig, aiVoterCount: 4, publicSignals: true },
+          activation: "NEXT CASE",
+        })
+      ).status,
+    ).toBe(200);
     const db = await mf.getD1Database("DB");
     const check = async (item: { id: string; uuid: string }) => {
       const result = await done(item.id);
       expect(result.status, JSON.stringify(result.result)).toBe("COMPLETED");
-      const context = result.context as { config: { aiVoterCount: number }; characters: { id: string }[] };
+      const context = result.context as {
+        config: { aiVoterCount: number };
+        characters: { id: string }[];
+      };
       expect(context.config.aiVoterCount).toBe(4);
-      expect(context.characters.map(c => c.id)).toEqual(roster);
-      const outputs = await db.prepare("SELECT character_id FROM ai_character_outputs WHERE case_uuid=? ORDER BY character_id").bind(item.uuid).all<{ character_id: string }>();
-      expect(outputs.results.map(output => output.character_id)).toEqual([...roster].sort());
+      expect(context.characters.map((c) => c.id)).toEqual(roster);
+      const outputs = await db
+        .prepare(
+          "SELECT character_id FROM ai_character_outputs WHERE case_uuid=? ORDER BY character_id",
+        )
+        .bind(item.uuid)
+        .all<{ character_id: string }>();
+      expect(outputs.results.map((output) => output.character_id)).toEqual(
+        [...roster].sort(),
+      );
       return result;
     };
     try {
       const start = aiRequests;
-      const request = { focus: "NONE", sendDiscord: false, idempotencyKey: "compact-live-pipeline" };
+      const request = {
+        focus: "NONE",
+        sendDiscord: false,
+        idempotencyKey: "compact-live-pipeline",
+      };
       const response = await call("/admin/emergency", request);
       expect(response.status).toBe(202);
-      const live = await response.json() as { id: string; uuid: string };
+      const live = (await response.json()) as { id: string; uuid: string };
       const result = await check(live);
-      expect(result.result).toMatchObject({ vote: { counts: { BUY: 4, SELL: 0, NO_TRADE: 0, UNAVAILABLE: 0 } } });
+      expect(result.result).toMatchObject({
+        vote: { counts: { BUY: 4, SELL: 0, NO_TRADE: 0, UNAVAILABLE: 0 } },
+      });
       expect(aiRequests - start).toBe(6);
-      expect(await (await call("/admin/emergency", request)).json()).toMatchObject({ id: live.id });
+      expect(
+        await (await call("/admin/emergency", request)).json(),
+      ).toMatchObject({ id: live.id });
       expect(aiRequests - start).toBe(6);
-      const meeting = await (await call(`/office/meeting?current=${live.id}`, undefined, false)).json() as { requested_meeting: { participants: string[]; turns: { character: string }[] } };
+      const meeting = (await (
+        await call(`/office/meeting?current=${live.id}`, undefined, false)
+      ).json()) as {
+        requested_meeting: {
+          participants: string[];
+          turns: { character: string }[];
+        };
+      };
       expect(meeting.requested_meeting.participants).toEqual(roster);
-      expect(meeting.requested_meeting.turns.map(turn => turn.character)).toEqual(roster);
-      const simulation = { timestamp: Date.now() - 600000, configMode: "CURRENT", replayMode: "COMPATIBLE", idempotencyKey: "compact-simulation-pipeline" };
+      expect(
+        meeting.requested_meeting.turns.map((turn) => turn.character),
+      ).toEqual(roster);
+      const simulation = {
+        timestamp: Date.now() - 600000,
+        configMode: "CURRENT",
+        replayMode: "COMPATIBLE",
+        idempotencyKey: "compact-simulation-pipeline",
+      };
       const compatible = await call("/admin/simulation", simulation);
       expect(compatible.status).toBe(202);
-      await check(await compatible.json() as { id: string; uuid: string });
+      await check((await compatible.json()) as { id: string; uuid: string });
       expect(aiRequests - start).toBe(12);
-      expect((await call("/admin/config", { config: { ...defaultConfig, aiVoterCount: 8, publicSignals: true }, activation: "NEXT CASE" })).status).toBe(200);
-      const strict = await call("/admin/simulation", { ...simulation, replayMode: "STRICT", historicalCaseId: live.id, idempotencyKey: "compact-strict-pipeline" });
+      expect(
+        (
+          await call("/admin/config", {
+            config: { ...defaultConfig, aiVoterCount: 8, publicSignals: true },
+            activation: "NEXT CASE",
+          })
+        ).status,
+      ).toBe(200);
+      const strict = await call("/admin/simulation", {
+        ...simulation,
+        replayMode: "STRICT",
+        historicalCaseId: live.id,
+        idempotencyKey: "compact-strict-pipeline",
+      });
       expect(strict.status).toBe(202);
-      await check(await strict.json() as { id: string; uuid: string });
+      await check((await strict.json()) as { id: string; uuid: string });
       expect(aiRequests - start).toBe(18);
-      expect(await (await call("/admin/config")).json()).toMatchObject({ config: { aiVoterCount: 8 } });
+      expect(await (await call("/admin/config")).json()).toMatchObject({
+        config: { aiVoterCount: 8 },
+      });
     } finally {
-      await call("/admin/config", { config: { ...defaultConfig, publicSignals: true }, activation: "NEXT CASE" });
+      await call("/admin/config", {
+        config: { ...defaultConfig, publicSignals: true },
+        activation: "NEXT CASE",
+      });
     }
   }, 30000);
   it("market repository remains unchanged; usage/audit stored and no secret leaks", async () => {
@@ -1802,6 +1886,151 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
     for (let i = 0; i < 6; i++)
       status = (await call("/auth/login", { password: "wrong" }, false)).status;
     expect(status).toBe(429);
+  });
+  it("persists versioned scanner parameters and custom rules and rejects invalid expressions", async () => {
+    const current = (await (await call("/admin/config")).json()) as {
+      config: typeof defaultConfig;
+    };
+    const scannerRules = { trend: exampleScannerRule() };
+    const config = {
+      ...current.config,
+      scanner: { ...current.config.scanner, adxMin: 31 },
+      scannerRules,
+    };
+    expect(
+      (await call("/admin/config", { config, activation: "NEXT CASE" })).status,
+    ).toBe(200);
+    const saved = (await (await call("/admin/config")).json()) as {
+      config: typeof defaultConfig;
+    };
+    expect(saved.config.scanner.adxMin).toBe(31);
+    expect(saved.config.scannerRules).toEqual(scannerRules);
+    expect(
+      (
+        await call("/admin/config", {
+          config: {
+            ...config,
+            scannerRules: {
+              trend: {
+                ...scannerRules.trend,
+                buy: { match: "ALL", conditions: [] },
+              },
+            },
+          },
+          activation: "NEXT CASE",
+        })
+      ).status,
+    ).toBe(400);
+    await call("/admin/config", {
+      config: current.config,
+      activation: "NEXT CASE",
+    });
+  });
+  it("persists editable avatar names and exposes only the public name", async () => {
+    const roster = (await (
+      await call("/admin/characters")
+    ).json()) as CharacterConfig[];
+    const original = roster.find((c) => c.id === "trend")!;
+    try {
+      expect(
+        (
+          await call("/admin/characters", {
+            ...original,
+            display_name: "  Aria  ",
+          })
+        ).status,
+      ).toBe(200);
+      const publicRoster = (await (
+        await call("/characters", undefined, false)
+      ).json()) as { id: string; display_name?: string }[];
+      expect(publicRoster.find((c) => c.id === "trend")).toEqual({
+        id: "trend",
+        avatar: original.avatar,
+        display_name: "Aria",
+      });
+      expect(
+        (
+          await call("/admin/characters", {
+            ...original,
+            display_name: "x".repeat(61),
+          })
+        ).status,
+      ).toBe(400);
+    } finally {
+      await call("/admin/characters", original);
+    }
+  });
+  it("deletes completed history with authentication, confirmation and active-case protection", async () => {
+    const db = await mf.getD1Database("DB");
+    const completed = await db
+      .prepare(
+        "SELECT c.id,c.uuid,s.id AS signal_id FROM cases c JOIN signals s ON s.case_uuid=c.uuid WHERE c.status='COMPLETED' LIMIT 1",
+      )
+      .first<{ id: string; uuid: string; signal_id: string }>();
+    expect(completed).toBeTruthy();
+    const body = {
+      mode: "LIVE",
+      caseId: completed!.id,
+      before: Date.now(),
+      confirmed: true,
+    };
+    expect((await call("/admin/history/delete", body, false)).status).toBe(401);
+    expect(
+      (await call("/admin/history/delete", body, true, "https://evil.test"))
+        .status,
+    ).toBe(403);
+    expect(
+      (await call("/admin/history/delete", { ...body, confirmed: false }))
+        .status,
+    ).toBe(400);
+    expect(await (await call("/admin/history/delete", body)).json()).toEqual({
+      deleted: 1,
+    });
+    expect(await (await call("/admin/history/delete", body)).json()).toEqual({
+      deleted: 0,
+    });
+    expect((await call(`/cases/${completed!.id}/public`)).status).toBe(404);
+    expect((await call(`/admin/cases/${completed!.id}`)).status).toBe(404);
+    expect((await call(`/signals/${completed!.signal_id}`)).status).toBe(404);
+    const signals = (await (
+      await call(`/signals?id=${completed!.signal_id}`)
+    ).json()) as { total: number };
+    expect(signals.total).toBe(0);
+    expect(
+      await db
+        .prepare("SELECT uuid FROM cases WHERE uuid=?")
+        .bind(completed!.uuid)
+        .first(),
+    ).toBeTruthy();
+    // Existing simulation remains visible when deleting live history.
+    const simulation = await db
+      .prepare("SELECT id FROM cases WHERE mode='SIMULATION' LIMIT 1")
+      .first<{ id: string }>();
+    expect(simulation).toBeTruthy();
+    expect((await call(`/admin/simulation/${simulation!.id}`)).status).toBe(
+      200,
+    );
+    const uuid = crypto.randomUUID();
+    await db
+      .prepare(
+        "INSERT INTO cases SELECT ?,?,'LIVE',source,direction,'AI_ANALYSIS',candle_timestamp,config_version,context,NULL,created_at,updated_at,? FROM cases WHERE uuid=?",
+      )
+      .bind(uuid, "CASE-DELETE-ACTIVE", uuid, completed!.uuid)
+      .run();
+    expect(
+      await (
+        await call("/admin/history/delete", {
+          ...body,
+          caseId: "CASE-DELETE-ACTIVE",
+        })
+      ).json(),
+    ).toEqual({ deleted: 0 });
+    expect((await call("/cases/CASE-DELETE-ACTIVE/public")).status).toBe(200);
+    await db.prepare("DELETE FROM cases WHERE uuid=?").bind(uuid).run();
+    await db
+      .prepare("DELETE FROM history_deletions WHERE case_uuid=?")
+      .bind(completed!.uuid)
+      .run();
   });
   it("logout invalidates session and expired sessions are rejected", async () => {
     const db = await mf.getD1Database("DB");

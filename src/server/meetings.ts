@@ -68,7 +68,7 @@ async function reviewMeeting(env: Env, row: ReviewRow, visible: boolean) {
   const review = JSON.parse(row.snapshot) as ScannerReview;
   if (row.case_uuid) {
     const current = await env.DB.prepare(
-      "SELECT uuid,id,status,created_at,context FROM cases WHERE uuid=? AND mode='LIVE'",
+      "SELECT uuid,id,status,created_at,context FROM cases WHERE uuid=? AND mode='LIVE' AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=cases.uuid)",
     )
       .bind(row.case_uuid)
       .first<MeetingCase>();
@@ -82,17 +82,17 @@ export async function readOfficeMeetings(
   requestedId?: string,
 ) {
   const active = await env.DB.prepare(
-    "SELECT uuid,id,status,created_at,context FROM cases WHERE mode='LIVE' AND status IN ('REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED') ORDER BY created_at LIMIT 1",
+    "SELECT uuid,id,status,created_at,context FROM cases WHERE mode='LIVE' AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=cases.uuid) AND status IN ('REVALIDATING','AI_ANALYSIS','AI_DEGRADED','RISK_REVIEW','BOSS_REVIEW','SIGNAL_CREATED') ORDER BY created_at LIMIT 1",
   ).first<MeetingCase>();
   const latestReview = await env.DB.prepare(
-    "SELECT * FROM scanner_meetings WHERE created_at>=? ORDER BY scheduled_at DESC LIMIT 1",
+    "SELECT * FROM scanner_meetings WHERE NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=scanner_meetings.case_uuid) AND created_at>=? ORDER BY scheduled_at DESC LIMIT 1",
   )
     .bind(Date.now() - CRON_INTERVAL_MS)
     .first<ReviewRow>();
   let meeting: MeetingSnapshot | null = null;
   if (active) {
     const linked = await env.DB.prepare(
-      "SELECT * FROM scanner_meetings WHERE case_uuid=? ORDER BY scheduled_at DESC LIMIT 1",
+      "SELECT * FROM scanner_meetings WHERE NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=scanner_meetings.case_uuid) AND case_uuid=? ORDER BY scheduled_at DESC LIMIT 1",
     )
       .bind(active.uuid)
       .first<ReviewRow>();
@@ -104,7 +104,7 @@ export async function readOfficeMeetings(
     );
   } else {
     const recent = await env.DB.prepare(
-      "SELECT uuid,id,status,created_at,context FROM cases WHERE mode='LIVE' AND status IN ('COMPLETED','NO_CONSENSUS','FAILED','CONFIG_CHANGED','STALE','DIRECTION_CHANGED') AND updated_at>=? ORDER BY created_at DESC LIMIT 1",
+      "SELECT uuid,id,status,created_at,context FROM cases WHERE mode='LIVE' AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=cases.uuid) AND status IN ('COMPLETED','NO_CONSENSUS','FAILED','CONFIG_CHANGED','STALE','DIRECTION_CHANGED') AND updated_at>=? ORDER BY created_at DESC LIMIT 1",
     )
       .bind(Date.now() - 180_000)
       .first<MeetingCase>();
@@ -120,13 +120,13 @@ export async function readOfficeMeetings(
   if (meeting?.case_id === requestedId) requested = meeting;
   else {
     const current = await env.DB.prepare(
-      "SELECT uuid,id,status,created_at,context FROM cases WHERE id=? AND mode='LIVE'",
+      "SELECT uuid,id,status,created_at,context FROM cases WHERE id=? AND mode='LIVE' AND NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=cases.uuid)",
     )
       .bind(requestedId)
       .first<MeetingCase>();
     if (current) {
       const linked = await env.DB.prepare(
-        "SELECT * FROM scanner_meetings WHERE case_uuid=? ORDER BY scheduled_at DESC LIMIT 1",
+        "SELECT * FROM scanner_meetings WHERE NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=scanner_meetings.case_uuid) AND case_uuid=? ORDER BY scheduled_at DESC LIMIT 1",
       )
         .bind(current.uuid)
         .first<ReviewRow>();
@@ -138,7 +138,7 @@ export async function readOfficeMeetings(
       );
     } else {
       const review = await env.DB.prepare(
-        "SELECT * FROM scanner_meetings WHERE id=?",
+        "SELECT * FROM scanner_meetings WHERE NOT EXISTS (SELECT 1 FROM history_deletions h WHERE h.case_uuid=scanner_meetings.case_uuid) AND id=?",
       )
         .bind(requestedId)
         .first<ReviewRow>();
