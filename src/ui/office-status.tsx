@@ -1,5 +1,6 @@
+import { useCharacterLabels } from "./character-names";
 import { useEffect, useState } from "react";
-import { InfoDialog, Notice, roles } from "./shared";
+import { InfoDialog, Notice } from "./shared";
 import { MeetingStatus, type useMeetingPresentation } from "./meeting-view";
 import { useOnline } from "./data";
 
@@ -18,6 +19,7 @@ export function OfficeStatus({
   development?: boolean;
   presentation: ReturnType<typeof useMeetingPresentation>;
 }) {
+  const roles = useCharacterLabels();
   const online = useOnline();
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState<string>();

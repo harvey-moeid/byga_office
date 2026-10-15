@@ -1,3 +1,5 @@
+import { CharacterNamesProvider, useCharacterLabels } from "./character-names";
+import { HistoryDelete } from "./history-delete";
 import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -38,6 +40,7 @@ import {
   SpeechBubble,
 } from "./meeting-view";
 import {
+  AppBoundary,
   Badge,
   Empty,
   Heading,
@@ -45,7 +48,6 @@ import {
   Notice,
   OfficeScene,
   SceneBoundary,
-  roles,
   supportsWebGL,
 } from "./shared";
 const Admin = lazy(() => import("./admin"));
@@ -88,11 +90,15 @@ interface PublicCase {
 }
 function App() {
   return (
-    <BrowserRouter>
-      <SessionProvider>
-        <AppLayout />
-      </SessionProvider>
-    </BrowserRouter>
+    <AppBoundary>
+      <BrowserRouter>
+        <SessionProvider>
+          <CharacterNamesProvider>
+            <AppLayout />
+          </CharacterNamesProvider>
+        </SessionProvider>
+      </BrowserRouter>
+    </AppBoundary>
   );
 }
 function AppLayout() {
@@ -308,6 +314,7 @@ function AppLayout() {
   );
 }
 function Dashboard({ immersive = false }: { immersive?: boolean }) {
+  const roles = useCharacterLabels();
   const state = useOfficeState<OfficeState>(),
     market = useData<Market>("/market/status", true),
     characters =
@@ -776,22 +783,31 @@ function ScannerGrid({ scanners }: { scanners: ScannerOutput[] }) {
   );
 }
 function Scanners() {
+  const session = useSession();
   const data = useData<ScannerOutput[]>("/scanners", true);
   return (
     <>
       <Heading
         eyebrow="DETERMINISTIC SYSTEMS"
         title="Scanners"
-        description="Semua enam scanner selalu aktif; strength tidak mengubah voting atau confidence."
+        description="Enam scanner mengikuti strategi dan parameter versi aktif; strength tidak mengubah voting atau confidence."
       />
       <Notice error={data.error} retry={data.retry} />
+      {session.data?.admin && (
+        <Link className="button" to="/admin#scanner">
+          Edit strategi scanner
+        </Link>
+      )}
       <ScannerGrid scanners={data.data ?? []} />
     </>
   );
 }
 function ScannerDetail() {
   const { id } = useParams();
-  const data = useData<ScannerOutput[]>(`/scanners/${id}`, true);
+  const data = useData<ScannerOutput[]>(
+    `/scanners/${encodeURIComponent(id ?? "")}`,
+    true,
+  );
   const s = data.data?.[0];
   return (
     <>
@@ -853,6 +869,13 @@ function Signals() {
         eyebrow="LIVE SIGNALS"
         title="Signals"
         description="Snapshot keputusan final. Simulasi dan hasil profit/loss tidak ditampilkan di sini."
+      />
+      <HistoryDelete
+        mode="LIVE"
+        onDeleted={() => {
+          setPage(1);
+          data.retry();
+        }}
       />
       <section className="filters">
         {(["direction", "flag", "source", "scanner"] as const).map((field) => (
@@ -1004,7 +1027,7 @@ function SignalView({ signal: s }: { signal: Signal }) {
 }
 function SignalDetail() {
   const { id } = useParams();
-  const data = useData<Signal>(`/signals/${id}`);
+  const data = useData<Signal>(`/signals/${encodeURIComponent(id ?? "")}`);
   return (
     <>
       <Heading eyebrow="FINAL DECISION" title={id ?? "Signal"} />
@@ -1024,6 +1047,7 @@ function Cases() {
         title="Cases"
         description="Daftar case memerlukan login Admin; ringkasan case live dapat dibuka melalui tautan case."
       />
+      <HistoryDelete mode="LIVE" onDeleted={data.retry} />
       <Notice error={data.error} retry={data.retry} />
       {data.data?.length
         ? data.data.map((c) => (
@@ -1039,11 +1063,12 @@ function Cases() {
   );
 }
 function CaseDetail({ simulation = false }: { simulation?: boolean }) {
+  const roles = useCharacterLabels();
   const { id } = useParams();
   const session = useSession();
   const path = session.data?.admin
-    ? `/admin/${simulation ? "simulation" : "cases"}/${id}`
-    : `/cases/${id}/public`;
+    ? `/admin/${simulation ? "simulation" : "cases"}/${encodeURIComponent(id ?? "")}`
+    : `/cases/${encodeURIComponent(id ?? "")}/public`;
   const data = useData<
     PublicCase & {
       context?: { market?: { M5: { close: number }[] } };
@@ -1124,6 +1149,7 @@ function CaseDetail({ simulation = false }: { simulation?: boolean }) {
   );
 }
 function Characters() {
+  const roles = useCharacterLabels();
   const state = useData<OfficeState>("/office/state", true);
   return (
     <>
@@ -1143,7 +1169,11 @@ function Characters() {
       />
       <div className="character-grid">
         {characterIds.map((id) => (
-          <Link to={`/characters/${id}`} className="panel" key={id}>
+          <Link
+            to={`/characters/${encodeURIComponent(id ?? "")}`}
+            className="panel"
+            key={id}
+          >
             <span className="avatar">
               {id === "boss"
                 ? "BG"
@@ -1171,11 +1201,12 @@ function Characters() {
   );
 }
 function CharacterDetail() {
+  const roles = useCharacterLabels();
   const { id } = useParams();
   const session = useSession();
   const history = useData<
     (PublicCase["analysts"][number] & { case_id: string; updated_at: number })[]
-  >(`/characters/${id}`, true);
+  >(`/characters/${encodeURIComponent(id ?? "")}`, true);
   const state = useData<OfficeState>("/office/state", true);
   return (
     <>

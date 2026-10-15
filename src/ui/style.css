@@ -2699,3 +2699,28 @@ footer {
     padding: 7px 10px;
   }
 }
+
+.scanner-rule-condition {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(60px, 0.7fr) minmax(
+      0,
+      1fr
+    ) minmax(0, 2fr);
+  gap: 8px;
+}
+.scanner-rule-condition select,
+.scanner-rule-condition input {
+  min-width: 0;
+  width: 100%;
+}
+.scanner-rule-row {
+  margin: 12px 0;
+}
+.history-delete {
+  margin: 12px 0;
+}
+@media (max-width: 600px) {
+  .scanner-rule-condition {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}

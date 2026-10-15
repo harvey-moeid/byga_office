@@ -206,88 +206,266 @@ afterAll(async () => {
 describe.sequential("Backend/API audit regressions", () => {
   it("validates 4/8 voting settings and keeps a queued case pinned when the next-case setting changes", async () => {
     for (const aiVoterCount of [0, 5, 6, 10, "4", null]) {
-      expect((await config({ ...defaultConfig, aiVoterCount } as TradingConfig)).status).toBe(400);
+      expect(
+        (await config({ ...defaultConfig, aiVoterCount } as TradingConfig))
+          .status,
+      ).toBe(400);
     }
-    expect((await config({ ...defaultConfig, aiVoterCount: 4 })).status).toBe(200);
+    expect((await config({ ...defaultConfig, aiVoterCount: 4 })).status).toBe(
+      200,
+    );
     const item = await queuedCase();
-    const row = await db.prepare("SELECT context FROM cases WHERE uuid=?").bind(item.uuid).first<{ context: string }>();
+    const row = await db
+      .prepare("SELECT context FROM cases WHERE uuid=?")
+      .bind(item.uuid)
+      .first<{ context: string }>();
     const snapshot = JSON.parse(row!.context);
     expect(snapshot.config.aiVoterCount).toBe(4);
-    expect(snapshot.characters.map((c: { id: string }) => c.id)).toEqual(["trend", "structure", "volume", "derivatives", "risk", "boss"]);
-    expect((await config({ ...defaultConfig, aiVoterCount: 8 })).status).toBe(200);
+    expect(snapshot.characters.map((c: { id: string }) => c.id)).toEqual([
+      "trend",
+      "structure",
+      "volume",
+      "derivatives",
+      "risk",
+      "boss",
+    ]);
+    expect((await config({ ...defaultConfig, aiVoterCount: 8 })).status).toBe(
+      200,
+    );
     expect((await activeConfig()).config.aiVoterCount).toBe(8);
-    await db.prepare("UPDATE cases SET status='AI_ANALYSIS' WHERE uuid=?").bind(item.uuid).run();
-    const state = await (await call("/office/state", undefined, "GET", false)).json();
-    expect(state).toMatchObject({ ai_voter_count: 8, active: { id: item.id, participants: ["trend", "structure", "volume", "derivatives", "risk", "boss"] } });
+    await db
+      .prepare("UPDATE cases SET status='AI_ANALYSIS' WHERE uuid=?")
+      .bind(item.uuid)
+      .run();
+    const state = await (
+      await call("/office/state", undefined, "GET", false)
+    ).json();
+    expect(state).toMatchObject({
+      ai_voter_count: 8,
+      active: {
+        id: item.id,
+        participants: [
+          "trend",
+          "structure",
+          "volume",
+          "derivatives",
+          "risk",
+          "boss",
+        ],
+      },
+    });
     expect(JSON.stringify(state)).not.toContain("primary_provider");
     expect(JSON.stringify(state)).not.toContain('"context"');
-    const meeting = await (await call(`/office/meeting?current=${item.id}`, undefined, "GET", false)).json();
-    expect(meeting).toMatchObject({ requested_meeting: { participants: ["trend", "structure", "volume", "derivatives", "risk", "boss"] } });
+    const meeting = await (
+      await call(`/office/meeting?current=${item.id}`, undefined, "GET", false)
+    ).json();
+    expect(meeting).toMatchObject({
+      requested_meeting: {
+        participants: [
+          "trend",
+          "structure",
+          "volume",
+          "derivatives",
+          "risk",
+          "boss",
+        ],
+      },
+    });
   });
   it("stores Admin API keys without echoing them and enforces authorization, origin and version conflicts", async () => {
     const key = "fixture-only-admin-provider-key";
-    const payload = { id: "openrouter", action: "SAVE", key, expectedVersion: null };
-    expect((await call("/admin/credentials", payload, "POST", false)).status).toBe(401);
-    expect((await call("/admin/credentials", payload, "POST", true, { Origin: "https://evil.test" })).status).toBe(403);
-    expect((await call("/admin/credentials", { ...payload, id: "workers-ai" })).status).toBe(400);
+    const payload = {
+      id: "openrouter",
+      action: "SAVE",
+      key,
+      expectedVersion: null,
+    };
+    expect(
+      (await call("/admin/credentials", payload, "POST", false)).status,
+    ).toBe(401);
+    expect(
+      (
+        await call("/admin/credentials", payload, "POST", true, {
+          Origin: "https://evil.test",
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (await call("/admin/credentials", { ...payload, id: "workers-ai" }))
+        .status,
+    ).toBe(400);
     const response = await call("/admin/credentials", payload);
     expect(response.status).toBe(200);
     const text = await response.text();
     expect(text).not.toContain(key);
     expect(text).not.toContain("encrypted");
-    const body = JSON.parse(text) as { items: { id: string; version: string; source: string }[] };
-    const status = body.items.find(item => item.id === "openrouter")!;
+    const body = JSON.parse(text) as {
+      items: { id: string; version: string; source: string }[];
+    };
+    const status = body.items.find((item) => item.id === "openrouter")!;
     expect(status.source).toBe("UI");
     expect((await call("/admin/credentials", payload)).status).toBe(409);
-    expect((await call("/admin/credentials", { id: "openrouter", action: "DELETE", expectedVersion: status.version, confirmed: false })).status).toBe(400);
-    expect((await call("/admin/credentials", { id: "openrouter", action: "DELETE", expectedVersion: crypto.randomUUID(), confirmed: true })).status).toBe(409);
-    const stored = await db.prepare("SELECT encrypted FROM provider_credentials").first<{ encrypted: string }>();
+    expect(
+      (
+        await call("/admin/credentials", {
+          id: "openrouter",
+          action: "DELETE",
+          expectedVersion: status.version,
+          confirmed: false,
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await call("/admin/credentials", {
+          id: "openrouter",
+          action: "DELETE",
+          expectedVersion: crypto.randomUUID(),
+          confirmed: true,
+        })
+      ).status,
+    ).toBe(409);
+    const stored = await db
+      .prepare("SELECT encrypted FROM provider_credentials")
+      .first<{ encrypted: string }>();
     expect(stored?.encrypted).not.toContain(key);
     const discovery = await call("/admin/models", { id: "openrouter" });
     expect(discovery.status).toBe(200);
-    const removed = await call("/admin/credentials", { id: "openrouter", action: "DELETE", expectedVersion: status.version, confirmed: true });
+    const removed = await call("/admin/credentials", {
+      id: "openrouter",
+      action: "DELETE",
+      expectedVersion: status.version,
+      confirmed: true,
+    });
     expect(removed.status).toBe(200);
-    expect(await removed.json()).toMatchObject({ items: expect.arrayContaining([expect.objectContaining({ id: "openrouter", source: "RUNTIME", version: null })]) });
-    expect(await db.prepare("SELECT COUNT(*) n FROM ai_runs").first()).toEqual({ n: 0 });
+    expect(await removed.json()).toMatchObject({
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          id: "openrouter",
+          source: "RUNTIME",
+          version: null,
+        }),
+      ]),
+    });
+    expect(await db.prepare("SELECT COUNT(*) n FROM ai_runs").first()).toEqual({
+      n: 0,
+    });
   });
   it("rejects a model catalog response obtained with a key that changed while discovery was running", async () => {
-    const first = await call("/admin/credentials", { id: "openrouter", action: "SAVE", key: "fixture-first-key", expectedVersion: null });
-    const body = await first.json() as { items: { id: string; version: string }[] };
-    const version = body.items.find(item => item.id === "openrouter")!.version;
-    const entered = new Promise<void>(resolve => { modelsEntered = resolve; });
-    modelGate = new Promise<void>(resolve => { releaseModels = resolve; });
+    const first = await call("/admin/credentials", {
+      id: "openrouter",
+      action: "SAVE",
+      key: "fixture-first-key",
+      expectedVersion: null,
+    });
+    const body = (await first.json()) as {
+      items: { id: string; version: string }[];
+    };
+    const version = body.items.find(
+      (item) => item.id === "openrouter",
+    )!.version;
+    const entered = new Promise<void>((resolve) => {
+      modelsEntered = resolve;
+    });
+    modelGate = new Promise<void>((resolve) => {
+      releaseModels = resolve;
+    });
     const discovery = call("/admin/models", { id: "openrouter" });
     await entered;
-    expect((await call("/admin/credentials", { id: "openrouter", action: "SAVE", key: "fixture-second-key", expectedVersion: version })).status).toBe(200);
+    expect(
+      (
+        await call("/admin/credentials", {
+          id: "openrouter",
+          action: "SAVE",
+          key: "fixture-second-key",
+          expectedVersion: version,
+        })
+      ).status,
+    ).toBe(200);
     releaseModels!();
     expect((await discovery).status).toBe(409);
-    expect((await call("/admin/models", { id: "openrouter" })).status).toBe(200);
+    expect((await call("/admin/models", { id: "openrouter" })).status).toBe(
+      200,
+    );
   });
   it("serves bounded public chart snapshots and exclusive deltas without starting AI or changing market rows", async () => {
-    const before = await chart.prepare("SELECT COUNT(*) n FROM candles").first<{ n: number }>();
+    await config({ ...defaultConfig, publicSignals: true });
+    const before = await chart
+      .prepare("SELECT COUNT(*) n FROM candles")
+      .first<{ n: number }>();
     for (const timeframe of ["M5", "M15", "H1"]) {
-      const response = await call(`/market/candles?timeframe=${timeframe}&limit=10`, undefined, "GET", false);
+      const response = await call(
+        `/market/candles?timeframe=${timeframe}&limit=10`,
+        undefined,
+        "GET",
+        false,
+      );
       expect(response.status).toBe(200);
-      const body = await response.json() as { candles: { timestamp: number; close: number }[]; status: string; market: string; latest_timestamp: number };
+      const body = (await response.json()) as {
+        candles: { timestamp: number; close: number }[];
+        status: string;
+        market: string;
+        latest_timestamp: number;
+      };
       expect(body.market).toBe("BTCUSDT.P");
       expect(body.candles).toHaveLength(10);
       expect(body.status).toBe("OK");
       expect(body.latest_timestamp).toBe(body.candles[9].timestamp);
-      const delta = await call(`/market/candles?timeframe=${timeframe}&after=${body.candles[8].timestamp}`, undefined, "GET", false);
-      const result = await delta.json() as { candles: unknown[]; has_more: boolean };
+      const delta = await call(
+        `/market/candles?timeframe=${timeframe}&after=${body.candles[8].timestamp}`,
+        undefined,
+        "GET",
+        false,
+      );
+      const result = (await delta.json()) as {
+        candles: unknown[];
+        has_more: boolean;
+      };
       expect(result.candles).toEqual([body.candles[9]]);
       expect(result.has_more).toBe(false);
-      const unchanged = await call(`/market/candles?timeframe=${timeframe}&after=${body.latest_timestamp}`, undefined, "GET", false);
-      expect(await unchanged.json()).toMatchObject({ candles: [], status: "OK", latest_timestamp: body.latest_timestamp });
-      const backlog = await call(`/market/candles?timeframe=${timeframe}&after=0&limit=10`, undefined, "GET", false);
-      expect(await backlog.json()).toMatchObject({ has_more: true, latest_timestamp: body.latest_timestamp });
+      const unchanged = await call(
+        `/market/candles?timeframe=${timeframe}&after=${body.latest_timestamp}`,
+        undefined,
+        "GET",
+        false,
+      );
+      expect(await unchanged.json()).toMatchObject({
+        candles: [],
+        status: "OK",
+        latest_timestamp: body.latest_timestamp,
+      });
+      const backlog = await call(
+        `/market/candles?timeframe=${timeframe}&after=0&limit=10`,
+        undefined,
+        "GET",
+        false,
+      );
+      expect(await backlog.json()).toMatchObject({
+        has_more: true,
+        latest_timestamp: body.latest_timestamp,
+      });
     }
-    for (const query of ["timeframe=D1", "limit=1001", "after=-1", "market=ETHUSDT", "limit=10&limit=20"])
-      expect((await call(`/market/candles?${query}`, undefined, "GET", false)).status).toBe(400);
+    for (const query of [
+      "timeframe=D1",
+      "limit=1001",
+      "after=-1",
+      "market=ETHUSDT",
+      "limit=10&limit=20",
+    ])
+      expect(
+        (await call(`/market/candles?${query}`, undefined, "GET", false))
+          .status,
+      ).toBe(400);
     expect((await call("/market/candles", {}, "POST", false)).status).toBe(405);
-    expect(await chart.prepare("SELECT COUNT(*) n FROM candles").first()).toEqual(before);
-    expect(await db.prepare("SELECT COUNT(*) n FROM ai_runs").first()).toEqual({ n: 0 });
-    expect(await db.prepare("SELECT COUNT(*) n FROM cases").first()).toEqual({ n: 0 });
+    expect(
+      await chart.prepare("SELECT COUNT(*) n FROM candles").first(),
+    ).toEqual(before);
+    expect(await db.prepare("SELECT COUNT(*) n FROM ai_runs").first()).toEqual({
+      n: 0,
+    });
+    expect(await db.prepare("SELECT COUNT(*) n FROM cases").first()).toEqual({
+      n: 0,
+    });
   });
   it("rejects unauthenticated routes and unsupported methods before any mutation", async () => {
     for (const path of [
@@ -524,23 +702,21 @@ describe.sequential("Backend/API audit regressions", () => {
           "trend",
           JSON.stringify({ id: "trend", status: "SUCCESS", output }),
         ),
-      db
-        .prepare("INSERT INTO scanner_meetings VALUES (?,?,?,?,?)")
-        .bind(
-          "SCANNER-latest",
-          Date.now(),
-          JSON.stringify({
-            id: "SCANNER-latest",
-            scheduled_at: Date.now(),
-            candle_timestamp: null,
-            minimum: 2,
-            direction: null,
-            reason: "MARKET_UNAVAILABLE",
-            groups: [],
-          }),
-          null,
-          Date.now(),
-        ),
+      db.prepare("INSERT INTO scanner_meetings VALUES (?,?,?,?,?)").bind(
+        "SCANNER-latest",
+        Date.now(),
+        JSON.stringify({
+          id: "SCANNER-latest",
+          scheduled_at: Date.now(),
+          candle_timestamp: null,
+          minimum: 2,
+          direction: null,
+          reason: "MARKET_UNAVAILABLE",
+          groups: [],
+        }),
+        null,
+        Date.now(),
+      ),
     ]);
     const path = "/office/meeting?current=" + encodeURIComponent(c.id);
     const response = await call(path, undefined, "GET", false);
@@ -829,6 +1005,152 @@ describe.sequential("Backend/API audit regressions", () => {
       modelGate = undefined;
     }
     expect((await diagnostic).status).toBe(200);
+  });
+  it("redacts rich scanner/state/SSE/meeting data and denies private market endpoints", async () => {
+    const scanner = {
+      name: "trend",
+      direction: "BUY",
+      strength: 80,
+      h1_bias: "BUY",
+      m15_setup: "BUY",
+      m5_trigger: "BUY",
+      levels: [987654.32],
+      indicators: { M5: { price: 987654.32 } },
+      reasons: ["Entry 987654.32"],
+      timestamp: Date.now(),
+      candle_timestamp: Date.now(),
+      config_version: "fixture",
+    };
+    const groups = [
+      {
+        group: "INDICATORS",
+        direction: "BUY",
+        strength: 80,
+        reasons: ["Entry 987654.32"],
+        payload: { price: 987654.32 },
+        timestamp: Date.now(),
+        candle_timestamp: Date.now(),
+        config_version: "fixture",
+      },
+    ];
+    await live.fetch("https://test/__test/public-fixture", {
+      method: "POST",
+      body: JSON.stringify({ scanners: [scanner], groups }),
+    });
+    await db
+      .prepare(
+        "INSERT INTO scanner_runs VALUES ('privacy-run',1,'fixture','LIVE',1)",
+      )
+      .run();
+    await db
+      .prepare("INSERT INTO scanner_outputs VALUES ('privacy-run','trend',?)")
+      .bind(JSON.stringify(scanner))
+      .run();
+    const review = {
+      id: "SCAN-private",
+      scheduled_at: Date.now(),
+      candle_timestamp: Date.now(),
+      minimum: 2,
+      direction: null,
+      reason: "NO_CONSENSUS",
+      groups,
+    };
+    await db
+      .prepare("INSERT INTO scanner_meetings VALUES (?,?,?,NULL,?)")
+      .bind(review.id, review.scheduled_at, JSON.stringify(review), Date.now())
+      .run();
+    for (const path of [
+      "/office/state",
+      "/scanners",
+      "/scanners/trend",
+      "/office/meeting",
+    ]) {
+      const publicResponse = await call(path, undefined, "GET", false);
+      expect(publicResponse.status).toBe(200);
+      expect(await publicResponse.text()).not.toContain("987654.32");
+      expect(await (await call(path)).text()).toContain("987654.32");
+    }
+    const stream = await call("/office/events", undefined, "GET", false);
+    const reader = stream.body!.getReader();
+    expect(new TextDecoder().decode((await reader.read()).value)).not.toContain(
+      "987654.32",
+    );
+    await reader.cancel();
+    for (const path of ["/market/status", "/market/candles?timeframe=M5"]) {
+      expect((await call(path, undefined, "GET", false)).status).toBe(401);
+      expect((await call(path)).status).toBe(200);
+    }
+    await config({ ...defaultConfig, publicSignals: true });
+    expect(
+      await (await call("/scanners/trend", undefined, "GET", false)).text(),
+    ).toContain("987654.32");
+    await db
+      .prepare("DELETE FROM scanner_outputs WHERE run_uuid='privacy-run'")
+      .run();
+    await db.prepare("DELETE FROM scanner_runs WHERE uuid='privacy-run'").run();
+  });
+  it("enforces history visibility and global history limit on sequential signal and case IDs", async () => {
+    const current = await activeConfig();
+    for (let i = 1; i <= 3; i++) {
+      const uuid = `privacy-case-${i}`,
+        id = `CASE-privacy-${i}`;
+      await db
+        .prepare(
+          "INSERT INTO cases VALUES (?,?, 'LIVE','AUTO','BUY','COMPLETED',1,?,'{}',NULL,?,?,?)",
+        )
+        .bind(uuid, id, current.id, i, i, uuid)
+        .run();
+      await db
+        .prepare("INSERT INTO signals VALUES (?,?,?,'BUY',70,?,?)")
+        .bind(
+          `signal-${i}`,
+          `SIG-privacy-${i}`,
+          uuid,
+          i,
+          JSON.stringify({
+            signal_id: `SIG-privacy-${i}`,
+            case_id: id,
+            direction: "BUY",
+            flags: [],
+          }),
+        )
+        .run();
+    }
+    await config({ ...defaultConfig, publicSignals: true, historyLimit: 1 });
+    for (const [path, status] of [
+      ["/signals/SIG-privacy-1", 404],
+      ["/signals/SIG-privacy-3", 200],
+      ["/cases/CASE-privacy-1/public", 404],
+      ["/cases/CASE-privacy-3/public", 200],
+    ] as const) {
+      expect((await call(path, undefined, "GET", false)).status).toBe(status);
+      expect((await call(path)).status).toBe(200);
+    }
+    expect(
+      (await (
+        await call(
+          "/office/meeting?current=CASE-privacy-1",
+          undefined,
+          "GET",
+          false,
+        )
+      ).json()) as { requested_meeting: unknown },
+    ).toMatchObject({ requested_meeting: null });
+    await config({
+      ...defaultConfig,
+      publicSignals: true,
+      publicHistory: false,
+    });
+    expect(
+      (await call("/signals/SIG-privacy-3", undefined, "GET", false)).status,
+    ).toBe(404);
+    expect(
+      (await call("/cases/CASE-privacy-3/public", undefined, "GET", false))
+        .status,
+    ).toBe(404);
+    expect(
+      await (await call("/characters/trend", undefined, "GET", false)).json(),
+    ).toEqual([]);
   });
   it("validates pagination and respects datetime cutoffs and WIB date-only end-of-day", async () => {
     await config({ ...defaultConfig, publicSignals: true });

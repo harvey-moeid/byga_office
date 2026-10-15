@@ -1,3 +1,5 @@
+import { HistoryDelete } from "./history-delete";
+import { useCharacterLabels } from "./character-names";
 import { Suspense, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { formatWib } from "../core/contracts";
@@ -10,7 +12,6 @@ import {
   PendingOperation,
   OfficeScene,
   SceneBoundary,
-  roles,
   supportsWebGL,
 } from "./shared";
 export default function Simulation() {
@@ -152,6 +153,7 @@ export function SimulationPlayback({
   status: string;
   prices: number[];
 }) {
+  const roles = useCharacterLabels();
   const [speed, setSpeed] = useState(1),
     [position, setPosition] = useState(0),
     [playing, setPlaying] = useState(true);
@@ -227,6 +229,7 @@ export function SimulationHistory() {
   return (
     <>
       <Heading eyebrow="HISTORICAL REPLAY" title="Simulation History" />
+      <HistoryDelete mode="SIMULATION" onDeleted={d.retry} />
       <Notice error={d.error} retry={d.retry} />
       {d.data?.map((s) => (
         <Link className="list-row" to={`/simulation/${s.id}`} key={s.id}>

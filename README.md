@@ -28,6 +28,10 @@ This command is explicitly `--local`; it never accesses or migrates the existing
 
 For Admin access, copy `.env.example` to the ignored `.dev.vars`. Generate a password hash with `npm run password:hash` (input hidden, minimum 12 characters), and put the resulting hash in `ADMIN_PASSWORD_HASH`. Do not commit the file. There is no default admin password. AI/provider and Discord variables are optional for read-only exploration, required for real calls. Configure provider/model per character in Admin. Never put keys in `VITE_*` variables.
 
+Pengaturan nama avatar, hapus histori, dan editor strategi scanner tersedia melalui Admin. Lihat [panduan kustomisasi](docs/ADMIN_CUSTOMIZATION.md).
+
+Kebijakan publikasi sinyal ketat, batas akses publik, dan isolasi secret CI dijelaskan pada [panduan keamanan](docs/SECURITY_HARDENING.md).
+
 ## Verification
 
 See [the movement, meeting and mobile status update](docs/OFFICE_EXPERIENCE_UPDATE.md) for natural stair travel, arrival-based gathering, head-linked speech and the compact Home status sheet. Ultra remains available.

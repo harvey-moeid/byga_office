@@ -1,3 +1,4 @@
+import { strictPublicationPolicy } from "../src/core/publication-policy";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { build } from "esbuild";
 import { mkdir, readFile, readdir } from "node:fs/promises";
@@ -7,13 +8,19 @@ import {
   Response as MFResponse,
 } from "miniflare";
 import {
-  defaultConfig,
+  defaultConfig as strictDefaultConfig,
   caseStopMessage,
   type AnalystResult,
   type Signal,
 } from "../src/core/contracts";
 import type { ScannerReview } from "../src/core/scanner-meeting";
 import type { CaseRow } from "../src/server/office";
+
+// Preserve advisory-policy regression fixtures; strict policy has dedicated tests.
+const defaultConfig: typeof strictDefaultConfig = {
+  ...strictDefaultConfig,
+  publicationPolicy: undefined,
+};
 
 let mf: Miniflare;
 let calls: number;
@@ -192,6 +199,10 @@ beforeEach(async () => {
     .filter((f) => f.endsWith(".sql"))
     .sort())
     await db.exec(await readFile("migrations/" + file, "utf8"));
+  await db
+    .prepare("INSERT OR IGNORE INTO trading_config_versions VALUES (?,?,?,?)")
+    .bind("TRADING-CONFIG-v1", 1, JSON.stringify(defaultConfig), Date.now())
+    .run();
   await chart.exec(
     "CREATE TABLE candles(symbol TEXT,timeframe TEXT,timestamp INTEGER,open REAL,high REAL,low REAL,close REAL,volume REAL,PRIMARY KEY(symbol,timeframe,timestamp));",
   );
@@ -234,6 +245,21 @@ afterEach(async () => {
 });
 
 describe.sequential("Trading publication and queue safety", () => {
+  it("enforces strict publication policy in the real Worker before writing a signal", async () => {
+    await config({
+      publicationPolicy: { ...strictPublicationPolicy, minConfidence: 100 },
+    });
+    const item = await emergency("strict-publication-fixture");
+    await alarm();
+    const saved = await row(item.uuid);
+    expect(saved.status).toBe("NO_CONSENSUS");
+    expect(["CONFIDENCE_BELOW_MINIMUM", "LOW_RR_BLOCKED"]).toContain(
+      JSON.parse(saved.result!).reason,
+    );
+    expect(await signals(item.uuid)).toBe(0);
+    expect(calls).toBe(10);
+  });
+
   it("fails an invalid legacy configuration without blocking the next queued case", async () => {
     const old = await emergency("safety-invalid-legacy-config");
     await patchContext(old.uuid, (context) => {

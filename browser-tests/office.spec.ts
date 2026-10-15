@@ -1423,9 +1423,6 @@ test("scanner numeric settings validate tuples and persist the exact parameters"
     });
   });
   await page.goto("/admin");
-  await page
-    .getByText("Scanner, context, dan budget settings", { exact: true })
-    .click();
   const save = page.getByRole("button", {
     name: "Save new version",
     exact: true,
@@ -1463,9 +1460,6 @@ test("scanner numeric settings validate tuples and persist the exact parameters"
     volumeRatio: 1.25,
   });
   await page.reload();
-  await page
-    .getByText("Scanner, context, dan budget settings", { exact: true })
-    .click();
   await expect(fast).toHaveValue("10");
   await expect(ratio).toHaveValue("1.25");
 });

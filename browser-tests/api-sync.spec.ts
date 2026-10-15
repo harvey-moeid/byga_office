@@ -253,9 +253,7 @@ test("JSON refresh matches the visible draft, invalid edits block Save and confl
     return true;
   });
   await page.goto("/admin");
-  await page
-    .getByText("Scanner, context, dan budget settings", { exact: true })
-    .click();
+  await page.getByText("Context dan budget", { exact: true }).click();
   const context = page.getByLabel("context", { exact: true }),
     save = page.getByRole("button", { name: "Save new version", exact: true });
   await expect(context).toHaveValue(JSON.stringify(config.context, null, 2));
@@ -560,4 +558,204 @@ test("failed state and health checks show UNKNOWN and logout failure has actiona
     "Logout belum terkonfirmasi",
   );
   expect(errors).toEqual([]);
+});
+
+test("avatar names persist and appear on the team after saving", async ({
+  page,
+}) => {
+  let roster = defaultCharacters();
+  await fixture(page, async (route, path) => {
+    if (path === "/admin/characters") {
+      if (route.request().method() === "POST") {
+        const saved = route.request().postDataJSON();
+        roster = roster.map((c) => (c.id === saved.id ? saved : c));
+        await route.fulfill({ json: saved });
+      } else await route.fulfill({ json: roster });
+      return true;
+    }
+    if (path === "/characters") {
+      await route.fulfill({
+        json: roster.map(({ id, avatar, display_name }) => ({
+          id,
+          avatar,
+          display_name,
+        })),
+      });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/admin");
+  await page
+    .getByRole("button", { name: "AI Characters", exact: true })
+    .click();
+  await page.getByLabel("Nama avatar", { exact: true }).fill("Aria");
+  await page
+    .getByRole("button", { name: "Save character & prompt", exact: true })
+    .click();
+  await expect(
+    page.getByText("Karakter tersimpan dengan prompt version baru."),
+  ).toBeVisible();
+  await page.getByRole("link", { name: /AI Team/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Aria", exact: true }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Aria", exact: true }),
+  ).toBeVisible();
+});
+
+test("scanner custom BUY and SELL rules save with parameters and block invalid comparisons", async ({
+  page,
+}) => {
+  let config = structuredClone(defaultConfig);
+  await fixture(page, async (route, path) => {
+    if (path !== "/admin/config") return false;
+    if (route.request().method() === "POST") {
+      config = route.request().postDataJSON().config;
+      await route.fulfill({
+        json: { id: "custom-v2", replacement_case_id: null },
+      });
+    } else
+      await route.fulfill({ json: { id: "custom-v2", config, versions: [] } });
+    return true;
+  });
+  await page.goto("/scanners");
+  await page
+    .getByRole("link", { name: "Edit strategi scanner", exact: true })
+    .click();
+  await page
+    .getByLabel("Mode strategi trend", { exact: true })
+    .selectOption("CUSTOM");
+  await page.getByLabel("trend buy 1 nilai", { exact: true }).fill("62");
+  await page.getByLabel("trend sell 1 nilai", { exact: true }).fill("38");
+  await page.getByLabel("ADX minimum", { exact: true }).fill("30");
+  const save = page.getByRole("button", {
+    name: "Save new version",
+    exact: true,
+  });
+  await save.click();
+  await expect(page.getByRole("status")).toContainText("Tersimpan: custom-v2");
+  expect(config.scannerRules?.trend?.buy.conditions[0].right).toBe(62);
+  expect(config.scannerRules?.trend?.sell.conditions[0].right).toBe(38);
+  expect(config.scanner.adxMin).toBe(30);
+  await page.reload();
+  await expect(
+    page.getByLabel("trend buy 1 nilai", { exact: true }),
+  ).toHaveValue("62");
+  await page
+    .getByLabel("trend buy 1 pembanding", { exact: true })
+    .selectOption("metric");
+  await page
+    .getByLabel("trend buy 1 indikator pembanding", { exact: true })
+    .selectOption("H1.bias");
+  await expect(save).toBeDisabled();
+  await expect(page.getByRole("alert")).toContainText(
+    "Bandingkan indikator numerik",
+  );
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+});
+
+test("history deletion asks for confirmation and refreshes the list", async ({
+  page,
+}) => {
+  let deleted = false;
+  let posts = 0;
+  await fixture(page, async (route, path) => {
+    if (path === "/admin/cases") {
+      await route.fulfill({
+        json: deleted
+          ? []
+          : [
+              {
+                id: "CASE-history",
+                status: "COMPLETED",
+                direction: "BUY",
+                created_at: Date.now(),
+              },
+            ],
+      });
+      return true;
+    }
+    if (path === "/admin/history/delete") {
+      expect(route.request().postDataJSON()).toMatchObject({
+        mode: "LIVE",
+        confirmed: true,
+      });
+      posts++;
+      deleted = true;
+      await route.fulfill({ json: { deleted: 1 } });
+      return true;
+    }
+    return false;
+  });
+  await page.goto("/cases");
+  const clear = page.getByRole("button", {
+    name: "Hapus histori selesai",
+    exact: true,
+  });
+  await expect(page.getByText("CASE-history", { exact: true })).toBeVisible();
+  page.once("dialog", (dialog) => dialog.dismiss());
+  await clear.click();
+  expect(posts).toBe(0);
+  page.once("dialog", (dialog) => dialog.accept());
+  await clear.click();
+  await expect(page.getByText("CASE-history", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("status")).toContainText("1 histori dihapus");
+  expect(posts).toBe(1);
+});
+
+test("strict publication controls validate confidence and persist the versioned policy", async ({
+  page,
+}) => {
+  let config = structuredClone(defaultConfig);
+  await fixture(page, async (route, path) => {
+    if (path !== "/admin/config") return false;
+    if (route.request().method() === "POST") {
+      config = route.request().postDataJSON().config;
+      await route.fulfill({
+        json: { id: "strict-policy-v2", replacement_case_id: null },
+      });
+    } else
+      await route.fulfill({
+        json: { id: "strict-policy-v2", config, versions: [] },
+      });
+    return true;
+  });
+  await page.goto("/admin");
+  const minimum = page.getByLabel("Confidence minimum", { exact: true });
+  const save = page.getByRole("button", {
+    name: "Save new version",
+    exact: true,
+  });
+  await expect(minimum).toHaveValue("60");
+  await expect(
+    page.getByLabel("Wajib persetujuan Risk Manager", { exact: true }),
+  ).toBeChecked();
+  await expect(
+    page.getByLabel("Wajib persetujuan Head Trader", { exact: true }),
+  ).toBeChecked();
+  await minimum.fill("");
+  await expect(save).toBeDisabled();
+  await minimum.fill("101");
+  await expect(save).toBeDisabled();
+  await minimum.fill("72");
+  await save.click();
+  await expect(page.getByRole("status")).toContainText(
+    "Tersimpan: strict-policy-v2",
+  );
+  expect(config.publicationPolicy).toMatchObject({
+    riskVeto: true,
+    bossVeto: true,
+    requireAiQuorum: true,
+    minConfidence: 72,
+    blockLowRR: true,
+  });
+  await page.reload();
+  await expect(minimum).toHaveValue("72");
 });

@@ -1,3 +1,8 @@
+import {
+  publicationPolicySchema,
+  strictPublicationPolicy,
+} from "./publication-policy";
+import { scannerRuleSchema } from "./scanner-rules";
 import { z } from "zod";
 export const MARKET = "BTCUSDT.P" as const;
 export const CHART_DB_MARKET = "BTCUSDT" as const;
@@ -47,10 +52,22 @@ const weights = z
     (v) => Math.abs(v.reduce((a, b) => a + b, 0) - 100) < 1e-6,
     "Weights must total 100",
   );
+export const scannerNames = [
+  "trend",
+  "breakout",
+  "momentum",
+  "mean-reversion",
+  "structure",
+  "liquidity",
+] as const;
+export type ScannerName = (typeof scannerNames)[number];
+
 export const aiVoterCountSchema = z.union([z.literal(4), z.literal(8)]);
 export const configSchema = z.object({
+  publicationPolicy: publicationPolicySchema.optional(),
   aiVoterCount: aiVoterCountSchema.default(8),
   scannerConsensusMin: z.number().int().min(1).max(4).default(2),
+  scannerRules: z.record(z.enum(scannerNames), scannerRuleSchema).optional(),
   scanner: z.object({
     ema: z
       .tuple([
@@ -112,6 +129,7 @@ export const configSchema = z.object({
 });
 export type TradingConfig = z.infer<typeof configSchema>;
 export const defaultConfig: TradingConfig = {
+  publicationPolicy: { ...strictPublicationPolicy },
   aiVoterCount: 8,
   scannerConsensusMin: 2,
   scanner: {
@@ -149,15 +167,6 @@ export const defaultConfig: TradingConfig = {
     simulationsPerDay: 0,
   },
 };
-export const scannerNames = [
-  "trend",
-  "breakout",
-  "momentum",
-  "mean-reversion",
-  "structure",
-  "liquidity",
-] as const;
-export type ScannerName = (typeof scannerNames)[number];
 export interface ScannerOutput {
   name: ScannerName;
   direction: Direction;
@@ -255,6 +264,7 @@ export const avatarPresets = [
 export type AvatarPreset = (typeof avatarPresets)[number];
 export const characterSchema = z.object({
   id: z.enum(characterIds),
+  display_name: z.string().trim().min(1).max(60).optional(),
   primary_provider: z.enum(providers),
   primary_model: z.string().min(1).max(200),
   fallback_provider: z.enum(providers),
@@ -359,6 +369,15 @@ const caseStopMessages: Record<string, string> = {
     "Candle ini sudah dianalisis untuk arah dan konfigurasi yang sama.",
   GROUP_CONSENSUS_LOST:
     "Konsensus grup tidak lagi memenuhi syarat analisis otomatis.",
+  AI_QUORUM_REQUIRED:
+    "Dukungan AI searah belum memenuhi kuorum. Sinyal tidak diterbitkan.",
+  RISK_VETO:
+    "Risk Manager belum menyetujui arah ini. Sinyal tidak diterbitkan.",
+  BOSS_VETO: "Head Trader belum menyetujui arah ini. Sinyal tidak diterbitkan.",
+  CONFIDENCE_BELOW_MINIMUM:
+    "Confidence di bawah batas konfigurasi. Sinyal tidak diterbitkan.",
+  LOW_RR_BLOCKED:
+    "Risk/reward di bawah batas konfigurasi. Sinyal tidak diterbitkan.",
   DECISION_SNAPSHOT_EXPIRED:
     "Analisis melewati batas waktu lima menit. Sinyal tidak diterbitkan.",
   MARKET_UNAVAILABLE_BEFORE_PUBLICATION:
@@ -387,6 +406,7 @@ export function wibDate(t = Date.now()) {
     .replaceAll("-", "");
 }
 export function formatWib(t: number) {
+  if (!Number.isFinite(t) || Math.abs(t) > 8.64e15) return "—";
   return (
     new Intl.DateTimeFormat("id-ID", {
       timeZone: "Asia/Jakarta",

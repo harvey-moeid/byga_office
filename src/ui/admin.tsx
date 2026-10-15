@@ -1,3 +1,6 @@
+import { strictPublicationPolicy } from "../core/publication-policy";
+import { ScannerRulesEditor } from "./scanner-rules";
+import { useCharacterNames } from "./character-names";
 import { ScannerSettings } from "./scanner-settings";
 import { ProviderKeys } from "./provider-keys";
 import React, { useEffect, useRef, useState } from "react";
@@ -376,12 +379,88 @@ function ConfigEditor() {
                 {k}
               </label>
             ))}
-            <details>
-              <summary>Scanner, context, dan budget settings</summary>
+            <fieldset>
+              <legend>Kebijakan publikasi sinyal</legend>
+              <p>
+                {draft.publicationPolicy
+                  ? "Kebijakan tersimpan pada versi konfigurasi ini."
+                  : "Konfigurasi lama memakai aturan advisory. Aktifkan kebijakan ketat untuk case baru."}
+              </p>
+              <button
+                onClick={() =>
+                  update("publicationPolicy", { ...strictPublicationPolicy })
+                }
+              >
+                Gunakan kebijakan ketat
+              </button>
+              {draft.publicationPolicy && (
+                <>
+                  {(
+                    [
+                      "riskVeto",
+                      "bossVeto",
+                      "requireAiQuorum",
+                      "blockLowRR",
+                    ] as const
+                  ).map((key) => (
+                    <label className="check" key={key}>
+                      <input
+                        type="checkbox"
+                        checked={draft.publicationPolicy![key]}
+                        onChange={(event) =>
+                          update("publicationPolicy", {
+                            ...draft.publicationPolicy!,
+                            [key]: event.target.checked,
+                          })
+                        }
+                      />
+                      {
+                        {
+                          riskVeto: "Wajib persetujuan Risk Manager",
+                          bossVeto: "Wajib persetujuan Head Trader",
+                          requireAiQuorum:
+                            "Wajib minimal separuh AI searah (minimal 2)",
+                          blockLowRR: "Blokir R:R di bawah minRR",
+                        }[key]
+                      }
+                    </label>
+                  ))}
+                  <label>
+                    Confidence minimum
+                    <input
+                      aria-label="Confidence minimum"
+                      type="number"
+                      min={0}
+                      max={100}
+                      step="any"
+                      value={draft.publicationPolicy.minConfidence}
+                      onChange={(event) =>
+                        update("publicationPolicy", {
+                          ...draft.publicationPolicy!,
+                          minConfidence:
+                            event.target.value === ""
+                              ? NaN
+                              : Number(event.target.value),
+                        })
+                      }
+                    />
+                  </label>
+                </>
+              )}
+            </fieldset>
+            <div id="scanner">
+              <h3>Edit strategi scanner</h3>
               <ScannerSettings
                 value={draft.scanner}
                 onChange={(value) => update("scanner", value)}
               />
+              <ScannerRulesEditor
+                value={draft.scannerRules}
+                onChange={(rules) => update("scannerRules", rules)}
+              />
+            </div>
+            <details>
+              <summary>Context dan budget</summary>
               {(["context", "budgets"] as const).map((k) => (
                 <JsonField
                   key={`${k}:${baseVersion.current}:${editorRevision}`}
@@ -489,6 +568,7 @@ function JsonField({
   );
 }
 function CharacterEditor() {
+  const names = useCharacterNames();
   const action = useAction();
   const data = useData<CharacterConfig[]>("/admin/characters");
   const [id, setId] = useState("trend"),
@@ -511,6 +591,7 @@ function CharacterEditor() {
         setMessage("Karakter tersimpan dengan prompt version baru.");
         data.retry();
         prompts.retry();
+        names.refresh();
       } catch (e) {
         setMessage((e as Error).message);
       }
@@ -528,7 +609,7 @@ function CharacterEditor() {
         >
           {characterIds.map((c) => (
             <option key={c} value={c}>
-              {roles[c]}
+              {names.names[c]} · {roles[c]}
             </option>
           ))}
         </select>
@@ -600,6 +681,22 @@ function CharacterEditor() {
                   )}
                 </label>
               ))}
+              <label>
+                Nama avatar
+                <input
+                  aria-label="Nama avatar"
+                  maxLength={60}
+                  value={draft.display_name ?? ""}
+                  placeholder={roles[id]}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      display_name: e.target.value || undefined,
+                    })
+                  }
+                />
+                <small>Kosongkan untuk memakai nama peran bawaan.</small>
+              </label>
               <label>
                 avatar
                 <select
@@ -692,6 +789,7 @@ function CharacterEditor() {
                       try {
                         await api("/admin/rollback", { id: p.id });
                         data.retry();
+                        names.refresh();
                         setMessage("Prompt version dipulihkan.");
                       } catch (e) {
                         setMessage((e as Error).message);
@@ -729,7 +827,12 @@ function Providers() {
   const [message, setMessage] = useState("");
   return (
     <section className="panel">
-      <ProviderKeys onSaved={() => { health.retry(); d.retry(); }} />
+      <ProviderKeys
+        onSaved={() => {
+          health.retry();
+          d.retry();
+        }}
+      />
       <h2>Provider health</h2>
       <p>Health pasif dan tes manual. Tidak ada polling AI berbayar.</p>
       <Notice error={d.error} />

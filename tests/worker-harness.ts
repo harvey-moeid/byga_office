@@ -13,6 +13,17 @@ export class Office extends ProductionOffice {
       await this.alarm();
       return Response.json({ ok: true });
     }
+    if (path === "/__test/public-fixture") {
+      const body = (await request.json()) as {
+        scanners: unknown[];
+        groups: unknown[];
+      };
+      await this.ctx.storage.put({
+        scanners: body.scanners,
+        groups: body.groups,
+      });
+      return Response.json({ ok: true });
+    }
     if (path === "/__test/storage") {
       return Response.json({
         alarm: await this.ctx.storage.getAlarm(),
@@ -28,7 +39,9 @@ export class Office extends ProductionOffice {
     }
     if (path === "/__test/old-key-circuit") {
       await this.ctx.storage.put("circuit:openrouter", {
-        failures: 5, openedAt: Date.now(), probeUntil: Date.now() + 180000,
+        failures: 5,
+        openedAt: Date.now(),
+        probeUntil: Date.now() + 180000,
         credentialVersion: "fixture-retired-key-version",
       });
       return Response.json({ ok: true });
