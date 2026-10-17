@@ -20,6 +20,7 @@
     "credentials:setup": "node scripts/credentials-key.mjs",
     "test:browser": "playwright test",
     "deploy:check": "node scripts/wrangler.mjs deploy --dry-run",
+    "production:check": "node scripts/production-check.mjs",
     "test:browser:integration": "playwright test --config playwright.integration.config.ts"
   },
   "dependencies": {

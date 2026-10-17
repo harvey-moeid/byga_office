@@ -1,47 +1,56 @@
-# Production acceptance — 4 October 2026 (UTC)
+# Production acceptance — reviewed 17 October 2026 (UTC)
 
-Historical production report: the observations below were recorded on 4 October, including that day's one-minute schedule. The subsequent five-minute schedule is recorded in [Deployment](DEPLOYMENT.md). The 10 October trading and UI/API fixes have passed local validation only; see [UI/API contract and validation](API_UI_CONTRACT.md). They do not update this production acceptance record, and migration `0006_admin_operations.sql` has not been applied remotely in this task.
+**Status: deployed and automatically validated; full operational acceptance remains open.** A green deployment is evidence for its recorded checks, not approval of every MVP criterion. This report supersedes the [4 October report](PRODUCTION_ACCEPTANCE_2026-10-04.md).
 
-## Current production state
+## Verified release
 
-Worker: `byga-office`  
-URL: https://byga-office.harveymoeid.workers.dev  
-Code: `aff739c0c93458a1fd9fa8a664aec384be9e944a`
+- Repository revision: `cff88b7074f476739f2954221d70b5634e3013ff`.
+- Worker: `byga-office`; production origin: https://karyawanai.muidsoft.com.
+- [CI 38694557165](https://github.com/harvey-moeid/byga_office/actions/runs/38694557165), 15 October: code/Worker build and desktop/mobile browser jobs succeeded.
+- [Deployment 38840278995, attempt 2](https://github.com/harvey-moeid/byga_office/actions/runs/38840278995), 16 October, completed at 03:22:08 UTC: **379 unit/integration tests, 165 browser tests and 30 browser–Worker/D1 tests passed**, alongside TypeScript, lint, dependency audit and build.
+- Deployment applied `0009_history_deletions.sql` and `0010_strict_publication_policy.sql`; a SELECT-only ledger check on 17 October confirmed **all ten migrations, 0001–0010**. Application migrations target `trading_office_db`, never `chart_db`.
+- Cloudflare GET on 17 October confirmed cron **`*/5 * * * *`**. The latest successful workflow restored it after initial deployed smoke passed.
 
-The Worker is published and the deployed application/Admin smoke checks pass. **The one-minute cron is now configured**: at 07:31:02 UTC (14:31:02 WIB), the Cloudflare schedules API accepted `* * * * *`, and a subsequent GET returned that schedule. This resolves the configuration blocker. Repeated scheduled execution is not yet accepted. The earlier deployment job remains a historical failed run; it was not re-run to install this schedule.
+## Deployment acceptance actually observed
 
-## Confirmed
+| Check | Result and scope |
+| --- | --- |
+| Market | At 16 October 03:20:59 UTC, the real SELECT-only reader validated 260 closed candles for each H1/M15/M5, including OHLC, gaps and freshness. This is a time-bound snapshot. |
+| Provider probes | OpenRouter `openai/gpt-4.1-mini` and Gemini `gemini-3.5-flash-lite` discovery and bounded structured inference passed in the GitHub runner. A deployed Workers AI binding/model probe also passed. These are synthetic probes, not full trading cases or configured failover acceptance. |
+| Infrastructure/auth | Frontend, D1, Durable Object state, unauthorized Admin rejection, real Admin login, Secure/HttpOnly/SameSite cookie flags, wrong-origin rejection and logout invalidation passed. |
+| Final smoke | Infrastructure, frontend, Durable Object, Admin controls and market passed. **Provider health was `DEGRADED`**, while Discord was `CONFIGURED`. The workflow permits provider degradation and does not claim it recovered. |
+| Frontend integrity | Deployed JS/CSS hashes matched six built assets. |
 
-- [CI 37184871468](https://github.com/harvey-moeid/byga_office/actions/runs/37184871468): **109 unit/integration tests**, **30 browser tests**, TypeScript, ESLint, frontend build and Worker dry run passed.
-- [Deployment 37184871525](https://github.com/harvey-moeid/byga_office/actions/runs/37184871525): credential preflight, code/browser checks, real market reads, both AI probes, app-only migrations, Worker publication, runtime secret installation and initial deployed smoke checks passed.
-- Required GitHub production secrets are `CLOUDFLARE_API_TOKEN`, `ADMIN_PASSWORD`, `OPENROUTER_API_KEY` and `GEMINI_API_KEY`. The workflow derives/installs only `ADMIN_PASSWORD_HASH` for runtime Admin authentication. A direct OpenAI key is no longer required.
-- Real SELECT-only application market reader at 07:11:12 UTC: 260 closed BTCUSDT candles per H1/M15/M5 passed OHLC/volume, gaps and freshness. These checks are snapshots; strict freshness protection remains active.
-- Real model discovery and one bounded synthetic structured inference per provider passed through the actual adapter in the GitHub runner: OpenRouter `openai/gpt-4.1-mini` (251 tokens) and Gemini `gemini-3.5-flash-lite` (126 tokens). The probes publish no trading signals. Full Worker case processing and failover are separate acceptance items.
-- Both selected runtime secret names were confirmed in Cloudflare settings, without reading/exposing values.
-- All eight stored character configurations were verified with OpenRouter primary and Gemini fallback using the models above.
-- Deployed frontend shell/static JavaScript, Durable Object state, production candle API, provider configuration, unauthorized Admin rejection, test-route absence, real Admin login, Secure/HttpOnly/SameSite=Strict cookie flags, wrong-origin rejection and logout/session invalidation passed.
-- All five application migrations are applied to `trading_office_db`; 22 application tables and the migration ledger were verified. No migrations or seed writes were applied to remote `chart_db`.
+The market preflight uses a warning policy for freshness lag; runtime trading guards remain strict. Structural market failures still reject deployment. The final smoke may accept freshness-only `DEGRADED` status, so a successful run alone is not continuous healthy operation.
 
-## Scheduling configuration — blocker resolved
+## Read-only production observations — 17 October
 
-The earlier enable-cron step returned Cloudflare **10072**:
+Cloudflare queries used only SELECT and reported `rows_written=0`, `changed_db=false`. They did not create cases, call providers, change settings or send messages.
 
-> This account has reached the Workers Free limit of 5 cron triggers per account.
+- The trailing 24-hour snapshot contained **18 LIVE scanner audit rows**. Repeated scans exist; uninterrupted five-minute cadence and upstream freshness still require observation over a defined operating window.
+- Four recent LIVE cases ended safely: **two `NO_CONSENSUS` (`AI_QUORUM_REQUIRED`) and two `STALE` (`ANALYSIS_GROUPS_CHANGED_DURING_ANALYSIS`)**. This does not establish a successful strict-policy final signal.
+- The same window contained **four recorded `MEETING` deliveries with `SENT` status**. Meeting delivery has real audit evidence; final `SIGNAL` delivery and duplicate-free recovery remain separate acceptance.
+- Saved character settings contain provider/model mismatches: Risk uses Gemini with `openai/gpt-4.1-mini`, Momentum uses Mistral with that same OpenAI model, Volume uses Cohere with that model, and the Boss fallback pairs NVIDIA with a Gemini model. Review both paths for every character using that account's model catalog and a selected-model inference probe.
+- Stored character-output audits include HTTP **400/404**, **402**, **429**, and missing-provider errors. These historical codes indicate model/request, quota/billing, rate or configuration problems; they do not identify every current account failure. No secret values or raw AI responses were retrieved.
+- Direct anonymous application health could not be re-read from this workspace because the configured egress policy returned HTTP 403. The deployment smoke above is dated evidence, not a claim of current health.
 
-On the subsequent user-requested check, PUT schedules returned HTTP 200/success and GET confirmed `* * * * *` for `byga-office`. No other Worker's trigger was deleted or modified, and no account plan was changed by this action. The schedule matches the tracked Wrangler configuration; no application code or runtime secret was changed.
+## Remaining release acceptance
 
-At 07:34:17 UTC, the office state had changed to `market_error: Stale M5 data`, while `scanner_runs` still contained zero rows. No manual scan was issued in this check; this is evidence that the scheduled tick reached the market freshness guard, not a successful market scan. A SELECT-only chart snapshot showed latest closed opens H1 06:00 UTC, M15 07:00 UTC, and M5 07:20 UTC (closed at 07:25 UTC), explaining the stale M5 rejection. Freshness checks were not relaxed and no chart data was written. Repeated successful scans and the full AI pipeline remain unaccepted. [Cloudflare documents up to 15 minutes of cron propagation](https://developers.cloudflare.com/workers/configuration/cron-triggers/). Inspect subsequent scanner audit rows and office state before accepting repeated execution. The current Durable Object alarm handles cases/outbox/retention; market scanning is triggered by the cron handler.
+- [ ] Correct and verify both saved model/provider paths for every active character; confirm relevant provider circuits recover through successful inference.
+- [ ] Observe fresh scheduled scans across an agreed continuous operating window; investigate gaps without relaxing freshness guards.
+- [ ] Observe the real strict-policy case pipeline, approved final signal publication, configured failover, simulation isolation and recovery. Legitimate abstentions must remain abstentions.
+- [ ] Verify final Discord signal delivery and duplicate-free/ambiguous-delivery recovery. Reuse existing delivery evidence when possible; do not send unsolicited acceptance messages.
+- [ ] Verify exchange tick size rather than relying on the `0.01` fallback.
+- [ ] Exercise backup/restore with the matching credential encryption root, prolonged outage recovery, retention scheduling and monitoring/alerts.
+- [ ] Complete physical low/mid-range device touch/FPS and prolonged-session QA; browser emulation is separate evidence.
+- [ ] Confirm GitHub environment protections and deployment token scope with operational access.
 
-An earlier first-deployment office-state read returned HTTP 500 and subsequent reads succeeded. Safe smoke-test reads now have five attempts with bounded delays for transient 5xx responses; persistent failures still reject deployment. Login/logout mutations are not retried by this helper.
+Use [the operations runbook](PRODUCTION_OPERATIONS.md) for repeatable checks and recovery. `npm run production:check` checks runtime health only and deliberately leaves end-to-end acceptance unassessed. New changes on the current development branch require their own CI/deployment evidence before replacing the verified revision above.
 
-The previous direct OpenAI attempt failed with HTTP 429 `insufficient_quota`. That historical failure no longer blocks the selected OpenRouter/Gemini configuration.
+## Finalization branch validation — 17 October
 
-## Still requiring acceptance
+The finalization change clears stale model IDs on provider changes, adds selected-model synthetic probes, requires successful inference before resetting a provider circuit, and adds the bounded read-only health command. The related Admin/API/credential browser suite passed **57 checks**, including the new scenario on desktop and both mobile orientations. After improving the save-feedback regression assertion, all **three targeted viewport checks** passed again. The complete browser–Worker/D1 suite passed **30 checks**. These use isolated fixtures, not paid providers or real Discord delivery.
 
-- Fresh upstream candle ingestion and repeated successful scheduled scans; schedule installation and reaching the freshness guard are confirmed.
-- Full real Worker case pipeline, configured failover, simulation and recovery observations.
-- Real Discord webhook configuration and explicitly authorized delivery acceptance. Current deployed health reports `NOT_CONFIGURED`; no real delivery test was sent.
-- Exchange tick-size verification; the existing display precision is not exchange evidence.
-- Physical device/FPS and premium asset acceptance where required by the PRD.
+Local `npm run check` passed TypeScript, ESLint, **387 tests across 31 files** and the production frontend build. The health/smoke regression subset passed all 17 tests after the last health-reader adjustment. Worker deployment dry-run also passed; it published nothing. The existing 3D chunk size warning remains (about 302 kB gzip) and does not substitute for physical performance QA.
 
-Do not label all production/MVP acceptance complete until these results exist.
+The new runtime command was exercised against the production origin at 01:24:02 UTC and exited nonzero with `HEALTH_UNAVAILABLE` and all component states `UNKNOWN`, consistent with the workspace access limitation above. This result does not establish application downtime. Final branch CI and an actual deployment result are still required before treating these new changes as the verified production revision.

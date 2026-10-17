@@ -8,11 +8,17 @@ Legend:
 - [~] Sedang dikerjakan
 
 
-## Update build lanjutan — 4 Oktober 2026 (UTC)
+## Status terverifikasi — 17 Oktober 2026 (UTC)
+
+Revisi produksi `cff88b7` berhasil dideploy 16 Oktober: 379 unit/integration tests, 165 browser tests dan 30 browser–Worker/D1 tests lulus. SELECT/GET Cloudflare 17 Oktober mengonfirmasi migrasi 0001–0010 serta cron lima menit. Health provider saat smoke terakhir masih DEGRADED; alur final sinyal/failover, pengiriman SIGNAL Discord dan perangkat fisik belum diterima penuh. Empat pengiriman MEETING nyata memiliki audit SENT. Rincian bukti dan batasnya: [Production acceptance](docs/PRODUCTION_ACCEPTANCE.md); langkah perbaikan/recovery: [Production operations](docs/PRODUCTION_OPERATIONS.md).
+
+Milestone 47 di bawah diperbarui mengikuti bukti ini. Catatan update lama dan checklist implementasi lainnya tetap membedakan implementasi lokal dari penerimaan produksi; kotak kosong bukan bukti bahwa fitur tidak ada, dan tes fixture bukan bukti alur live sudah diterima.
+
+## Catatan historis: update build lanjutan — 4 Oktober 2026 (UTC)
 
 Reader mendukung `closed: "is_closed"` dan hanya SELECT; validator AI memeriksa hubungan entry/SL/TP; API memiliki rate limit persisten pada database aplikasi; metadata provider/model ditampilkan khusus Admin; modul Admin dan Simulation dimuat terpisah. Typecheck, lint, build, dan 66 unit test lulus. Suite saat ini memiliki 100 tes total; 34 tes integrasi belum berjalan karena sandbox menolak server lokal (`listen EPERM`). Tiga skenario browser baru ditambahkan (30 eksekusi lintas tiga viewport); suite browser baru belum dijalankan. Validasi sebelumnya di bawah adalah catatan historis. Tidak ada migrasi/deployment remote.
 
-## Update implementasi awal — 4 Oktober 2026 (WIB)
+## Catatan historis: update implementasi awal — 4 Oktober 2026 (WIB)
 
 Fondasi dan pipeline backend diimplementasikan serta diuji lokal; UI/3D masih tahap awal. Pembaruan lanjutan: recovery D1 terbatas, resume keluaran AI, retensi idle, review audit Discord, filter scanner, reconnect offline, routing meja/dinding, instancing dan kualitas adaptif sudah ditambahkan. QA browser tetap terpisah dari acceptance produksi/perangkat fisik. `[x]` menunjukkan implementasi dengan pemeriksaan lokal relevan, `[~]` menunjukkan implementasi awal atau validasi lanjutan yang masih diperlukan. Bukan klaim MVP produksi selesai.
 
@@ -1148,25 +1154,25 @@ Account dan kedua database telah diperiksa melalui GET/SELECT konektor Cloudflar
 
 # Milestone 47 — Production Readiness
 
-- [ ] Production Wrangler config
-- [ ] Production D1 migrations
-- [ ] Production R2 assets
-- [ ] Production secrets
-- [ ] Production Admin password
-- [ ] Production Discord webhooks
-- [ ] Verify chart_db binding
-- [ ] Verify read-only behavior
-- [ ] Verify AI provider connectivity
-- [ ] Verify model discovery
-- [ ] Verify fallback provider
-- [ ] Verify circuit breaker
-- [ ] Verify Public Signals setting
-- [ ] Verify retention
-- [ ] Verify error pages
-- [ ] Verify WebGL fallback
-- [ ] Run smoke test
-- [ ] Run security checklist
-- [ ] Run final mobile QA
+- [x] Production Wrangler config — deployment 16 Oktober dan cron GET 17 Oktober
+- [x] Production D1 migrations — ledger 0001–0010 dikonfirmasi SELECT
+- [ ] Production R2 assets — opsional; tidak wajib untuk aset lokal saat ini
+- [x] Production secrets — instalasi/inventory dan probe deployment lulus; seluruh akun/model belum diterima
+- [x] Production Admin password — login/cookie/logout smoke lulus
+- [x] Production Discord webhooks — CONFIGURED dan audit MEETING SENT; final SIGNAL tetap terbuka
+- [x] Verify chart_db binding — reader live H1/M15/M5 lulus saat deployment
+- [x] Verify read-only behavior — reader SELECT-only; query verifikasi tidak menulis data
+- [~] Verify AI provider connectivity — probe terbatas lulus, health agregat DEGRADED
+- [x] Verify model discovery — OpenRouter/Gemini deployment probe; bukan semua akun/model tersimpan
+- [~] Verify fallback provider — probe Gemini lulus; failover case live belum diterima
+- [~] Verify circuit breaker — regression fixture tersedia; pemulihan provider live belum diterima
+- [~] Verify Public Signals setting — tes otomatis lulus; acceptance operasional tetap terpisah
+- [~] Verify retention — pengujian lokal tersedia; observasi jadwal produksi terbuka
+- [~] Verify error pages — pemeriksaan otomatis tersedia; QA operasional terbuka
+- [~] Verify WebGL fallback — browser CI lulus; perangkat fisik belum
+- [x] Run smoke test — deployment 38840278995 lulus dengan provider DEGRADED yang tercatat
+- [~] Run security checklist — auth/redaksi CI lulus; scope token dan proteksi GitHub perlu akses operasional
+- [ ] Run final mobile QA — perangkat fisik/FPS/prolonged session
 
 ---
 

@@ -30,6 +30,8 @@ let cookie = "",
   releaseModels: (() => void) | undefined;
 let modelsEntered: (() => void) | undefined,
   modelGate: Promise<void> | undefined;
+let probeStatus: number | undefined;
+let probeRequests = 0;
 const origin = "https://api-hardening.test",
   password = "fixture-only-password";
 const schema = {
@@ -122,6 +124,30 @@ beforeAll(async () => {
       },
       serviceBindings: { ASSETS: async () => new MFResponse("Fixture") },
       outboundService: async (request) => {
+        if (request.method === "POST" && probeStatus !== undefined) {
+          probeRequests++;
+          if (probeStatus !== 200)
+            return new MFResponse("Fixture inference failure", {
+              status: probeStatus,
+            });
+          return MFResponse.json({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    vote: "BUY",
+                    confidence: 0,
+                    summary: "Connectivity verified",
+                    reasoning: "Synthetic probe only",
+                    evidence: [],
+                    risk_flags: ["CONNECTIVITY_TEST"],
+                    price_levels: null,
+                  }),
+                },
+              },
+            ],
+          });
+        }
         if (request.method !== "GET")
           throw new Error(
             "No paid inference or delivery is allowed in API hardening tests",
@@ -173,6 +199,8 @@ beforeAll(async () => {
   cookie = login.headers.get("Set-Cookie")!.split(";")[0];
 });
 beforeEach(async () => {
+  probeStatus = undefined;
+  probeRequests = 0;
   releaseModels?.();
   modelGate = undefined;
   modelsEntered = undefined;
@@ -204,6 +232,66 @@ afterAll(async () => {
 });
 
 describe.sequential("Backend/API audit regressions", () => {
+  it("requires successful selected-model inference before clearing a failed provider circuit", async () => {
+    await live.fetch("https://internal/__test/failed-provider-circuit");
+    const circuit = async () =>
+      (
+        (await (await call("/admin/providers")).json()) as {
+          id: string;
+          failures: number;
+        }[]
+      ).find((p) => p.id === "openrouter")!;
+    const catalog = await call("/admin/test-provider", { id: "openrouter" });
+    expect(await catalog.json()).toMatchObject({
+      ok: true,
+      inference: "NOT_TESTED",
+    });
+    expect((await circuit()).failures).toBe(5);
+    expect(probeRequests).toBe(0);
+    probeStatus = 404;
+    const failed = await call("/admin/test-provider", {
+      id: "openrouter",
+      model: "missing-model",
+    });
+    expect(failed.status).toBe(503);
+    expect((await circuit()).failures).toBe(5);
+    probeStatus = 200;
+    const passed = await call("/admin/test-provider", {
+      id: "openrouter",
+      model: "fixture-model",
+    });
+    expect(await passed.json()).toMatchObject({
+      inference: "PASS",
+      model: "fixture-model",
+    });
+    expect(probeRequests).toBe(2);
+    expect((await circuit()).failures).toBe(0);
+    expect(await db.prepare("SELECT COUNT(*) n FROM cases").first()).toEqual({
+      n: 0,
+    });
+    expect(
+      await db.prepare("SELECT COUNT(*) n FROM discord_deliveries").first(),
+    ).toEqual({ n: 0 });
+  });
+  it("rejects empty and whitespace model IDs before saving character settings", async () => {
+    const characters = (await (
+      await call("/admin/characters")
+    ).json()) as Record<string, unknown>[];
+    for (const model of ["", "   "]) {
+      expect(
+        (
+          await call("/admin/characters", {
+            ...characters[0],
+            primary_model: model,
+          })
+        ).status,
+      ).toBe(400);
+      expect(
+        (await call("/admin/test-provider", { id: "openrouter", model }))
+          .status,
+      ).toBe(400);
+    }
+  });
   it("validates 4/8 voting settings and keeps a queued case pinned when the next-case setting changes", async () => {
     for (const aiVoterCount of [0, 5, 6, 10, "4", null]) {
       expect(

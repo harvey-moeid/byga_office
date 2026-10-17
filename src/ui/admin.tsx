@@ -10,6 +10,7 @@ import {
   avatarPresets,
   defaultConfig,
   configSchema,
+  characterSchema,
   providers,
   providerLabel,
   workersAIModel,
@@ -576,10 +577,10 @@ function CharacterEditor() {
     [message, setMessage] = useState("");
   const prompts =
     useData<{ id: string; character_id: string }[]>("/admin/prompts");
-  useEffect(
-    () => setDraft(data.data?.find((c) => c.id === id)),
-    [id, data.data],
-  );
+  useEffect(() => {
+    setDraft(data.data?.find((c) => c.id === id));
+    setModels({ primary: [], fallback: [] });
+  }, [id, data.data]);
   const [models, setModels] = useState({
     primary: [] as string[],
     fallback: [] as string[],
@@ -587,7 +588,7 @@ function CharacterEditor() {
   const save = async () => {
     await action.run(async () => {
       try {
-        await api("/admin/characters", draft);
+        await api("/admin/characters", characterSchema.parse(draft));
         setMessage("Karakter tersimpan dengan prompt version baru.");
         data.retry();
         prompts.retry();
@@ -605,7 +606,10 @@ function CharacterEditor() {
         <select
           disabled={action.busy}
           value={id}
-          onChange={(e) => setId(e.target.value)}
+          onChange={(e) => {
+            setId(e.target.value);
+            setMessage("");
+          }}
         >
           {characterIds.map((c) => (
             <option key={c} value={c}>
@@ -630,18 +634,18 @@ function CharacterEditor() {
                       setDraft({
                         ...draft,
                         [k]: provider,
-                        ...(provider === "workers-ai"
-                          ? {
-                              [k === "primary_provider"
-                                ? "primary_model"
-                                : "fallback_model"]: workersAIModel,
-                            }
-                          : {}),
+                        [k === "primary_provider"
+                          ? "primary_model"
+                          : "fallback_model"]:
+                          provider === "workers-ai" ? workersAIModel : "",
                       });
                       setModels((m) => ({
                         ...m,
                         [k === "primary_provider" ? "primary" : "fallback"]: [],
                       }));
+                      setMessage(
+                        "Provider berubah. Pilih model untuk provider ini lalu uji inference sebelum digunakan.",
+                      );
                     }}
                   >
                     {providers.map((p) => (
@@ -771,10 +775,49 @@ function CharacterEditor() {
                 Discover {role} models
               </button>
             ))}
-            <button className="primary" disabled={action.busy} onClick={save}>
+            {(["primary", "fallback"] as const).map((role) => (
+              <button
+                key={`test-${role}`}
+                disabled={action.busy || !draft[`${role}_model`].trim()}
+                onClick={async () => {
+                  await action.run(async () => {
+                    try {
+                      const result = await api<{
+                        inference: string;
+                        model: string;
+                      }>("/admin/test-provider", {
+                        id: draft[`${role}_provider`],
+                        model: draft[`${role}_model`],
+                      });
+                      if (result.inference !== "PASS")
+                        throw new Error("Inference belum terverifikasi.");
+                      setMessage(
+                        `${role}: inference berhasil untuk ${result.model}.`,
+                      );
+                    } catch (error) {
+                      setMessage((error as Error).message);
+                    }
+                  });
+                }}
+              >
+                Test {role} model
+              </button>
+            ))}
+            <button
+              className="primary"
+              disabled={
+                action.busy || !characterSchema.safeParse(draft).success
+              }
+              onClick={save}
+            >
               Save character & prompt
             </button>
           </div>
+          <small>
+            Test model mengirim satu permintaan AI sintetis berukuran terbatas
+            dan dapat memakai kuota provider. Tidak membuat sinyal atau mengirim
+            Discord.
+          </small>
           <p>{message}</p>
           <h3>Prompt rollback</h3>
           {prompts.data
@@ -861,8 +904,15 @@ function Providers() {
             onClick={async () => {
               await action.run(async () => {
                 try {
-                  await api("/admin/test-provider", { id: p.id });
-                  setMessage(`${p.id}: koneksi berhasil`);
+                  const result = await api<{ inference: string }>(
+                    "/admin/test-provider",
+                    { id: p.id },
+                  );
+                  setMessage(
+                    result.inference === "PASS"
+                      ? `${p.id}: inference berhasil`
+                      : `${p.id}: katalog model dapat diakses. Uji model terpilih di AI Characters untuk memverifikasi inference; circuit belum direset.`,
+                  );
                   d.retry();
                 } catch (e) {
                   setMessage(`${p.id}: ${(e as Error).message}`);

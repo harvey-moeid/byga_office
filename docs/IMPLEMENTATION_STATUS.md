@@ -1,8 +1,10 @@
-# Implementation status — 6 October 2026 (WIB)
+# Implementation status — reviewed 17 October 2026 (UTC)
 
-Workspace update — 10 October 2026: the trading safety fixes and 18 UI/API audit fixes are documented in [Trading safety](TRADING_SAFETY.md) and [UI/API contract and validation](API_UI_CONTRACT.md). These changes have been verified locally and have not been deployed. Migration `0006_admin_operations.sql` is local only. Production observations below describe their recorded dates; use [Deployment](DEPLOYMENT.md) for the current release procedure.
+Current verified production revision is `cff88b7`, published successfully by [deployment 38840278995](https://github.com/harvey-moeid/byga_office/actions/runs/38840278995) on 16 October. That run passed 379 unit/integration, 165 browser and 30 browser–Worker/D1 checks. Cloudflare SELECT/GET on 17 October confirmed migrations 0001–0010 and the five-minute cron. Provider health was DEGRADED at final deployment smoke; full operational acceptance remains open. Current evidence and remaining work are in [Production acceptance](PRODUCTION_ACCEPTANCE.md); recovery is in [Production operations](PRODUCTION_OPERATIONS.md).
 
-## Current production hardening — 6 October 2026
+The sections below are **historical observations**, including superseded claims that fixes were local only, old migration counts, cron behavior and frontend release mechanics. They are retained for provenance, not as the current production state. Use [Deployment](DEPLOYMENT.md) for the current release procedure. New finalization changes still require CI and publication before they replace the verified revision.
+
+## Historical production hardening — 6 October 2026
 
 - Worker `byga-office` is published and Cloudflare currently reports cron **`*/5 * * * *`**.
 - `chart_db` remains read-only in application code and live verification; market/derivative access uses SELECT only and migrations target only `trading_office_db`.
