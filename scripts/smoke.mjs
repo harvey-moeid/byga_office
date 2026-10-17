@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import {
+  probeDeployedProvider,
+  verifyProviderPaths,
+} from "./provider-smoke.mjs";
 const origin = process.env.BYGA_PUBLIC_ORIGIN;
 if (
   !origin ||
@@ -205,6 +209,7 @@ if (marketResponse.status === 200) {
 }
 let adminAuthentication = "NOT_TESTED";
 let realAIInference = "NOT_TESTED";
+let providerPaths = null;
 if (process.env.ADMIN_PASSWORD) {
   const login = await fetch(origin + "/api/v1/auth/login", {
     method: "POST",
@@ -245,37 +250,25 @@ if (process.env.ADMIN_PASSWORD) {
       "Admin provider health read failed",
     );
     const activeCharacters = await activeCharactersResponse.json();
+    assert.deepEqual(
+      activeCharacters.map((character) => character.id),
+      canonicalCharacters,
+      "Admin provider verification requires the complete active character roster",
+    );
     const adminHealth = await adminHealthResponse.json();
     const configuredProviders = new Map(
       adminHealth.configured.map((entry) => [entry.id, entry.configured]),
     );
-    for (const character of activeCharacters) {
-      const primaryConfigured =
-        configuredProviders.get(character.primary_provider) === true;
-      const fallbackConfigured =
-        configuredProviders.get(character.fallback_provider) === true;
-      assert.ok(
-        primaryConfigured || fallbackConfigured,
-        `Active character ${character.id} has no configured provider path: primary=${character.primary_provider}, fallback=${character.fallback_provider}`,
-      );
-    }
-    const aiProbe = await fetch(origin + "/api/v1/admin/test-provider", {
-      method: "POST",
-      headers: {
-        Cookie: cookie,
-        Origin: origin,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ id: "workers-ai" }),
-      signal: AbortSignal.timeout(30000),
-    });
-    const aiProbeBody = await aiProbe.text();
-    assert.equal(
-      aiProbe.status,
-      200,
-      `Deployed Workers AI binding/model probe failed: ${aiProbeBody.slice(0, 500)}`,
+    providerPaths = await verifyProviderPaths(
+      activeCharacters,
+      configuredProviders,
+      (provider, model) =>
+        probeDeployedProvider(origin, cookie, provider, model),
     );
-    assert.equal(JSON.parse(aiProbeBody).inference, "PASS");
+    if (providerPaths.degraded)
+      console.warn(
+        "Provider smoke DEGRADED: unavailable primary routes have verified fallbacks for every affected character.",
+      );
     realAIInference = "PASS";
     assert.equal(
       activeConfig.config.scannerConsensusMin,
@@ -325,6 +318,7 @@ console.log(
       provider_configuration: health.ai_providers,
       discord_configuration: health.discord,
       real_ai_inference: realAIInference,
+      active_provider_paths: providerPaths,
       full_case_pipeline: "NOT_TESTED",
       configured_failover: "NOT_TESTED",
       real_discord_delivery: "NOT_TESTED",

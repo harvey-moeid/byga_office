@@ -179,7 +179,7 @@ jobs:
         run: |
           node scripts/credentials-key.mjs --config "$BYGA_DEPLOY_CONFIG"
           node scripts/wrangler.mjs secret list --config "$BYGA_DEPLOY_CONFIG"
-      - name: Verify deployed frontend, D1, Durable Object and Admin session
+      - name: Verify deployed frontend, D1, Durable Object, Admin and active AI paths
         id: smoke_initial
         env:
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
