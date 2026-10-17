@@ -187,7 +187,9 @@ beforeAll(async () => {
               detail: "Fixture",
             },
           ],
-          risk_flags: [],
+          risk_flags: prompt.startsWith("Synthetic connection test only.")
+            ? ["CONNECTIVITY_TEST"]
+            : [],
         };
         return MFResponse.json(
           u.hostname.includes("googleapis")
@@ -1118,13 +1120,13 @@ describe.sequential("Real Worker / D1 / Durable Object workflow", () => {
       true,
     );
     failure = "none";
-    await call("/admin/test-provider", { id: "openrouter" });
-    await call("/admin/test-provider", { id: "gemini" });
+    await call("/admin/test-provider", { id: "openrouter", model: "fixture" });
+    await call("/admin/test-provider", { id: "gemini", model: "fixture" });
   }, 30000);
   it("APPLY NOW cancels in-flight case and replacement owns the new config", async () => {
     failure = "none";
-    await call("/admin/test-provider", { id: "openrouter" });
-    await call("/admin/test-provider", { id: "gemini" });
+    await call("/admin/test-provider", { id: "openrouter", model: "fixture" });
+    await call("/admin/test-provider", { id: "gemini", model: "fixture" });
     gate = new Promise<void>((r) => {
       release = r;
     });

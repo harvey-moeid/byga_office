@@ -3,6 +3,7 @@ import {
   defaultConfig,
   defaultCharacters,
   providers,
+  workersAIModel,
 } from "../src/core/contracts";
 
 async function fixture(
@@ -82,6 +83,75 @@ async function fixture(
     await route.fulfill({ json });
   });
 }
+
+test("changing provider clears the old model and tests the selected model explicitly", async ({
+  page,
+}) => {
+  const probes: unknown[] = [];
+  const characters = defaultCharacters();
+  await fixture(page, async (route, path) => {
+    if (path === "/admin/characters") {
+      if (route.request().method() === "POST") {
+        const saved = route.request().postDataJSON();
+        const index = characters.findIndex(
+          (character) => character.id === saved.id,
+        );
+        characters[index] = saved;
+        await route.fulfill({ json: saved });
+      } else await route.fulfill({ json: characters });
+      return true;
+    }
+    if (path !== "/admin/test-provider") return false;
+    const body = route.request().postDataJSON();
+    probes.push(body);
+    await route.fulfill({
+      json: { ok: true, inference: "PASS", model: body.model, models: [] },
+    });
+    return true;
+  });
+  await page.goto("/admin");
+  await page
+    .getByRole("button", { name: "AI Characters", exact: true })
+    .click();
+  const model = page.getByLabel("primary_model", { exact: true });
+  const fallback = page.getByLabel("fallback_model", { exact: true });
+  await expect(model).toHaveValue("openai/gpt-4.1-mini");
+  await page
+    .getByLabel("primary_provider", { exact: true })
+    .selectOption("gemini");
+  await expect(model).toHaveValue("");
+  await expect(fallback).toHaveValue("gemini-3.5-flash-lite");
+  await expect(
+    page.getByRole("button", { name: "Save character & prompt", exact: true }),
+  ).toBeDisabled();
+  await model.fill("gemini-3.5-flash-lite");
+  await page
+    .getByRole("button", { name: "Test primary model", exact: true })
+    .click();
+  await expect(
+    page.getByText("primary: inference berhasil untuk gemini-3.5-flash-lite.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(probes).toEqual([{ id: "gemini", model: "gemini-3.5-flash-lite" }]);
+  await page
+    .getByRole("button", { name: "Save character & prompt", exact: true })
+    .click();
+  await expect(
+    page.getByText("Karakter tersimpan dengan prompt version baru.", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(model).toHaveValue("gemini-3.5-flash-lite");
+  await page
+    .getByLabel("primary_provider", { exact: true })
+    .selectOption("workers-ai");
+  await expect(model).toHaveValue(workersAIModel);
+  await page
+    .getByLabel("primary_provider", { exact: true })
+    .selectOption("mistral");
+  await expect(model).toHaveValue("");
+});
 
 test("new polling snapshots replace stale SSE, stream failure exposes polling errors", async ({
   page,

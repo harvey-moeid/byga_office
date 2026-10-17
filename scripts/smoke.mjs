@@ -204,6 +204,7 @@ if (marketResponse.status === 200) {
   marketStatus = "DEGRADED";
 }
 let adminAuthentication = "NOT_TESTED";
+let realAIInference = "NOT_TESTED";
 if (process.env.ADMIN_PASSWORD) {
   const login = await fetch(origin + "/api/v1/auth/login", {
     method: "POST",
@@ -275,6 +276,7 @@ if (process.env.ADMIN_PASSWORD) {
       `Deployed Workers AI binding/model probe failed: ${aiProbeBody.slice(0, 500)}`,
     );
     assert.equal(JSON.parse(aiProbeBody).inference, "PASS");
+    realAIInference = "PASS";
     assert.equal(
       activeConfig.config.scannerConsensusMin,
       state.group_consensus_min,
@@ -322,7 +324,9 @@ console.log(
       market: marketStatus,
       provider_configuration: health.ai_providers,
       discord_configuration: health.discord,
-      real_ai_inference: "NOT_TESTED",
+      real_ai_inference: realAIInference,
+      full_case_pipeline: "NOT_TESTED",
+      configured_failover: "NOT_TESTED",
       real_discord_delivery: "NOT_TESTED",
     },
     null,

@@ -588,8 +588,11 @@ export class Office extends DurableObject<Env> {
       return json(result);
     }
     if (path === "/models" || path === "/test-provider") {
-      const { id } = z
-        .object({ id: z.enum(providers) })
+      const { id, model } = z
+        .object({
+          id: z.enum(providers),
+          model: z.string().trim().min(1).max(200).optional(),
+        })
         .parse(await readJsonObject(request));
       const providerEnv = await resolveProviderEnv(this.env);
       const credentialVersion =
@@ -611,12 +614,14 @@ export class Office extends DurableObject<Env> {
                 Date.now() - cache.at < 3600000
               ? cache.models
               : await discoverModels(providerEnv, id);
-        let inference: "PASS" | undefined;
-        if (path === "/test-provider" && id === "workers-ai") {
+        let inference: "PASS" | "NOT_TESTED" = "NOT_TESTED";
+        const probeModel =
+          model ?? (id === "workers-ai" ? workersAIModel : undefined);
+        if (path === "/test-provider" && probeModel) {
           const response = await requestAI(
             providerEnv,
             id,
-            workersAIModel,
+            probeModel,
             "Synthetic connection test only. Return JSON: vote BUY, confidence 0, summary Connectivity verified, reasoning Synthetic probe only, evidence [], risk_flags [CONNECTIVITY_TEST], price_levels null. Do not analyze markets or create a trading signal.",
             {
               ...defaultCharacters()[0],
@@ -630,7 +635,7 @@ export class Office extends DurableObject<Env> {
             output.vote !== "BUY" ||
             !output.risk_flags.includes("CONNECTIVITY_TEST")
           )
-            throw new Error("WORKERS_AI_PROBE_INVALID");
+            throw new Error("PROVIDER_PROBE_INVALID");
           inference = "PASS";
         }
         await this.serial(async () => {
@@ -649,7 +654,8 @@ export class Office extends DurableObject<Env> {
             models,
             credentialVersion,
           });
-          if (path === "/test-provider")
+          // Listing models proves catalog access, not inference recovery.
+          if (inference === "PASS")
             await this.ctx.storage.put(`circuit:${id}`, {
               failures: 0,
               openedAt: 0,
@@ -659,7 +665,9 @@ export class Office extends DurableObject<Env> {
         return json({
           models,
           ok: true,
-          ...(inference ? { inference, model: workersAIModel } : {}),
+          ...(path === "/test-provider"
+            ? { inference, ...(probeModel ? { model: probeModel } : {}) }
+            : {}),
         });
       } catch (error) {
         if (error instanceof HttpError) return errorResponse(error);

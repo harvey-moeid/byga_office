@@ -46,6 +46,14 @@ export class Office extends ProductionOffice {
       });
       return Response.json({ ok: true });
     }
+    if (path === "/__test/failed-provider-circuit") {
+      await this.ctx.storage.put("circuit:openrouter", {
+        failures: 5,
+        openedAt: Date.now(),
+        credentialVersion: null,
+      });
+      return Response.json({ ok: true });
+    }
     if (path === "/__test/tick-due") {
       await this.ctx.storage.put("pending_tick", Date.now() - 1);
       return Response.json({ ok: true });
